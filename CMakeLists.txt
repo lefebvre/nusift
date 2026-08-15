@@ -46,6 +46,38 @@ option(NUSIFT_BUILD_DOCS        "Generate the Doxygen API reference"            
 # up found or fetched, which is not known until after the dependency block below.
 
 # ---------------------------------------------------------------------------
+# Whole-build compile settings
+#
+# The two settings here are deliberately GLOBAL, unlike the per-target instrumentation further
+# down, and they are set here -- above the dependency block -- because a fetched dependency is
+# configured at the point it is made available. Set any later and cram, and through it Eigen,
+# would already have been configured without them.
+# ---------------------------------------------------------------------------
+if(NUSIFT_ENABLE_SANITIZERS)
+  if(MSVC)
+    message(FATAL_ERROR "NUSIFT_ENABLE_SANITIZERS requires a GCC/Clang toolchain.")
+  endif()
+  # A sanitizer build is only sound when every object linked together is instrumented, and with
+  # Eigen in the mix an uninstrumented dependency does not merely miss diagnostics -- it invents
+  # one. Eigen's Memory.h keys EIGEN_MALLOC_ALREADY_ALIGNED off __SANITIZE_ADDRESS__, which GCC
+  # defines per translation unit, so instrumenting NuSIFT alone left cram allocating through
+  # plain malloc while NuSIFT freed through the hand-made aligned allocator, which looks eight
+  # bytes in front of the block for a pointer that was never written there. Every test that ran
+  # a solve died on a heap-buffer-overflow attributed to Eigen rather than to the mismatch.
+  add_compile_options(-fsanitize=address,undefined -g)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
+# The Python extension is a shared module, so every static library linked into it -- nusift's
+# and cram's alike -- has to be position-independent. Without this an ELF link fails outright
+# ("relocation R_X86_64_PC32 against symbol ... can not be used when making a shared object"),
+# which is a link-time error in the extension rather than anything visible in the libraries
+# themselves. Windows has no such distinction, so this is invisible there in both directions.
+if(NUSIFT_BUILD_PYTHON)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# ---------------------------------------------------------------------------
 # cram-depletion: find first, fetch as fallback
 #
 # The two modes must be interchangeable, so everything downstream links cram::cram and
@@ -152,9 +184,13 @@ if(NUSIFT_INSTALL)
 endif()
 
 # ---------------------------------------------------------------------------
-# Shared instrumentation flags (coverage / sanitizers)
+# Shared instrumentation flags (coverage)
 # INTERFACE target rather than global flags so instrumentation is opt-in per target and the
 # Python extension and staging tool can stay out of it. cram's pattern.
+#
+# Coverage stays per-target where sanitizers could not: a coverage report over vendored code
+# is noise rather than a wrong answer, and gcov has no equivalent of Eigen's per-TU allocator
+# switch. See the whole-build settings above for why the sanitizers moved.
 # ---------------------------------------------------------------------------
 add_library(nusift_quality_flags INTERFACE)
 if(NUSIFT_ENABLE_COVERAGE)
@@ -163,13 +199,6 @@ if(NUSIFT_ENABLE_COVERAGE)
   endif()
   target_compile_options(nusift_quality_flags INTERFACE --coverage -O0 -g)
   target_link_options(nusift_quality_flags INTERFACE --coverage)
-endif()
-if(NUSIFT_ENABLE_SANITIZERS)
-  if(MSVC)
-    message(FATAL_ERROR "NUSIFT_ENABLE_SANITIZERS requires a GCC/Clang toolchain.")
-  endif()
-  target_compile_options(nusift_quality_flags INTERFACE -fsanitize=address,undefined -g)
-  target_link_options(nusift_quality_flags INTERFACE -fsanitize=address,undefined)
 endif()
 
 # --- warnings ---------------------------------------------------------------
