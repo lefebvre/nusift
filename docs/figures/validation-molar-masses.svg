@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 446" width="880" height="446" role="img" aria-label="Staged atomic weights against AME2020">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="879" height="445" rx="6"/>
+<rect class="fill-a" x="292.1" y="90.0" width="315.8" height="252.0" rx="3" fill-opacity="0.09" stroke-width="0"/>
+<line class="axis" x1="292.1" y1="90.0" x2="292.1" y2="342.0" stroke-width="1.0" stroke-dasharray="3 3"/>
+<line class="axis" x1="607.9" y1="90.0" x2="607.9" y2="342.0" stroke-width="1.0" stroke-dasharray="3 3"/>
+<line class="axis" x1="450.0" y1="90.0" x2="450.0" y2="342.0" stroke-width="1.4"/>
+<text class="muted" x="150.0" y="82.0" font-size="10" text-anchor="middle" font-weight="normal">-0.019%</text>
+<line class="grid" x1="292.1" y1="90.0" x2="292.1" y2="342.0" stroke-width="1.2"/>
+<text class="muted" x="292.1" y="82.0" font-size="10" text-anchor="middle" font-weight="normal">-0.01%</text>
+<line class="grid" x1="450.0" y1="90.0" x2="450.0" y2="342.0" stroke-width="1.2"/>
+<text class="muted" x="450.0" y="82.0" font-size="10" text-anchor="middle" font-weight="normal">0</text>
+<line class="grid" x1="607.9" y1="90.0" x2="607.9" y2="342.0" stroke-width="1.2"/>
+<text class="muted" x="607.9" y="82.0" font-size="10" text-anchor="middle" font-weight="normal">+0.01%</text>
+<text class="muted" x="750.0" y="82.0" font-size="10" text-anchor="middle" font-weight="normal">+0.019%</text>
+<line class="s0" x1="450.0" y1="106.0" x2="450.0" y2="106.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="106.0" r="3.4"/>
+<text class="ink" x="138.0" y="109.6" font-size="11" text-anchor="end" font-weight="600">H-3</text>
+<text class="muted" x="760.0" y="109.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="126.0" x2="450.3" y2="126.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.3" cy="126.0" r="3.4"/>
+<text class="ink" x="138.0" y="129.6" font-size="11" text-anchor="end" font-weight="600">C-14</text>
+<text class="muted" x="760.0" y="129.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="146.0" x2="450.1" y2="146.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.1" cy="146.0" r="3.4"/>
+<text class="ink" x="138.0" y="149.6" font-size="11" text-anchor="end" font-weight="600">Co-60</text>
+<text class="muted" x="760.0" y="149.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="166.0" x2="450.2" y2="166.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.2" cy="166.0" r="3.4"/>
+<text class="ink" x="138.0" y="169.6" font-size="11" text-anchor="end" font-weight="600">Sr-90</text>
+<text class="muted" x="760.0" y="169.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="186.0" x2="450.1" y2="186.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.1" cy="186.0" r="3.4"/>
+<text class="ink" x="138.0" y="189.6" font-size="11" text-anchor="end" font-weight="600">Cs-137</text>
+<text class="muted" x="760.0" y="189.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="206.0" x2="450.2" y2="206.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.2" cy="206.0" r="3.4"/>
+<text class="ink" x="138.0" y="209.6" font-size="11" text-anchor="end" font-weight="600">I-131</text>
+<text class="muted" x="760.0" y="209.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="226.0" x2="450.3" y2="226.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.3" cy="226.0" r="3.4"/>
+<text class="ink" x="138.0" y="229.6" font-size="11" text-anchor="end" font-weight="600">Pm-147</text>
+<text class="muted" x="760.0" y="229.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="246.0" x2="450.4" y2="246.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.4" cy="246.0" r="3.4"/>
+<text class="ink" x="138.0" y="249.6" font-size="11" text-anchor="end" font-weight="600">Ce-144</text>
+<text class="muted" x="760.0" y="249.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="266.0" x2="450.4" y2="266.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.4" cy="266.0" r="3.4"/>
+<text class="ink" x="138.0" y="269.6" font-size="11" text-anchor="end" font-weight="600">Ir-192</text>
+<text class="muted" x="760.0" y="269.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="286.0" x2="449.7" y2="286.0" stroke-width="1.6"/>
+<circle class="t0" cx="449.7" cy="286.0" r="3.4"/>
+<text class="ink" x="138.0" y="289.6" font-size="11" text-anchor="end" font-weight="600">Ra-226</text>
+<text class="muted" x="760.0" y="289.6" font-size="10" text-anchor="start" font-weight="normal">-0.0%</text>
+<line class="s0" x1="450.0" y1="306.0" x2="450.1" y2="306.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.1" cy="306.0" r="3.4"/>
+<text class="ink" x="138.0" y="309.6" font-size="11" text-anchor="end" font-weight="600">Pu-239</text>
+<text class="muted" x="760.0" y="309.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="326.0" x2="449.8" y2="326.0" stroke-width="1.6"/>
+<circle class="t0" cx="449.8" cy="326.0" r="3.4"/>
+<text class="ink" x="138.0" y="329.6" font-size="11" text-anchor="end" font-weight="600">Am-241</text>
+<text class="muted" x="760.0" y="329.6" font-size="10" text-anchor="start" font-weight="normal">-0.0%</text>
+<text class="ink" x="58.0" y="30.0" font-size="13.5" text-anchor="start" font-weight="600">Staged atomic weights against AME2020</text>
+<text class="muted" x="58.0" y="50.0" font-size="11.5" text-anchor="start" font-weight="normal">g/mol</text>
+<circle class="t0" cx="60.0" cy="66.5" r="3.4"/>
+<text class="muted" x="70.0" y="70.0" font-size="11" text-anchor="start" font-weight="normal">gated in CI</text>
+<circle class="t1" cx="168.0" cy="66.5" r="3.4"/>
+<text class="muted" x="178.0" y="70.0" font-size="11" text-anchor="start" font-weight="normal">reported, not gated</text>
+<text class="muted" x="456.0" y="70.0" font-size="11" text-anchor="start" font-weight="normal">shaded band: ±0.01% acceptance</text>
+<text class="muted" x="58.0" y="370.0" font-size="11.5" text-anchor="start" font-weight="normal">ENDF's atomic weight ratio and AME2020 are evaluations of the same measurements, so near-exact agreement is expected rather than</text>
+<text class="muted" x="58.0" y="388.0" font-size="11.5" text-anchor="start" font-weight="normal">impressive. What a 0.01% band catches is a ratio staged against the wrong reference mass, or a value attached to the wrong nuclide</text>
+<text class="muted" x="58.0" y="406.0" font-size="11.5" text-anchor="start" font-weight="normal">-- either of which would silently misconvert every inventory given in grams.</text>
+</svg>

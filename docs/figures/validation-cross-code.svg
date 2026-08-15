@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 452" width="880" height="452" role="img" aria-label="Cross-code comparison of one decay chain">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="879" height="451" rx="6"/>
+<line class="grid" x1="100.0" y1="96.0" x2="100.0" y2="292.0" stroke-width="1.2"/>
+<text class="muted" x="100.0" y="310.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 h</text>
+<line class="grid" x1="281.7" y1="96.0" x2="281.7" y2="292.0" stroke-width="1.2"/>
+<text class="muted" x="281.7" y="310.0" font-size="10.5" text-anchor="middle" font-weight="normal">6 h</text>
+<line class="grid" x1="422.3" y1="96.0" x2="422.3" y2="292.0" stroke-width="1.2"/>
+<text class="muted" x="422.3" y="310.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 d</text>
+<line class="grid" x1="533.8" y1="96.0" x2="533.8" y2="292.0" stroke-width="1.2"/>
+<text class="muted" x="533.8" y="310.0" font-size="10.5" text-anchor="middle" font-weight="normal">3 d</text>
+<line class="grid" x1="690.0" y1="96.0" x2="690.0" y2="292.0" stroke-width="1.2"/>
+<text class="muted" x="690.0" y="310.0" font-size="10.5" text-anchor="middle" font-weight="normal">14 d</text>
+<line class="grid" x1="100.0" y1="276.9" x2="690.0" y2="276.9" stroke-width="1.2"/>
+<text class="muted" x="91.0" y="280.4" font-size="10.5" text-anchor="end" font-weight="normal">1e12</text>
+<line class="grid" x1="100.0" y1="213.6" x2="690.0" y2="213.6" stroke-width="1.2"/>
+<text class="muted" x="91.0" y="217.1" font-size="10.5" text-anchor="end" font-weight="normal">1e13</text>
+<line class="grid" x1="100.0" y1="150.3" x2="690.0" y2="150.3" stroke-width="1.2"/>
+<text class="muted" x="91.0" y="153.8" font-size="10.5" text-anchor="end" font-weight="normal">1e14</text>
+<polyline class="s0" points="100.00,121.19 115.13,121.23 130.26,121.29 145.38,121.35 160.51,121.42 175.64,121.51 190.77,121.60 205.90,121.72 221.03,121.85 236.15,122.00 251.28,122.18 266.41,122.39 281.54,122.63 296.67,122.90 311.79,123.23 326.92,123.60 342.05,124.04 357.18,124.54 372.31,125.13 387.44,125.81 402.56,126.60 417.69,127.52 432.82,128.58 447.95,129.82 463.08,131.25 478.21,132.92 493.33,134.85 508.46,137.10 523.59,139.70 538.72,142.73 553.85,146.24 568.97,150.32 584.10,155.05 599.23,160.54 614.36,166.92 629.49,174.33 644.62,182.92 659.74,192.90 674.87,204.48 690.00,217.92" stroke-width="2.0" stroke-linejoin="round"/>
+<circle class="t0" cx="100.0" cy="121.2" r="2.8"/>
+<circle class="t0" cx="145.4" cy="121.3" r="2.8"/>
+<circle class="t0" cx="190.8" cy="121.6" r="2.8"/>
+<circle class="t0" cx="236.2" cy="122.0" r="2.8"/>
+<circle class="t0" cx="281.5" cy="122.6" r="2.8"/>
+<circle class="t0" cx="326.9" cy="123.6" r="2.8"/>
+<circle class="t0" cx="372.3" cy="125.1" r="2.8"/>
+<circle class="t0" cx="417.7" cy="127.5" r="2.8"/>
+<circle class="t0" cx="463.1" cy="131.2" r="2.8"/>
+<circle class="t0" cx="508.5" cy="137.1" r="2.8"/>
+<circle class="t0" cx="553.8" cy="146.2" r="2.8"/>
+<circle class="t0" cx="599.2" cy="160.6" r="2.8"/>
+<circle class="t0" cx="644.6" cy="182.9" r="2.8"/>
+<circle class="t0" cx="690.0" cy="218.0" r="2.8"/>
+<text class="t0" x="100.0" y="111.2" font-size="11" text-anchor="middle" font-weight="600">Mo-99</text>
+<polyline class="s1" points="100.00,185.52 115.13,181.69 130.26,177.91 145.38,174.18 160.51,170.50 175.64,166.89 190.77,163.36 205.90,159.91 221.03,156.57 236.15,153.34 251.28,150.24 266.41,147.29 281.54,144.51 296.67,141.92 311.79,139.55 326.92,137.42 342.05,135.55 357.18,133.97 372.31,132.71 387.44,131.79 402.56,131.23 417.69,131.04 432.82,131.25 447.95,131.84 463.08,132.82 478.21,134.20 493.33,135.95 508.46,138.10 523.59,140.66 538.72,143.66 553.85,147.17 568.97,151.24 584.10,155.98 599.23,161.47 614.36,167.85 629.49,175.25 644.62,183.85 659.74,193.82 674.87,205.40 690.00,218.85" stroke-width="2.0" stroke-linejoin="round"/>
+<circle class="t1" cx="100.0" cy="185.6" r="2.8"/>
+<circle class="t1" cx="145.4" cy="174.2" r="2.8"/>
+<circle class="t1" cx="190.8" cy="163.4" r="2.8"/>
+<circle class="t1" cx="236.2" cy="153.4" r="2.8"/>
+<circle class="t1" cx="281.5" cy="144.6" r="2.8"/>
+<circle class="t1" cx="326.9" cy="137.5" r="2.8"/>
+<circle class="t1" cx="372.3" cy="132.8" r="2.8"/>
+<circle class="t1" cx="417.7" cy="131.1" r="2.8"/>
+<circle class="t1" cx="463.1" cy="132.9" r="2.8"/>
+<circle class="t1" cx="508.5" cy="138.1" r="2.8"/>
+<circle class="t1" cx="553.8" cy="147.2" r="2.8"/>
+<circle class="t1" cx="599.2" cy="161.5" r="2.8"/>
+<circle class="t1" cx="644.6" cy="183.9" r="2.8"/>
+<circle class="t1" cx="690.0" cy="218.9" r="2.8"/>
+<text class="t1" x="417.7" y="121.0" font-size="11" text-anchor="middle" font-weight="600">Tc-99m</text>
+<line class="axis" x1="100.0" y1="292.0" x2="690.0" y2="292.0" stroke-width="1.4"/>
+<line class="axis" x1="100.0" y1="96.0" x2="100.0" y2="292.0" stroke-width="1.4"/>
+<text class="ink" x="58.0" y="30.0" font-size="13.5" text-anchor="start" font-weight="600">Mo-99 decayed by two unrelated implementations</text>
+<text class="muted" x="58.0" y="50.0" font-size="11.5" text-anchor="start" font-weight="normal">Lines are NuSIFT (CRAM, ENDF/B-VIII.1); dots are radioactivedecay (matrix exponential, ICRP-107). Activity in Bq.</text>
+<text class="muted" x="58.0" y="70.0" font-size="11.5" text-anchor="start" font-weight="normal">The dots sit on the lines through ingrowth, the crossing, and the decay -- three regimes with different sensitivities to the chain data.</text>
+<text class="muted" x="690.0" y="330.0" font-size="11" text-anchor="end" font-weight="normal">time after separation →</text>
+<text class="ink" x="58.0" y="356.0" font-size="12" text-anchor="start" font-weight="normal">Across all 95 gated comparisons -- six inventories, not just this one -- the largest disagreement is 0.82%.</text>
+<text class="muted" x="58.0" y="378.0" font-size="11.5" text-anchor="start" font-weight="normal">Different solver, different decay data, different author. The residual is not expected to be zero: the two evaluations differ on</text>
+<text class="muted" x="58.0" y="396.0" font-size="11.5" text-anchor="start" font-weight="normal">the Cs-137 half-life alone by 0.29%. What agreement at this level rules out is an error in the chain construction or the solve,</text>
+<text class="muted" x="58.0" y="414.0" font-size="11.5" text-anchor="start" font-weight="normal">which would show as tens of percent rather than tenths.</text>
+</svg>
