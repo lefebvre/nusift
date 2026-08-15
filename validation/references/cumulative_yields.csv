@@ -1,0 +1,24 @@
+# Cumulative fission-product chain yields for U-235 thermal fission (E = 0.0253 eV), read out
+# of the ENDF/B-VIII.0 fission-yield file itself (MAT 9228, MF=8/MT=459) rather than off a
+# web table. Values are percent per fission, at the terminal member of each mass chain.
+#
+# WHAT THIS COMPARES. NuSIFT's number is the sum of the INDEPENDENT yields over every nuclide
+# on the mass chain, taken at t = 0. That equals the total production into the chain, which is
+# the cumulative yield at its terminus except for delayed-neutron emission -- the one process
+# that moves a nucleus off its chain, and the reason several rows sit a couple of percent high.
+# So this is a consistency check on seeding and mass-chain aggregation, not an independent
+# measurement, and the 4% band is sized by that physical offset rather than by numerics.
+#
+# A = 99 terminates at Tc-99, whose 2.11e5 y half-life makes it the effective end of the chain;
+# comparing at Ru-99 instead returns essentially zero and a meaningless residual.
+key,value,unit,tolerance_rel,gate,source,note
+85,1.3186,percent,0.04,gate,endf80_cfy,terminus Rb-85; light-wing chains gain from delayed-neutron flow out of A=86
+90,5.7819,percent,0.04,gate,endf80_cfy,terminus Zr-90; use Sr-90's 1% uncertainty rather than Zr-90's 64% ENDF artifact
+95,6.5029,percent,0.04,gate,endf80_cfy,terminus Mo-95
+99,6.1087,percent,0.04,gate,endf80_cfy,terminus Tc-99
+131,2.8907,percent,0.04,gate,endf80_cfy,terminus Xe-131
+133,6.6991,percent,0.04,gate,endf80_cfy,terminus Cs-133
+137,6.1885,percent,0.04,gate,endf80_cfy,terminus Ba-137; I-137 has a 7% delayed-neutron branch out of the chain
+140,6.2197,percent,0.04,gate,endf80_cfy,terminus Ce-140
+144,5.4996,percent,0.04,gate,endf80_cfy,terminus Nd-144
+147,2.2467,percent,0.04,gate,endf80_cfy,terminus Sm-147

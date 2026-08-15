@@ -1,0 +1,26 @@
+# Atomic masses from AME2020, against the molar mass NuSIFT derives from the staged ENDF
+# atomic weight ratio. Since the 2019 redefinition of the mole, the molar mass in g/mol equals
+# the atomic mass in u to within 3e-10, so the two are compared directly.
+#
+# This is the only check in the suite that exercises the staged atomic weight, and everything
+# expressed per gram goes through it: an inventory given in grams, and any specific activity.
+# The band is 0.01%, which is far tighter than anything else here and still cleared by three
+# orders of magnitude -- ENDF's AWR and AME2020 are evaluations of the same measurements.
+#
+# There is no specific-activity table. It would be ln(2) N_A / (T_half M) over two quantities
+# that already have their own tables, and published specific-activity tables disagree with each
+# other by more than the staging error being looked for: Am-241 is tabulated at 3.2, 3.43 and
+# 3.5 Ci/g by different compilers depending on which half-life each used.
+key,value,unit,tolerance_rel,gate,source,note
+H-3,3.01604928132,g/mol,0.0001,gate,ame2020,
+C-14,14.00324198862,g/mol,0.0001,gate,ame2020,
+Co-60,59.933815536,g/mol,0.0001,gate,ame2020,the mass defect puts this below 60; a parser assuming the leading integer is A mis-reads it
+Sr-90,89.907727870,g/mol,0.0001,gate,ame2020,
+Cs-137,136.907089296,g/mol,0.0001,gate,ame2020,independently confirmed against the IAEA Livechart atomic_mass field
+I-131,130.906126375,g/mol,0.0001,gate,ame2020,
+Pm-147,146.915144944,g/mol,0.0001,gate,ame2020,
+Ce-144,143.913652763,g/mol,0.0001,gate,ame2020,
+Ir-192,191.962602414,g/mol,0.0001,gate,ame2020,
+Ra-226,226.025408186,g/mol,0.0001,gate,ame2020,
+Pu-239,239.052161596,g/mol,0.0001,gate,ame2020,
+Am-241,241.056827343,g/mol,0.0001,gate,ame2020,

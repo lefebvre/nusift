@@ -127,9 +127,15 @@ def test_views_are_read_only(data, result):
 
 @needs_store
 def test_gamma_constant_matches_the_published_value(data):
-    # 12.9 against a published 13.2 R*cm^2/(h*mCi); the residual is the uncollided model's.
+    # 12.91 against Ninkovic & Adrovic's 13.05 R*cm^2/(h*mCi). The residual is the air-table
+    # evaluation and the roentgen convention, not scatter -- published constants are vacuum
+    # quantities by definition. The classic 13.2 is the same physics in the pre-1979 roentgen.
+    #
+    # This stays here as a binding check: that the number survives the trip across nanobind
+    # intact. The authoritative published-value pass is the sweep in test_validation.py, which
+    # compares thirty of these against their reference table.
     published = data.gamma_constant("Co-60") * 1e4 * 3.7e7
-    assert published == pytest.approx(13.2, rel=0.05)
+    assert published == pytest.approx(13.05, rel=0.03)
 
 
 @needs_store
