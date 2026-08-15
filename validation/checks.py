@@ -338,6 +338,18 @@ def way_wigner(data, fissions=1.0e20):
     }
 
 
+# What the engine is required to reproduce a closed form to. The measured disagreement is three
+# orders below this -- it is double-precision round-off on a chained exponential rather than
+# anything the solver needs headroom for.
+#
+# The BOUND is what gets published, deliberately, and not the measured value. A residual at 1e-15
+# consists entirely of round-off, so its digits are a property of the platform's libm rather than
+# of NuSIFT: the same code prints 6.45e-15 under MSVC and 6.41e-15 under GCC. Committing that
+# number makes the report fail its own drift check on whichever machine did not generate it, and
+# claims a precision that does not exist.
+CLOSED_FORM_BOUND = 1.0e-12
+
+
 def equilibrium_curves(data):
     """Two real decay chains solved by the engine, against their closed forms.
 
@@ -389,7 +401,10 @@ def equilibrium_curves(data):
             "closed_daughter": closed_daughter,
             "worst_residual": float(np.max(np.abs(engine_daughter - closed_daughter)
                                            / np.maximum(closed_daughter, 1e-300))),
+            "bound": CLOSED_FORM_BOUND,
         })
+    for curve in curves:
+        curve["within"] = curve["worst_residual"] <= CLOSED_FORM_BOUND
     return curves
 
 

@@ -222,10 +222,15 @@ Fitted log-log slope **-1.121** over 1h to
 
 ![Equilibria](figures/validation-equilibria.svg)
 
-| chain | kind | staged branch | worst disagreement with Bateman |
+| chain | kind | staged branch | agrees with Bateman to |
 | --- | --- | --- | --- |
-| Sr-90 → Y-90 | secular | 1.0000 | 6.45e-15 |
-| Mo-99 → Tc-99m | transient | 0.8789 | 2.10e-15 |
+| Sr-90 → Y-90 | secular | 1.0000 | better than 1e-12 |
+| Mo-99 → Tc-99m | transient | 0.8789 | better than 1e-12 |
+
+The bound is published rather than the measured disagreement, which is around 1e-15 and
+therefore consists entirely of double-precision round-off — its digits are a property of
+the platform's libm, not of NuSIFT, and committing them would make this document fail
+its own drift check on whichever machine did not generate it.
 
 Atom conservation on a pure beta chain is checked alongside these in the C++ suite. It
 holds to 1e-10 on Sr-90 and to 1e-8 on Cs-137, and the difference is the evaluation's
