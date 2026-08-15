@@ -1,0 +1,5 @@
+# A spent-fuel-ish mix, in the units each source naturally comes in.
+nuclide, quantity, unit
+Cs-137,  1.2e14,   Bq
+Sr-90,   3.5,      g
+Co-60,   0.8,      Ci

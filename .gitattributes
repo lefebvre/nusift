@@ -1,0 +1,14 @@
+# Normalize every text file to LF in the repository, whatever the checkout platform does.
+# Without this, a Windows checkout with core.autocrlf=true can commit CRLF into shell
+# scripts, which then fail on the Linux CI runners with an unhelpful "bad interpreter".
+* text=auto eol=lf
+
+# Binary. Staged nuclear-data stores must never be line-ending converted -- doing so
+# corrupts them silently, and an HDF5 file that fails to open is the better outcome.
+*.h5 binary
+*.png binary
+*.pdf binary
+
+# ENDF tapes are fixed-column format; leave them exactly as the evaluator wrote them.
+*.endf -text
+*.dat -text

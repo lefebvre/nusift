@@ -1,0 +1,42 @@
+@PACKAGE_INIT@
+
+# Package config for the installed nusift library. Generated from this template by
+# configure_package_config_file(); see the install section of the top-level CMakeLists.txt.
+#
+# The exported nusift target carries its dependencies in its INTERFACE, so those packages
+# must be re-found here before nusiftTargets.cmake is included -- an imported target whose
+# INTERFACE_LINK_LIBRARIES names cram::cram is only usable once something has actually
+# defined cram::cram in the consumer's project.
+
+include(CMakeFindDependencyMacro)
+
+# cram is PRIVATE on the static nusift library, which still places it in the link interface
+# as $<LINK_ONLY:cram::cram> -- needed to link, never to compile against. Consumers therefore
+# never see a cram or Eigen header, which is the point of the PIMPL in nusift/nucdata and
+# nusift/engine, but they do need the imported target to exist.
+#
+# The prefix where THIS nusift found cram, recorded at configure time and appended as a
+# LAST-RESORT search hint. Without it, a consumer would have to know cram's location and put
+# it on CMAKE_PREFIX_PATH by hand -- which is a real burden rather than a theoretical one,
+# because cram is a niche package that will almost never be in a default system prefix, and
+# because a consumer of nusift has no reason to know nusift links cram at all. Appending to
+# CMAKE_PREFIX_PATH (rather than setting cram_DIR) means a stale hint -- either package
+# relocated since -- is harmless: it simply matches nothing and the normal search proceeds.
+# Anything the consumer supplies is searched first and wins.
+if(NOT "@NUSIFT_CRAM_PREFIX_HINT@" STREQUAL "")
+  list(APPEND CMAKE_PREFIX_PATH "@NUSIFT_CRAM_PREFIX_HINT@")
+endif()
+find_dependency(cram @NUSIFT_CRAM_MIN_VERSION@)
+
+# NO_MODULE mirrors cram's own config, and the version request is deliberately omitted for
+# the reason cram documents: Eigen's package version file uses SameMajorVersion compatibility,
+# so asking for 3.4 would reject a system Eigen 5.x outright.
+find_dependency(Eigen3 NO_MODULE)
+
+# C interface only. NuSIFT uses the raw HDF5 C API rather than the C++ bindings, so that a
+# consumer is not forced to match a C++ ABI it has no other reason to care about.
+find_dependency(HDF5 COMPONENTS C)
+
+include("${CMAKE_CURRENT_LIST_DIR}/nusiftTargets.cmake")
+
+check_required_components(nusift)

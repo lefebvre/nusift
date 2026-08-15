@@ -1,0 +1,44 @@
+# Build trees
+build/
+build-*/
+out/
+cmake-build-*/
+
+# FetchContent cache. Redirected here by FETCHCONTENT_BASE_DIR so downloads
+# survive clean builds and can be shared across build directories.
+external/
+
+# vcpkg manifest-mode install tree
+vcpkg_installed/
+
+# Editors / tooling
+.vs/
+.vscode/
+.idea/
+.cache/
+compile_commands.json
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+dist/
+wheelhouse/
+
+# Nuclear data. Raw ENDF tapes are large and regenerable via
+# data/endf/fetch_endf.sh; the staged store is committed (see the negation).
+data/endf/B-VIII.1/
+*.h5
+!data/nusift_b8.1.h5
+!tests/data/*.h5
+
+# Built Python extension, placed beside the sources so an in-tree build is importable. The
+# DLLs are the Windows case of the same thing: an in-tree extension finds hdf5 and its
+# dependencies next to itself. They are build output, not sources -- committing them put 4 MB
+# of Windows binaries into every wheel, including the Linux and macOS ones, since
+# wheel.packages ships this directory whole.
+python/nusift/*.pyd
+python/nusift/*.so
+python/nusift/*.dll
+python/nusift/*.dylib
+python/nusift/data/

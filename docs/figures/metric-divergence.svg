@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 420" width="760" height="420" role="img" aria-label="The same fission source at one day ranked by activity and by exposure">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="759" height="419" rx="6"/>
+<text class="ink" x="380.0" y="26.0" font-size="13" text-anchor="middle" font-weight="600">20 kt U-235 fission, 1 day after — the same atoms, ranked twice</text>
+<text class="ink" x="250.0" y="66.0" font-size="12.5" text-anchor="middle" font-weight="600">by activity</text>
+<text class="muted" x="250.0" y="82.0" font-size="10.5" text-anchor="middle" font-weight="normal">Bq</text>
+<text class="ink" x="510.0" y="66.0" font-size="12.5" text-anchor="middle" font-weight="600">by exposure at 1 m</text>
+<text class="muted" x="510.0" y="82.0" font-size="10.5" text-anchor="middle" font-weight="normal">R/h</text>
+<text class="t0" x="296.0" y="100.0" font-size="12" text-anchor="end" font-weight="600">Xe-135   11.5%</text>
+<text class="t1" x="296.0" y="134.0" font-size="12" text-anchor="end" font-weight="600">I-133   8.3%</text>
+<text class="t2" x="296.0" y="168.0" font-size="12" text-anchor="end" font-weight="600">Nb-97   8.0%</text>
+<text class="t3" x="296.0" y="202.0" font-size="12" text-anchor="end" font-weight="600">Zr-97   7.4%</text>
+<text class="t4" x="296.0" y="236.0" font-size="12" text-anchor="end" font-weight="600">Nb-97m   7.0%</text>
+<text class="t5" x="296.0" y="270.0" font-size="12" text-anchor="end" font-weight="600">Y-93   6.8%</text>
+<text class="t6" x="296.0" y="304.0" font-size="12" text-anchor="end" font-weight="600">Ce-143   6.1%</text>
+<text class="t7" x="296.0" y="338.0" font-size="12" text-anchor="end" font-weight="600">Sr-91   6.0%</text>
+<text class="t0" x="464.0" y="100.0" font-size="12" text-anchor="start" font-weight="600">I-135   12.7%</text>
+<text class="t1" x="464.0" y="134.0" font-size="12" text-anchor="start" font-weight="600">I-132   12.0%</text>
+<text class="t2" x="464.0" y="168.0" font-size="12" text-anchor="start" font-weight="600">Nb-97   11.2%</text>
+<text class="t4" x="464.0" y="202.0" font-size="12" text-anchor="start" font-weight="600">Nb-97m   10.8%</text>
+<text class="t1" x="464.0" y="236.0" font-size="12" text-anchor="start" font-weight="600">I-133   10.7%</text>
+<text class="t7" x="464.0" y="270.0" font-size="12" text-anchor="start" font-weight="600">Sr-91   8.7%</text>
+<text class="t0" x="464.0" y="304.0" font-size="12" text-anchor="start" font-weight="600">Xe-135   5.9%</text>
+<text class="t6" x="464.0" y="338.0" font-size="12" text-anchor="start" font-weight="600">Ce-143   4.5%</text>
+<path class="s0" d="M 308 96 C 380.0 96, 380.0 300, 452 300" stroke-width="1.6" fill="none" stroke-opacity="0.75"/>
+<path class="s1" d="M 308 130 C 380.0 130, 380.0 232, 452 232" stroke-width="1.6" fill="none" stroke-opacity="0.75"/>
+<path class="s2" d="M 308 164 C 380.0 164, 380.0 164, 452 164" stroke-width="1.6" fill="none" stroke-opacity="0.75"/>
+<text class="muted" x="316.0" y="202.0" font-size="12" text-anchor="start" font-weight="normal">—</text>
+<path class="s4" d="M 308 232 C 380.0 232, 380.0 198, 452 198" stroke-width="1.6" fill="none" stroke-opacity="0.75"/>
+<text class="muted" x="316.0" y="270.0" font-size="12" text-anchor="start" font-weight="normal">—</text>
+<path class="s6" d="M 308 300 C 380.0 300, 380.0 334, 452 334" stroke-width="1.6" fill="none" stroke-opacity="0.75"/>
+<path class="s7" d="M 308 334 C 380.0 334, 380.0 266, 452 266" stroke-width="1.6" fill="none" stroke-opacity="0.75"/>
+<text class="muted" x="444.0" y="100.0" font-size="12" text-anchor="end" font-weight="normal">—</text>
+<text class="muted" x="444.0" y="134.0" font-size="12" text-anchor="end" font-weight="normal">—</text>
+<text class="ink" x="60.0" y="360.0" font-size="12" text-anchor="start" font-weight="normal">2 of the top 8 by activity do not appear in the top 8 by exposure, and 2 appear only there.</text>
+<text class="muted" x="60.0" y="380.0" font-size="11.5" text-anchor="start" font-weight="normal">A pure beta emitter can lead a decay count and contribute no exposure at all; a nuclide can lead exposure through photons its</text>
+<text class="muted" x="60.0" y="398.0" font-size="11.5" text-anchor="start" font-weight="normal">daughter emits. Ranking by the wrong one is not a rounding error — it names a different nuclide.</text>
+</svg>

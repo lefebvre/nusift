@@ -1,0 +1,47 @@
+# An ILLUSTRATIVE irradiated-fuel inventory: the nuclides that usually matter for activity
+# and dose after a few years of cooling, at round order-of-magnitude quantities.
+#
+# The numbers are indicative, NOT the output of a burnup calculation, and should not be used
+# as a reference for anything. The point is the shape of the problem -- a mix of fission
+# products, activation products, and actinides that rank very differently depending on whether
+# you ask about activity or exposure.
+#
+# Quantities are per notional tonne of heavy metal, in the units each is naturally reported in.
+nuclide, quantity, unit
+
+# --- fission products, the activity drivers -----------------------------------
+Cs-137,   3.5e15,  Bq
+Ba-137m,  3.3e15,  Bq
+Sr-90,    2.4e15,  Bq
+Y-90,     2.4e15,  Bq
+Cs-134,   4.0e14,  Bq
+Ce-144,   6.0e14,  Bq
+Pr-144,   6.0e14,  Bq
+Ru-106,   2.0e14,  Bq
+Rh-106,   2.0e14,  Bq
+Pm-147,   9.0e14,  Bq
+Sm-151,   1.2e13,  Bq
+Eu-154,   1.1e14,  Bq
+Eu-155,   5.0e13,  Bq
+Sb-125,   8.0e13,  Bq
+Kr-85,    3.0e14,  Bq
+Tc-99,    1.5e10,  Bq
+I-129,    1.2e9,   Bq
+
+# --- activation products ------------------------------------------------------
+Co-60,    5.0e12,  Bq
+Fe-55,    2.0e12,  Bq
+Ni-63,    8.0e11,  Bq
+
+# --- actinides, given as mass because that is how burnup codes report them -----
+U-235,    5.5e3,   g
+U-238,    9.4e5,   g
+Pu-238,   2.0e2,   g
+Pu-239,   5.5e3,   g
+Pu-240,   2.4e3,   g
+Pu-241,   1.2e3,   g
+Pu-242,   6.0e2,   g
+Am-241,   3.0e2,   g
+Am-243,   1.0e2,   g
+Cm-244,   4.0e1,   g
+Np-237,   4.5e2,   g

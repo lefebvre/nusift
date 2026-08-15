@@ -1,0 +1,28 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++20
+
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 100
+
+AccessModifierOffset: -2
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+PointerAlignment: Left
+DerivePointerAlignment: false
+ReferenceAlignment: Left
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+
+AlignTrailingComments: true
+SpacesBeforeTrailingComments: 2

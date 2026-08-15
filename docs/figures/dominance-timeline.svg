@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" width="900" height="470" role="img" aria-label="Exposure share against time for the dominant fission products, with dominance windows">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="899" height="469" rx="6"/>
+<line class="grid" x1="74.0" y1="336.0" x2="792.0" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="65.0" y="339.5" font-size="10.5" text-anchor="end" font-weight="normal">0</text>
+<line class="grid" x1="74.0" y1="280.0" x2="792.0" y2="280.0" stroke-width="1.2"/>
+<text class="muted" x="65.0" y="283.5" font-size="10.5" text-anchor="end" font-weight="normal">25%</text>
+<line class="grid" x1="74.0" y1="224.0" x2="792.0" y2="224.0" stroke-width="1.2"/>
+<text class="muted" x="65.0" y="227.5" font-size="10.5" text-anchor="end" font-weight="normal">50%</text>
+<line class="grid" x1="74.0" y1="168.0" x2="792.0" y2="168.0" stroke-width="1.2"/>
+<text class="muted" x="65.0" y="171.5" font-size="10.5" text-anchor="end" font-weight="normal">75%</text>
+<line class="grid" x1="74.0" y1="112.0" x2="792.0" y2="112.0" stroke-width="1.2"/>
+<text class="muted" x="65.0" y="115.5" font-size="10.5" text-anchor="end" font-weight="normal">100%</text>
+<line class="grid" x1="74.0" y1="112.0" x2="74.0" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="74.0" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 m</text>
+<line class="grid" x1="167.0" y1="112.0" x2="167.0" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="167.0" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 m</text>
+<line class="grid" x1="239.4" y1="112.0" x2="239.4" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="239.4" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 h</text>
+<line class="grid" x1="367.7" y1="112.0" x2="367.7" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="367.7" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 d</text>
+<line class="grid" x1="460.7" y1="112.0" x2="460.7" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="460.7" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 d</text>
+<line class="grid" x1="606.0" y1="112.0" x2="606.0" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="606.0" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 y</text>
+<line class="grid" x1="699.0" y1="112.0" x2="699.0" y2="336.0" stroke-width="1.2"/>
+<text class="muted" x="699.0" y="354.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 y</text>
+<rect class="t0" x="74.0" y="46.0" width="29.9" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="74.0" y1="46.0" x2="74.0" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t0" x="89.0" y="60.0" font-size="10.5" text-anchor="middle" font-weight="600">La-144</text>
+<rect class="t1" x="103.9" y="46.0" width="27.7" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="103.9" y1="46.0" x2="103.9" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t1" x="117.7" y="73.0" font-size="10.5" text-anchor="middle" font-weight="600">Rb-91</text>
+<rect class="t2" x="131.6" y="46.0" width="54.5" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="131.6" y1="46.0" x2="131.6" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t2" x="158.8" y="60.0" font-size="10.5" text-anchor="middle" font-weight="600">Sr-93</text>
+<rect class="t3" x="186.1" y="46.0" width="20.8" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="186.1" y1="46.0" x2="186.1" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t3" x="196.5" y="73.0" font-size="10.5" text-anchor="middle" font-weight="600">Rb-89</text>
+<rect class="t4" x="206.9" y="46.0" width="36.1" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="206.9" y1="46.0" x2="206.9" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t4" x="224.9" y="60.0" font-size="10.5" text-anchor="middle" font-weight="600">Cs-138</text>
+<rect class="t5" x="242.9" y="46.0" width="66.9" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="242.9" y1="46.0" x2="242.9" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t5" x="276.4" y="73.0" font-size="10.5" text-anchor="middle" font-weight="600">I-134</text>
+<rect class="t6" x="309.8" y="46.0" width="58.8" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="309.8" y1="46.0" x2="309.8" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t6" x="339.2" y="60.0" font-size="10.5" text-anchor="middle" font-weight="600">I-135</text>
+<rect class="t7" x="368.6" y="46.0" width="75.4" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="368.6" y1="46.0" x2="368.6" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t7" x="406.3" y="73.0" font-size="10.5" text-anchor="middle" font-weight="600">I-132</text>
+<rect class="t0" x="444.1" y="46.0" width="91.3" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="444.1" y1="46.0" x2="444.1" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t0" x="489.7" y="60.0" font-size="10.5" text-anchor="middle" font-weight="600">La-140</text>
+<rect class="t1" x="535.3" y="46.0" width="89.5" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="535.3" y1="46.0" x2="535.3" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t1" x="580.1" y="73.0" font-size="10.5" text-anchor="middle" font-weight="600">Nb-95</text>
+<rect class="t2" x="624.8" y="46.0" width="167.2" height="34.0" rx="2" fill-opacity="0.22" stroke-width="0"/>
+<line class="axis" x1="624.8" y1="46.0" x2="624.8" y2="336.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t2" x="708.4" y="60.0" font-size="10.5" text-anchor="middle" font-weight="600">Ba-137m</text>
+<rect class="box" x="74.0" y="46.0" width="718.0" height="34.0" rx="2" fill-opacity="0" stroke-width="1.2"/>
+<text class="muted" x="74.0" y="38.0" font-size="11" text-anchor="start" font-weight="normal">leads the exposure</text>
+<polyline class="s0" points="74.00,311.71 84.41,312.15 94.81,314.54 105.22,318.63 115.62,323.74" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t0" x="74.0" y="304.7" font-size="10" text-anchor="middle" font-weight="600">La-144</text>
+<polyline class="s1" points="74.00,317.74 84.41,316.93 94.81,317.04 105.22,318.28 115.62,320.82 126.03,324.54" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t1" x="84.4" y="309.9" font-size="10" text-anchor="middle" font-weight="600">Rb-91</text>
+<polyline class="s2" points="105.22,327.22 115.62,324.85 126.03,321.99 136.43,318.86 146.84,316.00 157.25,314.01 167.65,313.39 178.06,314.39 188.46,317.02 198.87,320.97 209.28,325.53" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t2" x="167.7" y="306.4" font-size="10" text-anchor="middle" font-weight="600">Sr-93</text>
+<polyline class="s3" points="146.84,327.19 157.25,324.03 167.65,320.78 178.06,317.88 188.46,315.86 198.87,315.14 209.28,315.94 219.68,318.23 230.09,321.75 240.49,325.98" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t3" x="198.9" y="308.1" font-size="10" text-anchor="middle" font-weight="600">Rb-89</text>
+<polyline class="s4" points="178.06,327.33 188.46,323.84 198.87,319.46 209.28,314.29 219.68,308.67 230.09,303.45 240.49,300.01 250.90,299.86 261.30,303.84 271.71,311.27 282.12,320.04 292.52,327.72" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t4" x="250.9" y="292.9" font-size="10" text-anchor="middle" font-weight="600">Cs-138</text>
+<polyline class="s5" points="209.28,323.22 219.68,318.01 230.09,310.96 240.49,301.96 250.90,291.54 261.30,281.23 271.71,273.61 282.12,271.77 292.52,278.20 302.93,293.05 313.33,311.87" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t5" x="282.1" y="264.8" font-size="10" text-anchor="middle" font-weight="600">I-134</text>
+<polyline class="s6" points="261.30,328.24 271.71,325.69 282.12,322.18 292.52,317.26 302.93,310.70 313.33,303.11 323.74,296.46 334.14,292.89 344.55,293.32 354.96,297.75 365.36,305.56 375.77,315.18 386.17,324.30" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t6" x="334.1" y="285.9" font-size="10" text-anchor="middle" font-weight="600">I-135</text>
+<polyline class="s7" points="334.14,325.35 344.55,321.49 354.96,316.71 365.36,310.69 375.77,303.06 386.17,293.52 396.58,282.28 406.99,270.67 417.39,261.27 427.80,256.85 438.20,258.92 448.61,267.18 459.01,280.13 469.42,295.74 479.83,311.35 490.23,323.90 500.64,331.55" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t7" x="427.8" y="249.9" font-size="10" text-anchor="middle" font-weight="600">I-132</text>
+<polyline class="s0" points="396.58,321.20 406.99,312.65 417.39,301.09 427.80,287.06 438.20,271.55 448.61,255.41 459.01,239.10 469.42,223.46 479.83,210.52 490.23,203.37 500.64,204.67 511.04,215.60 521.45,236.23 531.86,265.03 542.26,295.90 552.67,319.35 563.07,331.18" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t0" x="490.2" y="196.4" font-size="10" text-anchor="middle" font-weight="600">La-140</text>
+<polyline class="s1" points="479.83,331.03 490.23,327.84 500.64,322.72 511.04,314.51 521.45,301.55 531.86,282.60 542.26,259.26 552.67,236.84 563.07,219.91 573.48,208.77 583.88,202.21 594.29,200.53 604.70,206.99 615.10,229.94 625.51,276.70 635.91,320.08 646.32,334.14" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t1" x="594.3" y="193.5" font-size="10" text-anchor="middle" font-weight="600">Nb-95</text>
+<polyline class="s2" points="563.07,334.74 573.48,334.18 583.88,333.10 594.29,330.68 604.70,324.52 615.10,307.88 625.51,269.97 635.91,221.23 646.32,185.14 656.72,157.96 667.13,136.79 677.54,123.42 687.94,116.91 698.35,114.24 708.75,113.10 719.16,112.54 729.57,112.25 739.97,112.12 750.38,112.07 760.78,112.05 771.19,112.04 781.59,112.05 792.00,112.06" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t2" x="771.2" y="105.0" font-size="10" text-anchor="middle" font-weight="600">Ba-137m</text>
+<polyline class="s3" points="448.61,328.36 459.01,326.30 469.42,323.53 479.83,319.84 490.23,315.07 500.64,308.99 511.04,301.07 521.45,290.84 531.86,278.86 542.26,268.01 552.67,261.97 563.07,261.42 573.48,263.96 583.88,267.46 594.29,271.46 604.70,277.37 615.10,289.05 625.51,310.05 635.91,329.06 646.32,335.19" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t3" x="563.1" y="254.4" font-size="10" text-anchor="middle" font-weight="600">Zr-95</text>
+<polyline class="s4" points="542.26,335.03 552.67,334.72 563.07,334.36 573.48,333.84 583.88,332.93 594.29,331.13 604.70,327.33 615.10,319.39 625.51,307.63 635.91,303.35 646.32,310.83 656.72,321.10 667.13,329.17 677.54,333.71 687.94,335.47 698.35,335.92" stroke-width="1.9" stroke-linejoin="round"/>
+<text class="t4" x="635.9" y="296.4" font-size="10" text-anchor="middle" font-weight="600">Ce-144</text>
+<line class="axis" x1="74.0" y1="336.0" x2="792.0" y2="336.0" stroke-width="1.4"/>
+<line class="axis" x1="74.0" y1="112.0" x2="74.0" y2="336.0" stroke-width="1.4"/>
+<text class="ink" x="74.0" y="24.0" font-size="13" text-anchor="start" font-weight="600">share of the total exposure rate — 20 kt U-235 thermal fission, ENDF/B-VIII.1</text>
+<text class="muted" x="792.0" y="376.0" font-size="11" text-anchor="end" font-weight="normal">time after fission →</text>
+<text class="ink" x="74.0" y="396.0" font-size="12" text-anchor="start" font-weight="normal">11 leadership changes over 70 log-spaced samples; the boundaries are interpolated crossings, not sample times.</text>
+<text class="muted" x="74.0" y="416.0" font-size="11.5" text-anchor="start" font-weight="normal">A share this concentrated is a late-time property: at one minute the leader holds 11%, at a century it holds essentially all of it.</text>
+<text class="muted" x="74.0" y="434.0" font-size="11.5" text-anchor="start" font-weight="normal">Curves are the per-time top 8, so a contributor's line stops where it drops out of that set.</text>
+</svg>

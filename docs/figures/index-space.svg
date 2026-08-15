@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" width="760" height="330" role="img" aria-label="Three nested index spaces: the staged nuclide axis inside the closed chain, with the pruned solve space crossing both">
+<style>
+  .bg    { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink   { fill: #1c1b19; }
+  .muted { fill: #6b6862; }
+  .outer { fill: #2f6f8f; stroke: #2f6f8f; }
+  .inner { fill: #4d7c4d; stroke: #4d7c4d; }
+  .prune { fill: #b4551f; stroke: #b4551f; }
+  .to    { fill: #2f6f8f; } .ti { fill: #4d7c4d; } .tp { fill: #b4551f; }
+  text   { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg    { fill: #12161c; stroke: #2b3239; }
+    .ink   { fill: #e6edf3; }
+    .muted { fill: #9aa4ae; }
+    .outer { fill: #6cb6d9; stroke: #6cb6d9; }
+    .inner { fill: #7fbf7f; stroke: #7fbf7f; }
+    .prune { fill: #e08a4c; stroke: #e08a4c; }
+    .to    { fill: #6cb6d9; } .ti { fill: #7fbf7f; } .tp { fill: #e08a4c; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="759" height="329" rx="6"/>
+
+<text class="ink" x="30" y="30" font-size="13" font-weight="600">three index spaces, and why they differ</text>
+<text class="muted" x="30" y="48" font-size="11">counts are the shipped ENDF/B-VIII.1 store, as reported by `nusift data info`</text>
+
+<rect class="outer" x="40" y="70" width="560" height="200" rx="8" fill-opacity="0.10" stroke-width="1.6"/>
+<text class="to" x="56" y="92" font-size="12.5" font-weight="600">closed chain &#8212; 4012</text>
+<text class="muted" x="56" y="108" font-size="10.5">every index the decay matrix can address</text>
+
+<rect class="inner" x="70" y="126" width="380" height="120" rx="6" fill-opacity="0.14" stroke-width="1.6"/>
+<text class="ti" x="86" y="148" font-size="12.5" font-weight="600">staged axis &#8212; 3828</text>
+<text class="muted" x="86" y="164" font-size="10.5">nuclides the store carries evaluated data for:</text>
+<text class="muted" x="86" y="179" font-size="10.5">half-life, decay modes, AWR, photon lines</text>
+<text class="muted" x="86" y="200" font-size="10.5">3562 unstable &#183; 1595 with discrete spectra</text>
+<text class="muted" x="86" y="215" font-size="10.5">3576 with atomic weights</text>
+<text class="muted" x="86" y="236" font-size="10.5">staged nuclide i is chain index i, exactly</text>
+
+<path class="prune" d="M 340 150 C 420 138, 500 150, 528 186 C 545 218, 500 246, 430 250 C 380 254, 345 230, 338 200 C 333 178, 332 160, 340 150 Z" fill-opacity="0.16" stroke-width="1.8" stroke-dasharray="6 4"/>
+<text class="tp" x="434" y="176" font-size="12.5" font-weight="600" text-anchor="middle">pruned solve space</text>
+<text class="muted" x="434" y="192" font-size="10.5" text-anchor="middle">forward closure of one seed</text>
+
+<text class="ink" x="620" y="92" font-size="11.5" font-weight="600">+184</text>
+<text class="muted" x="620" y="110" font-size="10.5">registered by</text>
+<text class="muted" x="620" y="124" font-size="10.5">closure and by</text>
+<text class="muted" x="620" y="138" font-size="10.5">fission yields:</text>
+<text class="muted" x="620" y="156" font-size="10.5">reachable</text>
+<text class="muted" x="620" y="170" font-size="10.5">daughters with</text>
+<text class="muted" x="620" y="184" font-size="10.5">no evaluated</text>
+<text class="muted" x="620" y="198" font-size="10.5">data of their</text>
+<text class="muted" x="620" y="212" font-size="10.5">own &#8212; stable</text>
+<text class="muted" x="620" y="226" font-size="10.5">terminators, so</text>
+<text class="muted" x="620" y="240" font-size="10.5">atoms arrive and</text>
+<text class="muted" x="620" y="254" font-size="10.5">never vanish</text>
+
+<text class="ink" x="30" y="296" font-size="12">The solve runs over the pruned space, which crosses the staged boundary: a closure-added daughter is reachable and</text>
+<text class="ink" x="30" y="314" font-size="12">therefore solved, contributing zero to every metric because it has no decay data. Lookups go by ZAI key, never by index.</text>
+</svg>

@@ -1,0 +1,37 @@
+# clang-tidy configuration for NuSIFT.
+#
+# Wired into the build via -DNUSIFT_CLANG_TIDY=ON and enforced by the `tidy` CI job.
+# The check set is curated to the HIGH-SIGNAL, bug-catching families -- bugprone-*,
+# performance-*, misc-* -- which stay clean and actionable on numerics code. The broad
+# stylistic families (readability-*, modernize-*, the cppcoreguidelines-* style checks)
+# are deliberately NOT enforced: on dense numeric code they produce thousands of
+# opinionated warnings (operator-precedence parentheses, literal-suffix case, designated
+# initializers, declare-then-assign locals) that bury the real findings. Run them ad hoc
+# when refactoring; this file is the gate.
+#
+# The repo root is named "nusift", so the plain 'nusift/.*' HeaderFilterRegex below would
+# also match vendored dependencies under external/ and _deps/. The CI gate suppresses that
+# by overriding the filter with an ABSOLUTE-path --header-filter=${CMAKE_SOURCE_DIR}/nusift/...
+# which external/ and _deps/ cannot collide with. That override -- rather than
+# ExcludeHeaderFilterRegex, which requires clang-tidy >= 19 -- keeps this config parseable
+# by older clang-tidy in CI images.
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  misc-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-exception-escape,
+  -performance-enum-size,
+  -performance-inefficient-string-concatenation,
+  -misc-include-cleaner,
+  -misc-const-correctness,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  -misc-use-anonymous-namespace,
+  -misc-header-include-cycle
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'nusift/.*\.hpp$'
+FormatStyle: none

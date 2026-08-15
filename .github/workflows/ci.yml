@@ -1,0 +1,240 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The cram ref CI builds and installs for the install-consume job.
+  #
+  # TODO: flip to a release tag once cram PR #15 ("Close install export gap") is merged and
+  # tagged. Until then no released cram carries install rules at all, so there is nothing for
+  # find_package(cram) to find and this job has to build the branch. Everything else in this
+  # workflow uses the pinned tag in cmake/dep_versions.cmake via the fetch fallback.
+  NUSIFT_CRAM_CI_REF: close-install-export-gap
+
+jobs:
+  # Formatting is a gate rather than a parallel job: a reformat churns every other job's
+  # diff, so it is cheaper to fail here first.
+  format-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang-format
+          files=$(git ls-files '*.cpp' '*.hpp')
+          if [ -z "$files" ]; then echo "no sources to check"; exit 0; fi
+          clang-format --dry-run --Werror $files
+
+  # The default developer configuration: no system cram, so it is fetched, and nothing is
+  # installable. This is what `cmake -B build` does on a fresh clone, and it must stay green.
+  build-test:
+    needs: format-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libhdf5-dev
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      # The unit label is the fast suite, and by construction needs no data files: it must
+      # pass on a clean checkout with nothing staged.
+      - name: Test
+        run: ctest --test-dir build -L unit --output-on-failure
+
+  # Address + UB sanitizers over the unit suite. The suite is 73 ms uninstrumented, so this
+  # costs a build and little else, and it is the only thing in CI that watches the raw-pointer
+  # span arithmetic the CSR line storage is built on -- NuclearData::lines hands out a span cut
+  # from a flat array by offset, and an off-by-one there reads valid memory belonging to the
+  # next nuclide, which no assertion on the values could catch.
+  #
+  # detect_leaks is off: cram and HDF5 both hold static allocations alive to exit by design,
+  # and a leak check here would report their bookkeeping rather than anything NuSIFT owns.
+  sanitizers:
+    needs: format-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libhdf5-dev
+      - name: Configure
+        run: |
+          cmake -B build-asan -G Ninja \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DNUSIFT_ENABLE_SANITIZERS=ON \
+                -DNUSIFT_BUILD_CLI=OFF
+      - name: Build
+        run: cmake --build build-asan
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build-asan -L unit --output-on-failure
+
+  # The RUNTIME configuration -- the only one that installs. Builds and installs cram against
+  # a system Eigen, then builds nusift against that installed cram, then runs the package
+  # test, which configures an external find_package(nusift) consumer against the staged
+  # prefix. This is what catches an export regression an in-tree build structurally cannot
+  # see: a source-tree path in the exported interface, a dependency missing from the export
+  # set, or a public header added but never installed.
+  install-consume:
+    needs: format-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # libeigen3-dev, not cram's fetch fallback: installing cram requires a SYSTEM Eigen,
+      # since a fetched one is a build-tree target that is never installed. cram enforces
+      # this itself, and nusift mirrors the policy for the same structural reason.
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libeigen3-dev libhdf5-dev
+
+      - name: Build and install cram
+        run: |
+          git clone --depth 1 -b "$NUSIFT_CRAM_CI_REF" \
+            https://github.com/lefebvre/cram-depletion.git cram-src
+          cmake -S cram-src -B cram-build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCRAM_ENABLE_TESTS=OFF \
+                -DCMAKE_INSTALL_PREFIX="$PWD/prefix"
+          cmake --build cram-build
+          cmake --install cram-build
+
+      - name: Configure nusift against the installed cram
+        run: |
+          cmake -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH="$PWD/prefix"
+          # The point of this job. If cram was fetched, the install policy silently turned
+          # install/export off and the package test below would be skipped rather than fail,
+          # so assert the configuration is the one we think it is.
+          grep -q 'NUSIFT_INSTALL:BOOL=ON' build/CMakeCache.txt \
+            || (echo "::error::NUSIFT_INSTALL is OFF -- cram was not found as an installed package" && exit 1)
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test, including the packaging smoke test
+        run: ctest --test-dir build --output-on-failure
+
+  build-test-windows:
+    needs: format-check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install HDF5
+        run: vcpkg install hdf5:x64-windows
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 \
+                -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release -L unit --output-on-failure
+
+  # The version lives in exactly one place -- project(VERSION) in the top-level CMakeLists --
+  # and a release tag is a claim about it. This makes a disagreeing tag fail rather than ship
+  # a binary whose --version contradicts the tag it was cut from. Borrowed from cram.
+  version-tag-check:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match project(VERSION)
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          project=$(sed -n 's/^project(nusift VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "tag=$tag project=$project"
+          if [ -z "$project" ]; then
+            echo "could not parse VERSION out of project() in CMakeLists.txt" >&2
+            exit 1
+          fi
+          if [ "$tag" != "$project" ]; then
+            echo "tag v$tag disagrees with project(VERSION) $project; bump CMakeLists.txt or retag" >&2
+            exit 1
+          fi
+
+  # The Python extension. Built against the same library the CLI uses, so this catches a
+  # binding that drifts from the C++ API -- a signature changed on one side only, or an array
+  # that silently became a copy.
+  #
+  # Wheels across the three platforms are deliberately NOT built here. That needs cibuildwheel
+  # and a bundled HDF5, and it is a release concern rather than a per-commit one; getting the
+  # binding itself under test every commit is what stops it rotting.
+  python-bindings:
+    needs: format-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libhdf5-dev
+          python -m pip install --upgrade pip
+          python -m pip install nanobind numpy pytest
+
+      - name: Build the extension
+        run: |
+          cmake -B build -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DNUSIFT_BUILD_PYTHON=ON \
+                -DNUSIFT_ENABLE_TESTS=OFF \
+                -DNUSIFT_BUILD_CLI=OFF \
+                -DPython_EXECUTABLE="$(which python)"
+          cmake --build build
+
+      - name: Test
+        env:
+          PYTHONPATH: python
+        run: python -m pytest python/tests -q
+
+  # The STAGING configuration -- the second of the two build configurations, and the only one
+  # that touches ENDFtk. Slow, because it compiles ENDFtk, spdlog, and range-v3 from source,
+  # but it is the only thing that verifies the staging tool at all: nothing in the runtime
+  # build references a single ENDFtk symbol.
+  #
+  # Linux only. cram builds ENDFtk with SPDLOG_USE_STD_FORMAT, and njoy's tools::Log forwards
+  # its arguments by value into spdlog, so the format string reaches std::format_string as a
+  # runtime value rather than a compile-time constant. MSVC rejects that (C7595) while
+  # libstdc++ accepts it, and the failure is inside cram's own translation units.
+  #
+  # This job deliberately does NOT install: a staging build fetches ENDFtk, which is never
+  # installed, so it can never be exported. The install-consume job covers that side.
+  staging-build:
+    needs: format-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libhdf5-dev
+
+      - name: Configure and build the staging tool
+        run: |
+          cmake -B build-staging -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DNUSIFT_WITH_STAGING=ON \
+                -DNUSIFT_BUILD_CLI=OFF \
+                -DNUSIFT_ENABLE_TESTS=OFF
+          cmake --build build-staging
+
+      # Compiling proves the ENDFtk accessors exist; only running proves they mean what the
+      # code assumes. cram ships two small tapes for exactly this.
+      - name: Stage a real ENDF tape end to end
+        run: |
+          git clone --depth 1 -b "$NUSIFT_CRAM_CI_REF" \
+            https://github.com/lefebvre/cram-depletion.git cram-tapes
+          D=cram-tapes/tests/integration/data
+          ./build-staging/nusift_apps/nusift_stage_data \
+            "$D/decay_am242m.endf" --nfy "$D/nfy-Pu239.endf" 94 239 \
+            -o staged.h5 --library "ENDF/B-VIII.0 (partial)"
+          test -s staged.h5 || (echo "::error::staging produced no store" && exit 1)

@@ -1,0 +1,83 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Developer build (cram fetched, not installable)",
+      "description": "The default. Fetches cram, so install/export is off -- see the install policy in CMakeLists.txt.",
+      "inherits": "base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "dev-windows",
+      "displayName": "Developer build (Windows, vcpkg)",
+      "inherits": ["base", "vcpkg"],
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64"
+    },
+    {
+      "name": "release",
+      "displayName": "Installable build (requires an installed cram and a system Eigen)",
+      "description": "The runtime configuration. Point CMAKE_PREFIX_PATH at a cram install prefix; this is the only configuration that can export a package.",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": { "NUSIFT_INSTALL": "ON" }
+    },
+    {
+      "name": "staging",
+      "displayName": "Staging build (ENDF -> HDF5 store)",
+      "description": "Fetches cram with CRAM_WITH_ENDFTK=ON. Mutually exclusive with install/export by construction: ENDFtk is always fetched and can never be exported.",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "NUSIFT_WITH_STAGING": "ON",
+        "CMAKE_DISABLE_FIND_PACKAGE_cram": "ON"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "Sanitizers (ASan + UBSan)",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "NUSIFT_ENABLE_SANITIZERS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev" },
+    { "name": "dev-windows", "configurePreset": "dev-windows", "configuration": "Release" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "staging", "configurePreset": "staging" },
+    { "name": "asan", "configurePreset": "asan" }
+  ],
+  "testPresets": [
+    {
+      "name": "unit",
+      "displayName": "Fast unit tests (no data files)",
+      "configurePreset": "dev",
+      "filter": { "include": { "label": "unit" } },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "all",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

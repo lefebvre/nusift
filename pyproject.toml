@@ -1,0 +1,42 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.4"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "nusift"
+description = "Which isotopes dominate activity or exposure, and when"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE.md" }
+dynamic = ["version"]
+dependencies = ["numpy>=1.23"]
+classifiers = [
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Source = "https://github.com/lefebvre/nusift"
+
+[tool.scikit-build]
+cmake.version = ">=3.28"
+wheel.packages = ["python/nusift"]
+sdist.exclude = ["external", "build*", "data/endf", ".venv"]
+
+[tool.scikit-build.cmake.define]
+NUSIFT_BUILD_PYTHON = "ON"
+NUSIFT_BUILD_CLI = "ON"
+NUSIFT_ENABLE_TESTS = "OFF"
+# A wheel build has no system Eigen, so cram is fetched and nothing can be exported -- and
+# nothing needs to be, since cram links statically into the extension.
+NUSIFT_WITH_STAGING = "OFF"
+NUSIFT_INSTALL = "OFF"
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "CMakeLists.txt"
+regex = 'project\(nusift VERSION (?P<value>[0-9.]+)'
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
