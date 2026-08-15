@@ -1,0 +1,46 @@
+# Evaluated half-lives from ENSDF (April 2022 snapshot), read through the IAEA Livechart API.
+# One evaluation throughout rather than the closest value per nuclide: mixing compilations
+# would let a row be quietly rehomed to whichever source happened to agree.
+#
+# The band is 1%, which the staged data clears by two to three orders of magnitude. It is set
+# where it is because independent compilations differ from each other by more than the staging
+# error being looked for -- DDEP and ENSDF disagree by 0.4% on Sr-90 and 0.2% on Cs-137 -- so a
+# tighter band would be measuring which compilation ENDF/B-VIII.1 adopted, not whether NuSIFT
+# staged it correctly.
+key,value,unit,tolerance_rel,gate,source,note
+H-3,12.32,y,0.01,gate,ensdf2022,
+C-14,5700,y,0.01,gate,ensdf2022,
+Na-22,2.6018,y,0.01,gate,ensdf2022,
+P-32,14.268,d,0.01,gate,ensdf2022,
+K-40,1.248e9,y,0.01,gate,ensdf2022,DDEP gives 1.2522e9; the compilations differ by 0.3%
+Mn-54,312.20,d,0.01,gate,ensdf2022,
+Fe-59,44.490,d,0.01,gate,ensdf2022,
+Co-57,271.74,d,0.01,gate,ensdf2022,
+Co-60,1925.28,d,0.01,gate,ensdf2022,
+Zn-65,243.93,d,0.01,gate,ensdf2022,
+Kr-85,10.739,y,0.01,gate,ensdf2022,
+Sr-90,28.91,y,0.01,gate,ensdf2022,DDEP gives 28.80; the compilations differ by 0.4%
+Y-90,64.05,h,0.01,gate,ensdf2022,
+Zr-95,64.032,d,0.01,gate,ensdf2022,
+Nb-95,34.991,d,0.01,gate,ensdf2022,
+Mo-99,65.924,h,0.01,gate,ensdf2022,
+Tc-99m,6.0072,h,0.01,gate,ensdf2022,
+Ru-103,39.247,d,0.01,gate,ensdf2022,not covered by DDEP
+I-125,59.407,d,0.01,gate,ensdf2022,
+I-131,8.0252,d,0.01,gate,ensdf2022,
+Cs-134,2.0652,y,0.01,gate,ensdf2022,
+Cs-137,30.08,y,0.01,gate,ensdf2022,DDEP gives 30.018
+Ba-133,10.551,y,0.01,gate,ensdf2022,
+Ba-137m,2.552,min,0.01,gate,ensdf2022,
+Ce-141,32.504,d,0.01,gate,ensdf2022,
+Ce-144,284.91,d,0.01,gate,ensdf2022,
+Pm-147,2.6234,y,0.01,gate,ensdf2022,
+Eu-152,13.517,y,0.01,gate,ensdf2022,
+Eu-154,8.601,y,0.01,gate,ensdf2022,
+Ir-192,73.829,d,0.01,gate,ensdf2022,
+Au-198,2.6941,d,0.01,gate,ensdf2022,
+Ra-226,1600,y,0.01,gate,ensdf2022,
+U-235,7.04e8,y,0.01,gate,ensdf2022,
+U-238,4.468e9,y,0.01,gate,ensdf2022,
+Pu-239,24110,y,0.01,gate,ensdf2022,
+Am-241,432.6,y,0.01,gate,ensdf2022,

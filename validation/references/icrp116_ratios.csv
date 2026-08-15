@@ -1,0 +1,16 @@
+# ICRP 116 effective dose (AP) per unit activity at 1 m, as tabulated by Peplow (2020), against
+# what NuSIFT reports in its sievert column.
+#
+# This table exists to keep a caveat true rather than to demonstrate agreement. NuSIFT computes
+# air kerma and converts with a photon radiation weighting factor of 1; that is not effective
+# dose to a person. Near 1 MeV the two track each other closely, which is a coincidence of
+# energy and not a validation of the label. Going soft they diverge badly, and Am-241 is gated
+# on STILL diverging by about a factor of five -- if that row ever started agreeing, the caveat
+# in docs/exposure.md would have quietly become wrong.
+#
+# expected_ratio is NuSIFT's air-kerma sievert divided by the ICRP 116 effective dose; the
+# tolerance applies to that ratio.
+key,value,unit,expected_ratio,tolerance_rel,gate,source,note
+Co-60,3.062e-4,mSv/(h.MBq)@1m,1.00,0.06,gate,peplow2020,agreement here is a coincidence of energy near 1 MeV
+Ba-137m,8.228e-5,mSv/(h.MBq)@1m,1.00,0.06,gate,peplow2020,agreement here is a coincidence of energy near 662 keV
+Am-241,5.413e-6,mSv/(h.MBq)@1m,5.17,0.15,gate,peplow2020,83% of the constant is below 20 keV where air kerma loads heavily and effective dose does not

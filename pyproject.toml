@@ -40,3 +40,6 @@ regex = 'project\(nusift VERSION (?P<value>[0-9.]+)'
 
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]
+markers = [
+  "validation: checks the shipped evaluation against published values and an independent code",
+]
