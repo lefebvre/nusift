@@ -77,6 +77,13 @@ in `references/README.md`. Two rules keep the suite honest:
 code does, which is what a golden file does, and proves nothing. Every band in
 `references/README.md` is justified from the physics that limits the comparison.
 
+**Never publish a number that is round-off.** A residual at 1e-15 has no significant digits of
+its own: it is the platform's libm, and the same code prints 6.45e-15 under MSVC and 6.41e-15
+under GCC. Committing one makes this document fail its own drift check on whichever machine did
+not generate it, and claims a precision that does not exist. Publish the bound the check asserts
+instead, and let the test carry the measurement. Every other number here is a physical quantity
+with orders of margin over round-off, which is why fixed formatting is enough for them.
+
 **Mark a row `report` rather than widening a band to swallow it.** A published value and a
 computed one are sometimes not the same quantity — a different energy cutoff, a constant
 tabulated for a parent in equilibrium with its daughter, an evaluation that simply disagrees.

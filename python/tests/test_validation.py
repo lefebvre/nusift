@@ -91,6 +91,21 @@ def test_the_sievert_column_tracks_and_departs_from_effective_dose(data):
     )
 
 
+# The report publishes a bound rather than the measured disagreement, because at 1e-15 the
+# measurement is round-off and its digits vary by platform. This is what makes that published
+# bound a claim rather than a decoration.
+def test_real_chains_reproduce_their_closed_forms(data):
+    curves = checks.equilibrium_curves(data)
+    assert curves, "no chains were solved"
+    failures = [
+        f"{c['parent']} -> {c['daughter']}: worst {c['worst_residual']:.2e}, "
+        f"bound {c['bound']:g}"
+        for c in curves
+        if not c["within"]
+    ]
+    assert not failures, "\n".join(failures)
+
+
 # --- an empirical law nothing here was fitted to ------------------------------
 
 

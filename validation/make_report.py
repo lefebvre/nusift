@@ -322,10 +322,13 @@ def figure_equilibria(path, curves):
                       "Lines are the CRAM solve; dots are the Bateman solution evaluated with "
                       "the store's own decay constants. Activity, log scale, arbitrary units.",
                       "muted", 11.5))
-    worst = max(c["worst_residual"] for c in curves)
+    # The bound, not the measured residual: at 1e-15 the measurement is round-off, and its
+    # digits differ between platforms' libm. See CLOSED_FORM_BOUND in checks.py.
+    bound = curves[0]["bound"]
     after = caption(parts, 58, 386,
-                    [f"Worst disagreement between solve and closed form across both chains: "
-                     f"{worst:.2e} relative."], width, size=12, cls="ink")
+                    [f"Solve and closed form agree to better than {bound:g} relative on both "
+                     f"chains -- double-precision round-off on a chained exponential, not a "
+                     f"tolerance the solver needs."], width, size=12, cls="ink")
     after = caption(parts, 58, after + 4,
             ["Mo-99 only lands on its curve if the 87.6% branch to the isomer was staged "
              "correctly; a branch of 1.0 would sit a seventh high and no half-life check would "
@@ -697,9 +700,14 @@ def main():
     add("")
     add("![Equilibria](figures/validation-equilibria.svg)")
     add("")
-    add(table(["chain", "kind", "staged branch", "worst disagreement with Bateman"],
+    add(table(["chain", "kind", "staged branch", "agrees with Bateman to"],
               [[f"{c['parent']} → {c['daughter']}", c["kind"], f"{c['branch']:.4f}",
-                f"{c['worst_residual']:.2e}"] for c in curves]))
+                f"better than {c['bound']:g}"] for c in curves]))
+    add("")
+    add("The bound is published rather than the measured disagreement, which is around 1e-15 and")
+    add("therefore consists entirely of double-precision round-off — its digits are a property of")
+    add("the platform's libm, not of NuSIFT, and committing them would make this document fail")
+    add("its own drift check on whichever machine did not generate it.")
     add("")
     add("Atom conservation on a pure beta chain is checked alongside these in the C++ suite. It")
     add("holds to 1e-10 on Sr-90 and to 1e-8 on Cs-137, and the difference is the evaluation's")
