@@ -217,12 +217,37 @@ NB_MODULE(_core, m) {
           },
           "nuclide"_a, "Half-life in seconds; 0 for stable or absent.")
       .def(
-          "gamma_constant",
+          "molar_mass",
           [](const NuclearData& d, const std::string& name) {
             const int i = d.indexOf(requireNuclideName(name));
-            return i >= 0 ? exposure::gammaConstant(d.lines(i)) : 0.0;
+            return i >= 0 ? d.molarMassGPerMol(i) : 0.0;
           },
-          "nuclide"_a, "Specific gamma-ray constant in R*m^2/(h*Bq), vacuum.")
+          "nuclide"_a, "Molar mass in g/mol from the staged atomic weight; 0 if absent.")
+      .def(
+          "gamma_constant",
+          [](const NuclearData& d, const std::string& name, double minEnergyEv) {
+            const int i = d.indexOf(requireNuclideName(name));
+            if (i < 0) {
+              return 0.0;
+            }
+            if (minEnergyEv <= 0.0) {
+              return exposure::gammaConstant(d.lines(i));
+            }
+            // Published tabulations usually state a low-energy cutoff -- 20 keV is the common
+            // one -- because soft X-rays are absorbed by any real source encapsulation before
+            // they reach air. Applying the same cutoff is what makes a comparison against such
+            // a table a like-for-like one rather than a comparison of two conventions.
+            std::vector<GammaLine> kept;
+            for (const GammaLine& line : d.lines(i)) {
+              if (line.energyEv >= minEnergyEv) {
+                kept.push_back(line);
+              }
+            }
+            return exposure::gammaConstant(LineSpectrum(kept.data(), kept.size()));
+          },
+          "nuclide"_a, "min_energy_ev"_a = 0.0,
+          "Specific gamma-ray constant in R*m^2/(h*Bq), vacuum. With min_energy_ev, counts only "
+          "photons at or above that energy, matching tabulations that state a cutoff.")
       .def("__repr__", [](const NuclearData& d) {
         return "<NuclearData " + d.provenance().library + ", " + std::to_string(d.stagedCount()) +
                " nuclides>";
