@@ -3,9 +3,10 @@
 # CTest labels partition the suite by what a test NEEDS, which is what makes the inner loop
 # fast and a clean checkout green:
 #
-#   unit     -- no data files at all. Must pass on a fresh clone with no store staged.
-#   data     -- needs the real staged nuclear-data store.
-#   staging  -- needs ENDFtk and ENDF tapes.
+#   unit        -- no data files at all. Must pass on a fresh clone with no store staged.
+#   validation  -- runs against the committed store, comparing it to published physics.
+#   data        -- needs a staged store that is not the committed one.
+#   staging     -- needs ENDFtk and ENDF tapes.
 #
 # `ctest -L unit` is the inner loop; `ctest -LE 'data|staging'` is what CI runs by default.
 
@@ -66,6 +67,42 @@ nusift_clang_tidy(nusift_unit_tests)
 gtest_discover_tests(nusift_unit_tests
   TEST_PREFIX nusift.
   PROPERTIES LABELS unit
+  DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# Validation suite
+#
+# The unit suite proves the code does what the physics says on chains it invents. This one
+# asks whether the evaluation NuSIFT actually ships reproduces published values -- gamma
+# constants, evaluated half-lives, real chain topology -- and pins what the store contains so
+# a restaging cannot quietly change the answers users get.
+#
+# A second binary rather than more files in the first, because the dependency is different in
+# kind: these tests cannot run without the committed store, and the unit suite's defining
+# property is that it needs nothing. The label keeps them separable in both directions.
+#
+# The store path is compiled in rather than passed as a test property so the binary works when
+# run directly, which is what anyone debugging a failure does. See validation_store.hpp.
+# ---------------------------------------------------------------------------
+add_executable(nusift_validation_tests
+  validation/test_published_constants.cpp
+  validation/test_store_census.cpp
+  validation/test_store_chain.cpp)
+
+target_include_directories(nusift_validation_tests
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/validation ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+
+target_compile_definitions(nusift_validation_tests
+  PRIVATE NUSIFT_COMMITTED_STORE="${CMAKE_SOURCE_DIR}/data/nusift_b8.1.h5")
+
+target_link_libraries(nusift_validation_tests
+  PRIVATE nusift::nusift GTest::gtest GTest::gtest_main nusift_warnings)
+
+nusift_clang_tidy(nusift_validation_tests)
+
+gtest_discover_tests(nusift_validation_tests
+  TEST_PREFIX nusift.validation.
+  PROPERTIES LABELS validation
   DISCOVERY_MODE PRE_TEST)
 
 # ---------------------------------------------------------------------------
