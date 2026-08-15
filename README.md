@@ -134,6 +134,7 @@ exactly, what is approximated and by how much, and what is not modelled at all.
 | [Interval integration](docs/interval-integration.md) | Time-integrated answers in closed form, and the cancellation guard |
 | [Exposure](docs/exposure.md) | The point-source photon model, and what it excludes |
 | [Ranking and forecasting](docs/ranking.md) | Weights, aggregation, coverage, and dominance windows |
+| [**Validation**](docs/validation.md) | Computed against published constants, evaluated data, an empirical law, and an independent code — regenerated and diff-checked in CI |
 
 ## Building
 
