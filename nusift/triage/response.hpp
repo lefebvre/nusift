@@ -165,6 +165,24 @@ struct ResponseTable {
   }
 };
 
+// Resolve a contributor named the way a user writes one, against the aggregate `table` was
+// built with: "Cs-137" for a nuclide, "A=140" or "140" for a mass chain, "Cs" or "55" for an
+// element. A nuclide name is accepted whatever the aggregate and resolves to the bucket that
+// nuclide falls in, so `--pin Cs-137` means the same thing whether the table ranks nuclides or
+// the mass chains they sit in -- someone who knows a nuclide name should not have to work out
+// which isobar it belongs to in order to follow it.
+//
+// Returns the contributor key, which is what RankRequest::pinned holds. Throws InputError when
+// the spelling names nothing of the right kind, and when it names something this table does not
+// carry: an inventory whose chain never reaches Cs-137 cannot pin it, and saying so is better
+// than a row of zeros that reads like an answer.
+//
+// A gamma-line table has one column per line and several per emitter, so a key there names an
+// EMITTER, and pinning it pins every line of that emitter the table carries. Pinning one line
+// out of a spectrum is not offered: what is understated or overlooked is the nuclide, and which
+// of its lines you are looking at does not change that.
+std::int64_t requirePin(const ResponseTable& table, std::string_view text);
+
 struct ResponseSpec {
   Metric metric = Metric::Activity;
   Aggregate aggregate = Aggregate::Nuclide;

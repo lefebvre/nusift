@@ -146,6 +146,51 @@ TEST(Forecast, UnionTopNIncludesALateBloomer) {
   EXPECT_GT(tracks[1].peakFraction, 0.0);
 }
 
+// A contributor that never places is exactly the one a window list cannot describe, and a
+// forecast that only shows contenders cannot answer "and where is this one in all of it".
+TEST(Forecast, PinnedTrackIsFollowedEvenThoughItNeverReachesTheTop) {
+  const NuclearData data = twoIndependentEmitters(1.0e-3, 1.0e-6);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e22);  // leads over the whole grid below
+  inv.add(Zai{60, 120, 0}, 1.0e20);
+
+  const std::int64_t follower = Zai{60, 120, 0}.key();
+  const ResponseTable table = tableOver(data, inv, logspace(1.0, 1.0e4, 40));
+
+  ASSERT_EQ(unionTopN(table, 1).size(), 1u) << "one contributor leads throughout";
+
+  const std::vector<std::int64_t> pins = {follower};
+  const std::vector<RankTrack> tracks = unionTopN(table, 1, pins);
+
+  ASSERT_EQ(tracks.size(), 2u);
+  EXPECT_FALSE(tracks[0].pinned);
+  EXPECT_TRUE(tracks[1].pinned) << "the pinned track follows the ones the forecast found";
+  EXPECT_EQ(tracks[1].id.key, follower);
+  EXPECT_GT(tracks[1].peakFraction, 0.0);
+  // Second everywhere: present at every time, leading at none.
+  for (const int rank : tracks[1].rank) {
+    EXPECT_EQ(rank, 2);
+  }
+}
+
+// A pin on a contributor the forecast already surfaced is not a second track, and it is not
+// re-labelled as pinned either -- it earned its place.
+TEST(Forecast, PinningAContenderDoesNotDuplicateIt) {
+  const NuclearData data = twoIndependentEmitters(1.0e-3, 1.0e-6);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e22);
+  inv.add(Zai{60, 120, 0}, 1.0e20);
+
+  const ResponseTable table = tableOver(data, inv, logspace(1.0, 1.0e7, 60));
+  const std::vector<std::int64_t> pins = {Zai{60, 120, 0}.key()};
+
+  const std::vector<RankTrack> tracks = unionTopN(table, 1, pins);
+  ASSERT_EQ(tracks.size(), unionTopN(table, 1).size());
+  for (const RankTrack& track : tracks) {
+    EXPECT_FALSE(track.pinned);
+  }
+}
+
 // The complement: what must always be accounted for, as opposed to what could ever matter.
 TEST(Forecast, PersistentTopNExcludesAnyoneWhoDropsOut) {
   const NuclearData data = twoIndependentEmitters(1.0e-3, 1.0e-6);

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <map>
+#include <span>
 #include <vector>
 
 namespace nusift {
@@ -218,6 +220,49 @@ std::vector<RankTrack> unionTopN(const ResponseTable& table, int n) {
     }
     return a.id.key < b.id.key;
   });
+  return tracks;
+}
+
+std::vector<RankTrack> unionTopN(const ResponseTable& table, int n,
+                                 std::span<const std::int64_t> pinned) {
+  std::vector<RankTrack> tracks = unionTopN(table, n);
+  if (pinned.empty() || table.timeCount() == 0) {
+    return tracks;
+  }
+
+  std::vector<RankTrack> extras;
+  for (int c = 0; c < table.contributorCount(); ++c) {
+    const ContributorId& id = table.contributors[static_cast<std::size_t>(c)];
+    if (std::find(pinned.begin(), pinned.end(), id.key) == pinned.end()) {
+      continue;
+    }
+    // A gamma-line table has one column per line, so identity there is the emitter AND the
+    // energy; comparing keys alone would drop every line of an emitter after its first.
+    const bool already = std::any_of(tracks.begin(), tracks.end(), [&](const RankTrack& track) {
+      return track.id.key == id.key && track.id.lineEnergyEv == id.lineEnergyEv;
+    });
+    if (already) {
+      continue;
+    }
+    RankTrack track = trackOf(table, c);
+    track.pinned = true;
+    extras.push_back(std::move(track));
+  }
+
+  // Ordered among themselves the way the tracks above them are, and appended rather than merged:
+  // a pinned track is in the list because it was asked for, and sorting it in with the ones the
+  // forecast found would erase that distinction at exactly the moment it matters.
+  std::sort(extras.begin(), extras.end(), [](const RankTrack& a, const RankTrack& b) {
+    if (a.peakFraction != b.peakFraction) {
+      return a.peakFraction > b.peakFraction;
+    }
+    if (a.id.key != b.id.key) {
+      return a.id.key < b.id.key;
+    }
+    return a.id.lineEnergyEv < b.id.lineEnergyEv;
+  });
+  tracks.insert(tracks.end(), std::make_move_iterator(extras.begin()),
+                std::make_move_iterator(extras.end()));
   return tracks;
 }
 

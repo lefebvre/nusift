@@ -24,6 +24,9 @@ nusift rank -i inventory.csv --at 30d
 # Which mass chains are 95% of the activity at 30 years, in curies?
 nusift rank -i inventory.csv --at 30y --by mass-chain --units Ci --top 0 --coverage 0.95
 
+# Top 10, and wherever Cs-137 and the A=90 chain happen to fall
+nusift rank -i inventory.csv --at 30d --pin Cs-137 --pin A=90
+
 # How many decays occur in the first year?
 nusift integrate -i inventory.csv --interval 0,1y
 
@@ -59,6 +62,13 @@ Co-60,   0.8,      Ci
 
 Every report states the total over *all* contributors and the fraction the shown rows cover,
 so a top-10 worth 40% and one worth 99% can never look alike.
+
+Every other way of shortening a ranking truncates it; `--pin` is the one that reaches past the
+cut. A pinned nuclide, mass chain, or element appears below the ranking whatever it ranks,
+carrying the place it actually holds — `27  Cs-137  0.063%  99.6%` — so following one specific
+isotope never means printing the whole chain or guessing a `--top` large enough to reach it.
+Pinning changes nothing about the ranking above it, and a pin that resolves to nothing is
+refused rather than answered with a row of zeros.
 
 Activity and exposure routinely give different answers, which is the point of ranking by the
 one you care about. A pure beta emitter can dominate activity and contribute no exposure at
@@ -197,7 +207,7 @@ Implemented:
 
 - Inventory input in atoms, moles, mass, or activity units
 - Decay to a set of cooling times, with exact time integrals over an interval
-- Ranking by nuclide, mass chain, element, or gamma line
+- Ranking by nuclide, mass chain, element, or gamma line, with any of them pinnable
 - Point-source gamma exposure in R/h, Gy/h, or Sv/h, at any distance
 - Staging a data store from ENDF decay and fission-yield tapes
 - Seeding an inventory from fission, by fission count, kilotons, or joules

@@ -191,6 +191,40 @@ def test_rank_at_accepts_the_same_strings_as_the_cli(data, result):
 
 
 @needs_store
+def test_a_pin_reaches_past_the_cut_without_moving_it(data, result):
+    _, res = result
+    table = nusift.response(data, res, metric="activity")
+    plain = table.rank(at="10y", top=3)
+    pinned = table.rank(at="10y", top=3, pin="Sm-151")
+
+    # The ranking is untouched; the pin is a row after it, carrying where it really stands.
+    assert [c.label for c in pinned.contributors[:3]] == [c.label for c in plain.contributors]
+    assert len(pinned.contributors) == 4
+    tail = pinned.contributors[3]
+    assert tail.label == "Sm-151"
+    assert tail.pinned
+    assert not any(c.pinned for c in pinned.contributors[:3])
+    assert tail.rank > 3
+    assert pinned.covered_fraction > plain.covered_fraction
+
+
+@needs_store
+def test_several_pins_are_accepted_and_a_bare_string_is_one_pin(data, result):
+    _, res = result
+    table = nusift.response(data, res, metric="activity", by="mass-chain")
+
+    # "A=147" is one pin, not five one-character ones -- a string is a perfectly good sequence
+    # in Python, which is what makes that mistake worth a test.
+    assert len(table.rank(at="10y", top=1, pin="A=147").contributors) == 2
+    assert len(table.rank(at="10y", top=1, pin=["A=147", "A=85"]).contributors) == 3
+    # A pin that already ranked is not a second row.
+    assert len(table.rank(at="10y", top=1, pin="A=137").contributors) == 1
+
+    with pytest.raises(Exception, match="pin"):
+        table.rank(at="10y", top=1, pin="not-a-chain")
+
+
+@needs_store
 def test_dominance_windows_partition_the_grid(data, result):
     _, res = result
     table = nusift.response(data, res, metric="activity")

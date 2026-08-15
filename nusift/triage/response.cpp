@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -18,6 +19,7 @@ namespace {
 
 constexpr const char* kModule = "response";
 constexpr const char* kUnitsModule = "units";
+constexpr const char* kPinModule = "pin";
 
 // Every unit, in the order the help text lists them. The one place the set is enumerated, so
 // parseUnit and the error message it raises cannot come to disagree about what exists.
@@ -411,6 +413,108 @@ std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
   return fractions;
 }
 
+// --- naming a contributor to pin ---------------------------------------------
+
+std::string_view trimmed(std::string_view text) {
+  const auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+  while (!text.empty() && space(text.front())) {
+    text.remove_prefix(1);
+  }
+  while (!text.empty() && space(text.back())) {
+    text.remove_suffix(1);
+  }
+  return text;
+}
+
+// Consume a leading "A=" or "Z=", case-insensitively. The qualified forms exist so a pin can
+// say which number it means; the bare number is accepted too because in a table ranked by mass
+// chain there is nothing else "140" could be.
+bool stripQualifier(std::string_view& text, char letter) {
+  if (text.size() >= 2 && std::tolower(static_cast<unsigned char>(text.front())) == letter &&
+      text[1] == '=') {
+    text.remove_prefix(2);
+    return true;
+  }
+  return false;
+}
+
+std::optional<int> wholeNumber(std::string_view text) {
+  if (text.empty()) {
+    return std::nullopt;
+  }
+  int value = 0;
+  for (const char c : text) {
+    if (c < '0' || c > '9') {
+      return std::nullopt;
+    }
+    value = value * 10 + (c - '0');
+    if (value > 10'000'000) {
+      return std::nullopt;  // far past anything either field can hold
+    }
+  }
+  return value;
+}
+
+// The bucket key a pin spelling names, in the key space `aggregate` buckets into.
+//
+// Parsed here rather than through requireNuclideName so a failure can say what the spelling
+// should have been for THIS aggregate: told "Cs-13" while ranking by mass chain, a message
+// about nuclide names names only half the ways the pin could have been written.
+std::int64_t pinKey(Aggregate aggregate, std::string_view text) {
+  const std::string_view whole = trimmed(text);
+  std::string_view rest = whole;
+  if (rest.empty()) {
+    throw InputError(tagged(kPinModule, "a pin needs a contributor to name"));
+  }
+
+  // The forms that would have worked, named only if none of them did.
+  const char* expected = "a nuclide name";
+  switch (aggregate) {
+    case Aggregate::MassChain: {
+      expected = "a mass number, A=140, or a nuclide name";
+      const bool qualified = stripQualifier(rest, 'a');
+      if (const std::optional<int> number = wholeNumber(rest);
+          number.has_value() && *number >= 1 && *number <= kMaxMassNumber) {
+        return *number;
+      }
+      // A nuclide name, or the raw-key form -- both of which know their own mass number.
+      if (!qualified) {
+        if (const std::optional<Zai> zai = parseNuclideName(rest); zai.has_value()) {
+          return zai->a;
+        }
+      }
+      break;
+    }
+    case Aggregate::Element: {
+      expected = "an element symbol, Z=55, or a nuclide name";
+      const bool qualified = stripQualifier(rest, 'z');
+      if (const std::optional<int> number = wholeNumber(rest);
+          number.has_value() && *number >= 1 && *number <= kMaxAtomicNumber) {
+        return *number;
+      }
+      if (!qualified) {
+        if (const int z = atomicNumber(rest); z > 0) {
+          return z;
+        }
+        if (const std::optional<Zai> zai = parseNuclideName(rest); zai.has_value()) {
+          return zai->z;
+        }
+      }
+      break;
+    }
+    case Aggregate::Nuclide:
+    case Aggregate::GammaLine:
+      if (const std::optional<Zai> zai = parseNuclideName(rest); zai.has_value()) {
+        return zai->key();
+      }
+      break;
+  }
+
+  throw InputError(tagged(kPinModule, "\"" + std::string(whole) + "\" is not " + expected +
+                                          " (this ranking is by " + aggregateName(aggregate) +
+                                          ")"));
+}
+
 void requireUsableSpec(const NuclearData& data, const ResponseSpec& spec, Domain domain) {
   if (!unitSuitsMetric(spec.unit, spec.metric)) {
     throw InputError(tagged(kModule, std::string("unit ") + unitName(spec.unit) +
@@ -554,6 +658,26 @@ const char* aggregateName(Aggregate aggregate) {
       return "gamma line";
   }
   return "?";
+}
+
+std::int64_t requirePin(const ResponseTable& table, std::string_view text) {
+  const std::int64_t key = pinKey(table.aggregate, text);
+  for (const ContributorId& id : table.contributors) {
+    if (id.key == key) {
+      return key;
+    }
+  }
+
+  // Refused rather than pinned to a row of zeros. A pin that silently resolves to nothing is
+  // the worst possible answer to "where does Cs-137 stand": it looks like the ranking was
+  // asked and replied "nowhere", when in fact the question never reached the table.
+  const std::string reading = table.aggregate == Aggregate::GammaLine
+                                  ? formatNuclideName(Zai::fromKey(key))
+                                  : bucketLabel(table.aggregate, key, 0);
+  throw InputError(tagged(kPinModule, "\"" + std::string(trimmed(text)) + "\" names " + reading +
+                                          ", which this table does not carry -- it is ranked by " +
+                                          aggregateName(table.aggregate) +
+                                          " and nothing in the inventory's chain reaches it"));
 }
 
 ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,

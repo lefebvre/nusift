@@ -8,6 +8,7 @@
 #include <CLI/CLI.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <fstream>
@@ -67,6 +68,7 @@ struct CommonOptions {
   int topN = 10;
   double coverage = 0.0;
   double minFraction = 0.0;
+  std::vector<std::string> pins;
 
   std::string output;
   std::string format = "text";
@@ -137,6 +139,11 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
       ->check(CLI::Range(0.0, 1.0));
   app->add_option("--min-fraction", options.minFraction, "Drop contributors below this fraction")
       ->check(CLI::Range(0.0, 1.0));
+  // The one option here that adds a row rather than removing one. Spelled the way the aggregate
+  // in force names its contributors, and a nuclide name works for all of them.
+  app->add_option("--pin", options.pins,
+                  "Always show this contributor whatever it ranks, repeatable "
+                  "(e.g. Cs-137, A=140, Cs)");
 
   app->add_option("-o,--output", options.output, "Write here instead of stdout");
   app->add_option("--format", options.format, "text, csv, or json")
@@ -184,11 +191,25 @@ DecayOptions decayOptionsFrom(const CommonOptions& options) {
   return decayOptions;
 }
 
-RankRequest rankRequestFrom(const CommonOptions& options) {
+// Pins are resolved against the table they will be applied to, not against the store: what a
+// pin has to name is a CONTRIBUTOR, and which contributors exist depends on the aggregate and
+// on how far the inventory's chain reaches. Resolving here is what lets `--pin Cs-137` be
+// refused with a reason instead of quietly matching nothing.
+std::vector<std::int64_t> pinsFrom(const CommonOptions& options, const ResponseTable& table) {
+  std::vector<std::int64_t> keys;
+  keys.reserve(options.pins.size());
+  for (const std::string& text : options.pins) {
+    keys.push_back(requirePin(table, text));
+  }
+  return keys;
+}
+
+RankRequest rankRequestFrom(const CommonOptions& options, const ResponseTable& table) {
   RankRequest request;
   request.topN = options.topN;
   request.coverage = options.coverage;
   request.minFraction = options.minFraction;
+  request.pinned = pinsFrom(options, table);
   return request;
 }
 
@@ -374,7 +395,7 @@ int runRank(const CommonOptions& options, const char* argv0) {
   spec.geometry = geometryFrom(options);
   const ResponseTable table = buildResponse(data, result, spec);
 
-  const std::vector<Ranking> rankings = rankAll(table, rankRequestFrom(options));
+  const std::vector<Ranking> rankings = rankAll(table, rankRequestFrom(options, table));
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
@@ -413,7 +434,10 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
     const std::vector<double> integral =
         intervalIntegral(data, inventory, t1, t2, &keys, decayOptionsFrom(options));
     const ResponseTable table = buildIntervalResponse(data, keys, integral, t1, t2, spec);
-    rankings.push_back(rank(table, 0, rankRequestFrom(options)));
+    // Each interval is solved over its own index space, so its pins are resolved against its own
+    // table -- a pin naming something this interval's chain does not reach is refused for that
+    // interval rather than silently dropped from one report out of several.
+    rankings.push_back(rank(table, 0, rankRequestFrom(options, table)));
     contexts.push_back(contextFor(data, storePath, inventory, table));
     contexts.back().geometry = geometry;
   }
@@ -451,7 +475,9 @@ int runForecast(const CommonOptions& options, const char* argv0) {
   const std::vector<DominanceWindow> windows = dominanceWindows(table);
   // topN doubles as the depth of "ever near the top"; 0 means no limit, which for a forecast
   // would print every nuclide in the chain, so it falls back to a readable default.
-  const std::vector<RankTrack> tracks = unionTopN(table, options.topN > 0 ? options.topN : 10);
+  const std::vector<std::int64_t> pins = pinsFrom(options, table);
+  const std::vector<RankTrack> tracks =
+      unionTopN(table, options.topN > 0 ? options.topN : 10, pins);
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);

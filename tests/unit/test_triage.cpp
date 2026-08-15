@@ -147,6 +147,203 @@ TEST(Ranking, RejectsOutOfRangeTimeIndex) {
   EXPECT_THROW(rank(table, -1, RankRequest{}), NusiftError);
 }
 
+// --- pinning ----------------------------------------------------------------
+
+// The point of a pin: a contributor below every cut still appears, and it says where it really
+// stands rather than borrowing a place in the prefix it was excluded from.
+TEST(Ranking, PinnedContributorSurvivesTheCutCarryingItsTrueRank) {
+  const ResponseTable table = tableOf({50.0, 30.0, 15.0, 5.0}, {1, 2, 3, 4});
+  RankRequest request;
+  request.topN = 2;
+  request.pinned = {4};
+  const Ranking ranking = rank(table, 0, request);
+
+  ASSERT_EQ(ranking.contributors.size(), 3u);
+  EXPECT_FALSE(ranking.contributors[0].pinned);
+  EXPECT_FALSE(ranking.contributors[1].pinned);
+
+  const Contributor& pinned = ranking.contributors[2];
+  EXPECT_TRUE(pinned.pinned);
+  EXPECT_EQ(pinned.id.key, 4);
+  EXPECT_EQ(pinned.rank, 4) << "the rank it holds in the full ordering, not the row it landed on";
+  EXPECT_NEAR(pinned.fraction, 0.05, 1e-12);
+  // Everything down to it, which is the whole table -- so the number says the rows above it
+  // account for all but its own share.
+  EXPECT_NEAR(pinned.cumulativeFraction, 1.0, 1e-12);
+}
+
+// Coverage is the sum of what the reader can see, so a pinned row counts toward it and out of
+// the omitted count. Reporting the prefix cumulative instead would understate what was shown.
+TEST(Ranking, PinnedRowCountsTowardCoverageAndOutOfWhatWasOmitted) {
+  const ResponseTable table = tableOf({50.0, 30.0, 15.0, 5.0}, {1, 2, 3, 4});
+  RankRequest request;
+  request.topN = 2;
+  request.pinned = {4};
+  const Ranking ranking = rank(table, 0, request);
+
+  EXPECT_NEAR(ranking.coveredFraction, 0.85, 1e-12);
+  EXPECT_EQ(ranking.omittedCount, 1) << "only the unpinned, unranked contributor is missing";
+}
+
+// A pin that ranked on its own is not a second row. Anything else would double-count it in the
+// coverage, and print a contributor twice under two different headings.
+TEST(Ranking, PinnedContributorAlreadyInTheTopIsNotRepeated) {
+  const ResponseTable table = tableOf({50.0, 30.0, 15.0, 5.0}, {1, 2, 3, 4});
+  RankRequest request;
+  request.topN = 2;
+  request.pinned = {1, 1, 2};  // including one named twice
+  const Ranking ranking = rank(table, 0, request);
+
+  ASSERT_EQ(ranking.contributors.size(), 2u);
+  EXPECT_FALSE(ranking.contributors[0].pinned);
+  EXPECT_FALSE(ranking.contributors[1].pinned);
+  EXPECT_NEAR(ranking.coveredFraction, 0.80, 1e-12);
+}
+
+// Pinning is not filtering: it reaches past the cut without moving it, so the rows that would
+// have been shown are all still shown, in the order they were.
+TEST(Ranking, PinnedRowsFollowTheRankedOnesInTheOrderTheyStand) {
+  const ResponseTable table = tableOf({50.0, 30.0, 15.0, 4.0, 1.0}, {1, 2, 3, 4, 5});
+  RankRequest request;
+  request.topN = 1;
+  request.pinned = {5, 3};  // deliberately given worst-first
+  const Ranking ranking = rank(table, 0, request);
+
+  ASSERT_EQ(ranking.contributors.size(), 3u);
+  EXPECT_EQ(ranking.contributors[0].id.key, 1);
+  EXPECT_EQ(ranking.contributors[1].id.key, 3) << "3rd comes before 5th, whatever order they were "
+                                                  "pinned in";
+  EXPECT_EQ(ranking.contributors[2].id.key, 5);
+  EXPECT_EQ(ranking.contributors[1].rank, 3);
+  EXPECT_EQ(ranking.contributors[2].rank, 5);
+}
+
+// The cuts that drop a tail have to be reached past as well, or `--min-fraction` and
+// `--coverage` would each quietly defeat a pin the way `--top` does not.
+TEST(Ranking, PinReachesPastCoverageAndMinFractionToo) {
+  const ResponseTable table = tableOf({50.0, 30.0, 15.0, 5.0}, {1, 2, 3, 4});
+
+  RankRequest byCoverage;
+  byCoverage.topN = 0;
+  byCoverage.coverage = 0.5;
+  byCoverage.pinned = {4};
+  const Ranking covered = rank(table, 0, byCoverage);
+  ASSERT_EQ(covered.contributors.size(), 2u);
+  EXPECT_EQ(covered.contributors[1].id.key, 4);
+
+  RankRequest byFraction;
+  byFraction.topN = 0;
+  byFraction.minFraction = 0.20;
+  byFraction.pinned = {4};
+  const Ranking trimmed = rank(table, 0, byFraction);
+  ASSERT_EQ(trimmed.contributors.size(), 3u);
+  EXPECT_EQ(trimmed.contributors[2].id.key, 4);
+}
+
+// A pinned contributor that contributes nothing is a real answer, not a missing row: a pure
+// beta emitter pinned in an exposure ranking is exactly this case. It holds no place in the
+// ordering, and rank 0 says so rather than implying it came last.
+TEST(Ranking, PinnedContributorThatContributesNothingHasNoRank) {
+  const ResponseTable table = tableOf({50.0, 30.0, 0.0}, {1, 2, 3});
+  RankRequest request;
+  request.pinned = {3};
+  const Ranking ranking = rank(table, 0, request);
+
+  ASSERT_EQ(ranking.contributors.size(), 3u);
+  const Contributor& pinned = ranking.contributors[2];
+  EXPECT_TRUE(pinned.pinned);
+  EXPECT_EQ(pinned.rank, 0);
+  EXPECT_DOUBLE_EQ(pinned.value, 0.0);
+  EXPECT_DOUBLE_EQ(pinned.fraction, 0.0);
+  // It was never in the count of contributors, so it cannot come out of it.
+  EXPECT_EQ(ranking.omittedCount, 0);
+  EXPECT_NEAR(ranking.coveredFraction, 1.0, 1e-12);
+}
+
+// One emitter is several columns in a gamma-line table, and a pin names the emitter. Matching
+// on the key alone would be wrong in the other direction too -- it must catch every line, not
+// just the first.
+TEST(Ranking, PinningAnEmitterInALineTablePinsEveryLineItEmits) {
+  const std::int64_t emitter = Zai{56, 137, 1}.key();
+  const std::int64_t other = Zai{55, 134, 0}.key();
+
+  ResponseTable table;
+  table.aggregate = Aggregate::GammaLine;
+  table.times = {0.0};
+  table.contributors = {ContributorId{other, other, 604700.0},
+                        ContributorId{emitter, emitter, 661700.0},
+                        ContributorId{emitter, emitter, 31800.0}};
+  table.labels = {"Cs-134 604.7 keV", "Ba-137m 661.7 keV", "Ba-137m 31.8 keV"};
+  table.flags.assign(3, kFlagNone);
+  table.values = {60.0, 30.0, 10.0};
+  table.totals = {100.0};
+
+  RankRequest request;
+  request.topN = 1;
+  request.pinned = {emitter};
+  const Ranking ranking = rank(table, 0, request);
+
+  ASSERT_EQ(ranking.contributors.size(), 3u);
+  EXPECT_EQ(ranking.contributors[0].label, "Cs-134 604.7 keV");
+  EXPECT_EQ(ranking.contributors[1].label, "Ba-137m 661.7 keV");
+  EXPECT_EQ(ranking.contributors[2].label, "Ba-137m 31.8 keV");
+  EXPECT_TRUE(ranking.contributors[1].pinned);
+  EXPECT_TRUE(ranking.contributors[2].pinned);
+}
+
+// --- naming a contributor to pin --------------------------------------------
+
+ResponseTable tableRankedBy(Aggregate aggregate, const std::vector<std::int64_t>& keys) {
+  ResponseTable table = tableOf(std::vector<double>(keys.size(), 1.0), keys);
+  table.aggregate = aggregate;
+  return table;
+}
+
+TEST(Pin, ResolvesANuclideHoweverItIsSpelled) {
+  const std::int64_t cs137 = Zai{55, 137, 0}.key();
+  const ResponseTable table = tableRankedBy(Aggregate::Nuclide, {cs137});
+
+  EXPECT_EQ(requirePin(table, "Cs-137"), cs137);
+  EXPECT_EQ(requirePin(table, "cs137"), cs137);
+  EXPECT_EQ(requirePin(table, "  551370 "), cs137);
+}
+
+// A user who knows a nuclide name should not have to work out which isobar it sits in. The
+// bare and qualified forms of the number itself both work, so a pin can say what it means.
+TEST(Pin, ResolvesAMassChainFromANumberOrANuclide) {
+  const ResponseTable table = tableRankedBy(Aggregate::MassChain, {137});
+
+  EXPECT_EQ(requirePin(table, "137"), 137);
+  EXPECT_EQ(requirePin(table, "A=137"), 137);
+  EXPECT_EQ(requirePin(table, "a=137"), 137);
+  EXPECT_EQ(requirePin(table, "Cs-137"), 137) << "the chain the nuclide belongs to";
+  EXPECT_EQ(requirePin(table, "551370"), 137) << "and the same through the raw-key spelling";
+}
+
+TEST(Pin, ResolvesAnElementFromASymbolNumberOrNuclide) {
+  const ResponseTable table = tableRankedBy(Aggregate::Element, {55});
+
+  EXPECT_EQ(requirePin(table, "Cs"), 55);
+  EXPECT_EQ(requirePin(table, "cs"), 55);
+  EXPECT_EQ(requirePin(table, "55"), 55);
+  EXPECT_EQ(requirePin(table, "Z=55"), 55);
+  EXPECT_EQ(requirePin(table, "Cs-137"), 55);
+}
+
+// A pin that resolves to nothing is refused rather than answered with zeros. "Cs-137 is not in
+// this chain" and "Cs-137 contributes nothing here" are different statements, and a row of
+// zeros makes the first look like the second.
+TEST(Pin, RefusesAContributorTheTableDoesNotCarry) {
+  const ResponseTable table = tableRankedBy(Aggregate::Nuclide, {Zai{55, 137, 0}.key()});
+  EXPECT_THROW(requirePin(table, "Co-60"), InputError);
+  EXPECT_THROW(requirePin(table, "not-a-nuclide"), InputError);
+  EXPECT_THROW(requirePin(table, ""), InputError);
+
+  const ResponseTable chains = tableRankedBy(Aggregate::MassChain, {137});
+  EXPECT_THROW(requirePin(chains, "140"), InputError);
+  EXPECT_THROW(requirePin(chains, "A=9999"), InputError);
+}
+
 // --- response construction -------------------------------------------------
 
 // Activity is lambda*N per nuclide. With a single nuclide the whole table reduces to a value

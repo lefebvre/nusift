@@ -14,6 +14,8 @@
 // from two years onward -- which is both what a reader remembers and what decides when a
 // measurement or a shielding assumption stops being valid.
 //
+#include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -41,6 +43,10 @@ struct RankTrack {
   std::vector<double> fraction;  // [nT]
   double peakFraction = 0.0;
   int peakTimeIndex = 0;
+  // Followed because the caller asked for it, not because it ever reached the top. The numbers
+  // are the real ones either way; the flag is what lets a report present the track as the answer
+  // to "and where is Cs-137 in all this" instead of listing it among the contenders.
+  bool pinned = false;
 };
 
 // The windows over which each successive leader holds first place.
@@ -67,6 +73,16 @@ std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table, int mi
 // a forecast prints rows for: a nuclide that only matters at thirty years still belongs in the
 // table, and a nuclide that is never in the top `n` anywhere does not.
 std::vector<RankTrack> unionTopN(const ResponseTable& table, int n);
+
+// The same, plus a track for every pinned contributor the top `n` never reached, flagged and
+// appended after them. The forecast counterpart of a pinned ranking row, and the question it
+// answers is the one a window list cannot: a nuclide that never leads and never places still
+// has a shape over time, and "it peaks at thirty years at 4%" is an answer where its absence
+// from every window is not.
+//
+// Keys are contributor keys as requirePin() resolves them.
+std::vector<RankTrack> unionTopN(const ResponseTable& table, int n,
+                                 std::span<const std::int64_t> pinned);
 
 // Contributors in the top `n` at EVERY time. The complement of the above, and the answer to
 // "what do I always have to account for" as opposed to "what could ever matter".

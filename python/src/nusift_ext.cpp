@@ -353,6 +353,7 @@ NB_MODULE(_core, m) {
       .def_ro("fraction", &Contributor::fraction)
       .def_ro("cumulative_fraction", &Contributor::cumulativeFraction)
       .def_ro("rank", &Contributor::rank)
+      .def_ro("pinned", &Contributor::pinned)
       .def_prop_ro("key", [](const Contributor& c) { return c.id.key; })
       .def_prop_ro("line_energy_ev", [](const Contributor& c) { return c.id.lineEnergyEv; })
       .def("__repr__", [](const Contributor& c) {
@@ -417,11 +418,24 @@ NB_MODULE(_core, m) {
       .def(
           "rank",
           [](const ResponseTable& table, const nb::object& at, int top, double coverage,
-             double min_fraction) {
+             double min_fraction, const nb::object& pin) {
             RankRequest request;
             request.topN = top;
             request.coverage = coverage;
             request.minFraction = min_fraction;
+
+            // A bare string is one pin, not an iterable of one-character ones. Python makes
+            // that mistake easy to write and impossible to notice, since "Cs-137" is a perfectly
+            // good sequence -- of six spellings that name nothing.
+            if (!pin.is_none()) {
+              if (nb::isinstance<nb::str>(pin)) {
+                request.pinned.push_back(requirePin(table, nb::cast<std::string>(pin)));
+              } else {
+                for (const nb::handle item : pin) {
+                  request.pinned.push_back(requirePin(table, nb::cast<std::string>(item)));
+                }
+              }
+            }
 
             int index = 0;
             if (!at.is_none()) {
@@ -440,7 +454,10 @@ NB_MODULE(_core, m) {
             return rank(table, index, request);
           },
           "at"_a = nb::none(), "top"_a = 10, "coverage"_a = 0.0, "min_fraction"_a = 0.0,
-          "Rank at the grid time nearest `at`.")
+          "pin"_a = nb::none(),
+          "Rank at the grid time nearest `at`. `pin` is a contributor name, or several, that "
+          "appear whatever they rank -- appended below the ranking carrying the place they "
+          "actually hold.")
       .def(
           "dominance_windows",
           [](const ResponseTable& table, int min_samples) {

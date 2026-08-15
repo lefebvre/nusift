@@ -127,6 +127,51 @@ A zero or negative total makes every fraction meaningless. That happens legitima
 inventory of nothing but stable nuclides has no activity — so it produces an **empty ranking**
 rather than an error or a division by zero.
 
+### Pinning: the one knob that adds a row
+
+`--top`, `--coverage` and `--min-fraction` all truncate. `--pin` is the only one that reaches
+*past* the cut, and it exists because "which isotopes dominate" and "and where does Cs-137 stand
+in all this" are different questions that a truncated ranking answers only by accident:
+
+```
+   #  contributor           Bq     frac      cum
+   1  La-140        2.5574e+16    12.4%    12.4%
+   ...
+   8  Ru-103        1.0584e+16     5.1%    74.4%
+  pinned:
+  27  Cs-137        1.2962e+14   0.063%    99.6%
+```
+
+The design follows from one rule: **a pin must not change the ranking it was added to.** So the
+prefix is selected exactly as it would have been, the pinned rows are appended *below* it rather
+than merged into it, and each carries the rank and cumulative fraction it holds in the **full**
+ordering — 27th, with everything down to it covering 99.6%. Sorting a pin into the prefix, or
+renumbering the rows around it, would make a top-8 into something that is not one.
+
+Three consequences follow from keeping the numbers true rather than convenient:
+
+- **`coveredFraction` is a sum over the returned rows, not the cumulative of the last one.** With
+  a pin below the cut those stop being the same number, and only the sum describes what the reader
+  can actually see.
+- **A pinned contributor that contributes nothing gets rank 0**, rendered `-`. This is a real
+  answer, not a missing row: a pure beta emitter pinned in an exposure ranking contributes exactly
+  zero, and a cumulative fraction is meaningless where nothing stands above. It was never in the
+  omitted count either, so it cannot come out of it.
+- **A pin that resolves to nothing is refused**, naming what it read and what the table ranks by.
+  "Cs-137 is not in this chain" and "Cs-137 contributes nothing here" are different statements, and
+  a silently empty pin makes the first look like the second.
+
+A pin is named the way the aggregate in force names its contributors — `Cs-137`, `A=140` or `140`,
+`Cs` or `Z=55` — and a **nuclide name works for every aggregate**, resolving to the bucket that
+nuclide falls in. Someone who knows a nuclide name should not have to work out which isobar it
+belongs to in order to follow it. In a gamma-line table a key names an *emitter*, so pinning one
+pins every line of it the table carries; pinning a single line out of a spectrum is not offered,
+since what is understated or overlooked is the nuclide.
+
+Forecasting takes the same pins (§6). A ranking pin answers "where does it stand at this time"; a
+forecast pin answers "what shape does it have over all of them", which is the question a list of
+dominance windows structurally cannot answer about a contributor that never leads.
+
 ### Flags become footnotes
 
 A contributor carrying more than 5% of its photon energy in an unmodelled continuum is flagged,
@@ -181,6 +226,13 @@ time would bury exactly the contributor a forecast exists to surface. `persisten
 those that never left the top N, which is the "steady concern" list rather than the "was briefly
 important" one.
 
+Pinned tracks are appended after both, flagged, and reported with the best rank they hold
+**anywhere** on the grid alongside where they peak — deliberately two different times, since a
+share is measured against the total and a shrinking total can lift a rank while the share falls.
+A contributor that never leads has no window and never enters `unionTopN`, so without a pin the
+forecast has no way to say that Cs-137 peaks at 68 years and gets no closer to the top than
+ninth. A pinned contributor that contributes nothing anywhere is reported as exactly that.
+
 The resolution of all of this is the grid you ask for. Nothing in the forecast path is
 half-life-aware, so a log grid dense enough to resolve early churn is the user's responsibility —
 see [Interval integration §9](interval-integration.md#9-what-this-method-does-not-do).
@@ -195,14 +247,21 @@ inputs that produced it are part of it.
 Each `--interval` gets its **own** report context rather than sharing the last one. The set of
 contributors carrying unmodelled continuum is a property of that window, and building one context
 from the last table footnotes every ranking with the last window's emitters — which need not
-appear in the ranking they annotate.
+appear in the ranking they annotate. Pins are resolved per interval for the same reason: each is
+solved over its own index space, so a pin naming something one window's chain does not reach is
+refused for that window rather than silently dropped from one report out of several.
+
+The text writer separates pinned rows under a `pinned:` heading and prints `-` where a contributor
+holds no rank; CSV and JSON carry a `pinned` column and field instead, because a loaded table that
+cannot tell a row that placed from one fetched below the cut cannot tell a top-N from a top-N plus
+an aside. The CSV column is last, so adding it renumbered nothing anyone already reads by position.
 
 ## 8. Source map
 
 | File | Role |
 | --- | --- |
 | [`nusift/triage/response.hpp`](../nusift/triage/response.hpp) | `Metric`, `Domain`, `Aggregate`, `Unit`, the pairing rules, and `ResponseTable` |
-| [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `unitScale`, `domainScale`, `assemble`, `assembleLines`, the unmodelled-energy accounting |
-| [`nusift/triage/ranking.cpp`](../nusift/triage/ranking.cpp) | Sorting, stop conditions, coverage, and the omitted count |
+| [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `unitScale`, `domainScale`, `assemble`, `assembleLines`, the unmodelled-energy accounting, and `requirePin` |
+| [`nusift/triage/ranking.cpp`](../nusift/triage/ranking.cpp) | Sorting, stop conditions, coverage, the omitted count, and the pinned tail |
 | [`nusift/triage/forecast.cpp`](../nusift/triage/forecast.cpp) | `dominanceWindows`, crossing interpolation, `unionTopN`, `persistentTopN` |
 | [`nusift/io/report.cpp`](../nusift/io/report.cpp) | Text, CSV, and JSON writers, and the provenance header |
