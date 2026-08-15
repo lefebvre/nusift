@@ -98,9 +98,43 @@ $ nusift data nuclide Co-60
 
 Ba-137m's 3.472, multiplied by the ~94.7% branch from Cs-137 to the isomer, gives **3.29** — the
 figure usually tabulated for a Cs-137 source, about 3.3. Nothing in NuSIFT was fitted to produce
-that: the constant falls out of the equilibrium ratio and the staged line intensities. Co-60's
-12.91 sits a couple of percent under the values commonly quoted (≈13.0–13.2), which is within the
-spread between published tabulations.
+that: the constant falls out of the equilibrium ratio and the staged line intensities. It is
+also, honestly, an identity rather than an independent check — a tabulated "Cs-137" constant *is*
+the Ba-137m constant times the branch, because Cs-137 emits almost nothing itself (§5).
+
+Co-60's 12.91 against a commonly quoted 13.0–13.2 needs more care, because **the published values
+disagree with each other by more than any of them disagrees with NuSIFT**.
+
+Start with what cannot be responsible. Γ(Co-60) is two lines, and it is pinned:
+
+| Perturbation | Δ |
+| --- | --- |
+| Both intensities forced to exactly 1.0 | +0.07% |
+| Both lines collapsed onto the 1.25 MeV NIST grid point — no interpolation at all | −0.00% |
+| Linear interpolation instead of log-log | +0.12% |
+
+No change to the decay data or to the interpolation moves the number by a quarter of a percent.
+The gap is in the conversion convention, and it decomposes:
+
+| Term | Worth |
+| --- | --- |
+| The roentgen depends on `W/e`, revised 33.7 → 33.85 (ICRU 1979) → 33.97 J/C. Anything tabulated before that revision reads high. | +0.75% |
+| An air *kerma* rate constant uses the mass energy-**transfer** coefficient; exposure needs mass energy-**absorption**. | +0.32% |
+| Air-coefficient evaluation: NISTIR 5632 log-log against Hubbell 1969 / Hubbell & Seltzer 2001 cubic-spline. | ~0.5% |
+
+[Ninkovic & Adrovic](https://cdn.intechopen.com/pdfs/32834/intech-air_kerma_rate_constants_for_nuclides_important_to_gamma_ray_dosimetry_and_practical_application.pdf)
+recalculated these constants precisely because "published data are in strong
+disagreement", and got 309.0 µGy·m²/(GBq·h) for Co-60. In the modern roentgen that is **13.05**;
+in the pre-1979 roentgen it is **13.15** — the classic 13.2. Same physics, different decade.
+
+Like-for-like against that recalculation — their >20 keV cut, their transfer coefficients —
+NuSIFT sits **0.8% low** on Co-60 and **0.9% low** on Ba-137m. One uniform offset in the air
+table, not a Co-60 problem. The Cs-137 comparison only *looked* cleaner because 3.3 is quoted to
+two significant figures and cannot resolve a percent.
+
+The residual is **not** scatter that an uncollided calculation omits. These constants are vacuum
+quantities by definition: "a point source of a unit activity of the nuclide in a vacuum … no
+self-attenuation, no air scatter" ([Peplow 2020](https://doi.org/10.1097/HP.0000000000001136)).
 
 ## 5. Photons are attributed to the nuclide that emits them
 
@@ -117,6 +151,14 @@ physically correct attribution, and it is what makes the published constant fall
 equilibrium ratio rather than having to be folded into a table. It also means a reader who
 expected "Cs-137" has to be told why they got "Ba-137m" — which is what the mass-chain aggregate
 is for ([Ranking §3](ranking.md#3-aggregation)).
+
+The alternative is worse than untidy, and the tables that take it say so themselves. Unger &
+Trubey's Cs-137 entry is the product of the 94.6% branch and their computed Ba-137m constant,
+added as a convenience, and it carries a warning: applied to a data set holding activities of
+*both* Cs-137 and Ba-137m, it double-counts photons that only ever came from the daughter
+([Peplow 2020](https://doi.org/10.1097/HP.0000000000001136), §Methods). NuSIFT's inventory is
+exactly such a data set — it evolves both nuclides — so a folded-in constant would be a live bug
+rather than a hypothetical one. Attributing each line to its emitter makes it unrepresentable.
 
 ## 6. Units
 
@@ -137,6 +179,21 @@ is not an ICRP-74 fluence-to-H\*(10) operational quantity, and it is not effecti
 person.** The headers say so, `roentgenToGray` and `roentgenToSievert` are separate functions
 returning the same number precisely because the quantities are different, and conflating them in
 a report is how a dose gets misread.
+
+How wrong can it be? Against [Peplow's](https://doi.org/10.1097/HP.0000000000001136) tabulation
+of ICRP 116 effective dose (AP) per unit activity, in mSv·h⁻¹·MBq⁻¹ at 1 m:
+
+| Nuclide | NuSIFT air-kerma Sv | ICRP 116 effective dose | ratio |
+| --- | --- | --- | --- |
+| Co-60 | 3.057e-4 | 3.062e-4 | 1.00 |
+| Ba-137m | 8.220e-5 | 8.228e-5 | 1.00 |
+| Am-241 | 2.801e-5 | 5.413e-6 | **5.17** |
+
+The agreement on the first two is a coincidence of energy — effective dose per fluence happens to
+track air kerma per fluence near 1 MeV — and **it does not survive going soft**. 83% of Am-241's
+constant sits below 20 keV and 10.9% below 10 keV, where µ_en/ρ is clamped (§3). Those photons
+load air kerma heavily and deposit almost no effective dose, so the label overstates the hazard
+to a person by a factor of five. Read the sievert column as air kerma wearing a label.
 
 Interval-domain exposure carries one more correction: the rate is computed per **hour** while the
 integral weights atom-**seconds**, so an accrued exposure has a spurious factor of an hour taken
