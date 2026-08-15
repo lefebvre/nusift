@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 478" width="880" height="478" role="img" aria-label="Engine against closed-form Bateman">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="879" height="477" rx="6"/>
+<line class="grid" x1="130.5" y1="112.0" x2="130.5" y2="296.0" stroke-width="1.2"/>
+<text class="muted" x="130.5" y="314.0" font-size="10.5" text-anchor="middle" font-weight="normal">0.1 d</text>
+<line class="grid" x1="231.8" y1="112.0" x2="231.8" y2="296.0" stroke-width="1.2"/>
+<text class="muted" x="231.8" y="314.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 d</text>
+<line class="grid" x1="333.2" y1="112.0" x2="333.2" y2="296.0" stroke-width="1.2"/>
+<text class="muted" x="333.2" y="314.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 d</text>
+<polyline class="s0" points="92.00,131.61 97.42,131.61 102.85,131.61 108.27,131.61 113.69,131.61 119.12,131.61 124.54,131.61 129.97,131.61 135.39,131.61 140.81,131.61 146.24,131.61 151.66,131.61 157.08,131.61 162.51,131.61 167.93,131.61 173.36,131.61 178.78,131.61 184.20,131.62 189.63,131.62 195.05,131.62 200.47,131.62 205.90,131.62 211.32,131.62 216.75,131.62 222.17,131.62 227.59,131.62 233.02,131.62 238.44,131.62 243.86,131.62 249.29,131.62 254.71,131.62 260.14,131.62 265.56,131.62 270.98,131.62 276.41,131.62 281.83,131.62 287.25,131.62 292.68,131.62 298.10,131.62 303.53,131.62 308.95,131.63 314.37,131.63 319.80,131.63 325.22,131.63 330.64,131.63 336.07,131.63 341.49,131.64 346.92,131.64 352.34,131.64 357.76,131.65 363.19,131.65 368.61,131.66 374.03,131.66 379.46,131.67 384.88,131.67 390.31,131.68 395.73,131.69 401.15,131.70 406.58,131.71 412.00,131.73" stroke-width="2.0" stroke-linejoin="round"/>
+<polyline class="s1" points="92.00,259.83 97.42,256.36 102.85,252.89 108.27,249.43 113.69,245.97 119.12,242.52 124.54,239.07 129.97,235.62 135.39,232.18 140.81,228.74 146.24,225.32 151.66,221.90 157.08,218.49 162.51,215.09 167.93,211.70 173.36,208.32 178.78,204.96 184.20,201.61 189.63,198.29 195.05,194.98 200.47,191.70 205.90,188.44 211.32,185.21 216.75,182.02 222.17,178.86 227.59,175.75 233.02,172.68 238.44,169.66 243.86,166.71 249.29,163.81 254.71,160.99 260.14,158.25 265.56,155.60 270.98,153.05 276.41,150.61 281.83,148.28 287.25,146.08 292.68,144.02 298.10,142.11 303.53,140.36 308.95,138.77 314.37,137.36 319.80,136.12 325.22,135.05 330.64,134.17 336.07,133.45 341.49,132.88 346.92,132.46 352.34,132.15 357.76,131.94 363.19,131.81 368.61,131.73 374.03,131.69 379.46,131.68 384.88,131.67 390.31,131.68 395.73,131.69 401.15,131.69 406.58,131.71 412.00,131.72" stroke-width="2.0" stroke-linejoin="round"/>
+<circle class="t0" cx="92.0" cy="131.6" r="2.6"/>
+<circle class="t0" cx="124.5" cy="131.6" r="2.6"/>
+<circle class="t0" cx="157.1" cy="131.6" r="2.6"/>
+<circle class="t0" cx="189.6" cy="131.6" r="2.6"/>
+<circle class="t0" cx="222.2" cy="131.6" r="2.6"/>
+<circle class="t0" cx="254.7" cy="131.6" r="2.6"/>
+<circle class="t0" cx="287.3" cy="131.6" r="2.6"/>
+<circle class="t0" cx="319.8" cy="131.6" r="2.6"/>
+<circle class="t0" cx="352.3" cy="131.6" r="2.6"/>
+<circle class="t0" cx="384.9" cy="131.7" r="2.6"/>
+<circle class="t1" cx="92.0" cy="259.8" r="2.6"/>
+<circle class="t1" cx="124.5" cy="239.1" r="2.6"/>
+<circle class="t1" cx="157.1" cy="218.5" r="2.6"/>
+<circle class="t1" cx="189.6" cy="198.3" r="2.6"/>
+<circle class="t1" cx="222.2" cy="178.9" r="2.6"/>
+<circle class="t1" cx="254.7" cy="161.0" r="2.6"/>
+<circle class="t1" cx="287.3" cy="146.1" r="2.6"/>
+<circle class="t1" cx="319.8" cy="136.1" r="2.6"/>
+<circle class="t1" cx="352.3" cy="132.1" r="2.6"/>
+<circle class="t1" cx="384.9" cy="131.7" r="2.6"/>
+<line class="axis" x1="92.0" y1="296.0" x2="412.0" y2="296.0" stroke-width="1.4"/>
+<line class="axis" x1="92.0" y1="112.0" x2="92.0" y2="296.0" stroke-width="1.4"/>
+<text class="ink" x="92.0" y="88.0" font-size="12.5" text-anchor="start" font-weight="600">Sr-90 → Y-90</text>
+<text class="muted" x="412.0" y="88.0" font-size="11" text-anchor="end" font-weight="normal">secular equilibrium</text>
+<text class="t0" x="92.0" y="342.0" font-size="11" text-anchor="start" font-weight="600">Sr-90</text>
+<text class="t1" x="154.0" y="342.0" font-size="11" text-anchor="start" font-weight="600">Y-90</text>
+<text class="muted" x="412.0" y="342.0" font-size="10.5" text-anchor="end" font-weight="normal">branch 1.000</text>
+<line class="grid" x1="568.2" y1="112.0" x2="568.2" y2="296.0" stroke-width="1.2"/>
+<text class="muted" x="568.2" y="314.0" font-size="10.5" text-anchor="middle" font-weight="normal">0.1 d</text>
+<line class="grid" x1="694.8" y1="112.0" x2="694.8" y2="296.0" stroke-width="1.2"/>
+<text class="muted" x="694.8" y="314.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 d</text>
+<line class="grid" x1="821.5" y1="112.0" x2="821.5" y2="296.0" stroke-width="1.2"/>
+<text class="muted" x="821.5" y="314.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 d</text>
+<polyline class="s0" points="520.00,131.61 525.42,131.65 530.85,131.68 536.27,131.72 541.69,131.76 547.12,131.80 552.54,131.85 557.97,131.91 563.39,131.97 568.81,132.04 574.24,132.11 579.66,132.20 585.08,132.29 590.51,132.39 595.93,132.50 601.36,132.62 606.78,132.76 612.20,132.91 617.63,133.07 623.05,133.25 628.47,133.45 633.90,133.67 639.32,133.92 644.75,134.19 650.17,134.49 655.59,134.81 661.02,135.18 666.44,135.58 671.86,136.02 677.29,136.50 682.71,137.04 688.14,137.64 693.56,138.29 698.98,139.01 704.41,139.81 709.83,140.69 715.25,141.66 720.68,142.73 726.10,143.92 731.53,145.22 736.95,146.66 742.37,148.25 747.80,150.01 753.22,151.94 758.64,154.08 764.07,156.44 769.49,159.04 774.92,161.92 780.34,165.09 785.76,168.59 791.19,172.45 796.61,176.71 802.03,181.41 807.46,186.60 812.88,192.33 818.31,198.65 823.73,205.63 829.15,213.33 834.58,221.83 840.00,231.21" stroke-width="2.0" stroke-linejoin="round"/>
+<polyline class="s1" points="520.00,197.85 525.42,195.24 530.85,192.65 536.27,190.08 541.69,187.53 547.12,185.01 552.54,182.51 557.97,180.05 563.39,177.61 568.81,175.22 574.24,172.86 579.66,170.54 585.08,168.27 590.51,166.06 595.93,163.89 601.36,161.79 606.78,159.76 612.20,157.80 617.63,155.91 623.05,154.12 628.47,152.41 633.90,150.80 639.32,149.30 644.75,147.91 650.17,146.64 655.59,145.51 661.02,144.51 666.44,143.65 671.86,142.95 677.29,142.40 682.71,142.02 688.14,141.81 693.56,141.77 698.98,141.90 704.41,142.21 709.83,142.70 715.25,143.36 720.68,144.19 726.10,145.20 731.53,146.38 736.95,147.74 742.37,149.28 747.80,151.00 753.22,152.92 758.64,155.04 764.07,157.40 769.49,160.00 774.92,162.87 780.34,166.04 785.76,169.54 791.19,173.40 796.61,177.66 802.03,182.36 807.46,187.56 812.88,193.28 818.31,199.61 823.73,206.58 829.15,214.28 834.58,222.78 840.00,232.16" stroke-width="2.0" stroke-linejoin="round"/>
+<circle class="t0" cx="520.0" cy="131.6" r="2.6"/>
+<circle class="t0" cx="552.5" cy="131.9" r="2.6"/>
+<circle class="t0" cx="585.1" cy="132.3" r="2.6"/>
+<circle class="t0" cx="617.6" cy="133.1" r="2.6"/>
+<circle class="t0" cx="650.2" cy="134.5" r="2.6"/>
+<circle class="t0" cx="682.7" cy="137.0" r="2.6"/>
+<circle class="t0" cx="715.3" cy="141.7" r="2.6"/>
+<circle class="t0" cx="747.8" cy="150.0" r="2.6"/>
+<circle class="t0" cx="780.3" cy="165.1" r="2.6"/>
+<circle class="t0" cx="812.9" cy="192.3" r="2.6"/>
+<circle class="t1" cx="520.0" cy="197.8" r="2.6"/>
+<circle class="t1" cx="552.5" cy="182.5" r="2.6"/>
+<circle class="t1" cx="585.1" cy="168.3" r="2.6"/>
+<circle class="t1" cx="617.6" cy="155.9" r="2.6"/>
+<circle class="t1" cx="650.2" cy="146.6" r="2.6"/>
+<circle class="t1" cx="682.7" cy="142.0" r="2.6"/>
+<circle class="t1" cx="715.3" cy="143.4" r="2.6"/>
+<circle class="t1" cx="747.8" cy="151.0" r="2.6"/>
+<circle class="t1" cx="780.3" cy="166.0" r="2.6"/>
+<circle class="t1" cx="812.9" cy="193.3" r="2.6"/>
+<line class="axis" x1="520.0" y1="296.0" x2="840.0" y2="296.0" stroke-width="1.4"/>
+<line class="axis" x1="520.0" y1="112.0" x2="520.0" y2="296.0" stroke-width="1.4"/>
+<text class="ink" x="520.0" y="88.0" font-size="12.5" text-anchor="start" font-weight="600">Mo-99 → Tc-99m</text>
+<text class="muted" x="840.0" y="88.0" font-size="11" text-anchor="end" font-weight="normal">transient equilibrium</text>
+<text class="t0" x="520.0" y="342.0" font-size="11" text-anchor="start" font-weight="600">Mo-99</text>
+<text class="t1" x="582.0" y="342.0" font-size="11" text-anchor="start" font-weight="600">Tc-99m</text>
+<text class="muted" x="840.0" y="342.0" font-size="10.5" text-anchor="end" font-weight="normal">branch 0.879</text>
+<text class="ink" x="58.0" y="30.0" font-size="13.5" text-anchor="start" font-weight="600">Real chains from the shipped store, against their closed forms</text>
+<text class="muted" x="58.0" y="50.0" font-size="11.5" text-anchor="start" font-weight="normal">Lines are the CRAM solve; dots are the Bateman solution evaluated with the store's own decay constants. Activity, log scale, arbitrary units.</text>
+<text class="ink" x="58.0" y="386.0" font-size="12" text-anchor="start" font-weight="normal">Worst disagreement between solve and closed form across both chains: 6.45e-15 relative.</text>
+<text class="muted" x="58.0" y="408.0" font-size="11.5" text-anchor="start" font-weight="normal">Mo-99 only lands on its curve if the 87.6% branch to the isomer was staged correctly; a branch of 1.0 would sit a seventh high and</text>
+<text class="muted" x="58.0" y="426.0" font-size="11.5" text-anchor="start" font-weight="normal">no half-life check would notice. Sr-90's daughter climbs to its parent's activity and stays there, which is what secular</text>
+<text class="muted" x="58.0" y="444.0" font-size="11.5" text-anchor="start" font-weight="normal">equilibrium means and what a Sr-90 source does.</text>
+</svg>
