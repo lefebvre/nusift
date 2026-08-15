@@ -197,6 +197,80 @@ TEST(Report, EachRankingCarriesItsOwnContext) {
   EXPECT_EQ(text.find("Y-90", first + 1), std::string::npos) << text;
 }
 
+// --- pinned rows ---------------------------------------------------------------
+
+// A ranking cut at one row, with a contributor pinned from well below it.
+Ranking withAPinnedTail(int trueRank, double value) {
+  Ranking ranking = oneRow("Ba-140");
+  ranking.total = 100.0;
+  ranking.contributors[0].id = ContributorId{Zai{56, 140, 0}.key(), 0};
+  ranking.contributors[0].value = 80.0;
+  ranking.contributors[0].fraction = 0.80;
+  ranking.contributors[0].cumulativeFraction = 0.80;
+  ranking.coveredFraction = 0.80 + value / 100.0;
+  ranking.omittedCount = 12;
+
+  Contributor pinned;
+  pinned.id = ContributorId{Zai{55, 137, 0}.key(), 0};
+  pinned.label = "Cs-137";
+  pinned.value = value;
+  pinned.fraction = value / 100.0;
+  pinned.cumulativeFraction = trueRank > 0 ? 0.998 : 0.0;
+  pinned.rank = trueRank;
+  pinned.pinned = true;
+  ranking.contributors.push_back(pinned);
+  return ranking;
+}
+
+// Run together with the prefix above them, pinned rows read as one list with numbers missing
+// out of it. The heading is what says the rows below it were asked for rather than reached.
+TEST(Report, TextSeparatesPinnedRowsFromTheRankingAboveThem) {
+  const std::string text = asText(withAPinnedTail(37, 0.2), ReportContext{});
+
+  const std::size_t heading = text.find("  pinned:\n");
+  const std::size_t leader = text.find("Ba-140");
+  const std::size_t pinned = text.find("Cs-137");
+  ASSERT_NE(heading, std::string::npos) << text;
+  EXPECT_LT(leader, heading) << text;
+  EXPECT_LT(heading, pinned) << text;
+  // The place it actually holds, which is the whole reason the row is worth printing.
+  EXPECT_NE(text.find("  37  Cs-137"), std::string::npos) << text;
+}
+
+// A pinned contributor that contributes nothing holds no place in the ordering. A 0 in the rank
+// column would look like one, and a cumulative is meaningless where there is nothing above.
+TEST(Report, TextPrintsNoRankRatherThanZeroForAContributorWithNoPlace) {
+  const std::string text = asText(withAPinnedTail(0, 0.0), ReportContext{});
+
+  EXPECT_NE(text.find("   -  Cs-137"), std::string::npos) << text;
+  EXPECT_NE(text.find("contributes nothing to this activity at this time"), std::string::npos)
+      << text;
+}
+
+TEST(Report, TextSaysNothingAboutPinsWhenNoneWereGiven) {
+  const std::string text = asText(oneRow("Cs-137"), ReportContext{});
+  EXPECT_EQ(text.find("pinned"), std::string::npos) << text;
+}
+
+// Without this a loaded table cannot tell a row that placed from one fetched from below the
+// cut, which is the difference between a top-N and a top-N plus an aside.
+TEST(Report, MachineReadableFormatsMarkWhichRowsWerePinned) {
+  const Ranking ranking = withAPinnedTail(37, 0.2);
+
+  const std::vector<std::string> ranked = csvFields(asCsv(ranking), 1);
+  const std::vector<std::string> pinned = csvFields(asCsv(ranking), 2);
+  ASSERT_EQ(ranked.size(), 11u);
+  ASSERT_EQ(pinned.size(), 11u);
+  EXPECT_EQ(ranked.back(), "0");
+  EXPECT_EQ(pinned.back(), "1");
+
+  const std::string json = asJson(ranking, ReportContext{});
+  EXPECT_NE(json.find("\"rank\": 1, \"label\": \"Ba-140\""), std::string::npos) << json;
+  EXPECT_NE(json.find("\"rank\": 37, \"label\": \"Cs-137\""), std::string::npos) << json;
+  EXPECT_NE(json.find("\"pinned\": true"), std::string::npos) << json;
+  EXPECT_NE(json.find("\"pinned\": false"), std::string::npos) << json;
+}
+
 // --- machine-readable precision -----------------------------------------------
 
 // CSV and JSON exist to be parsed again. At the stream default of six significant digits
@@ -253,11 +327,11 @@ TEST(Report, CsvNumbersReadBackAsTheValuesTheyCameFrom) {
   ranking.contributors[0].cumulativeFraction = 0.99999000000000005;
 
   // Columns of the single data row: time_s, time_end_s, rank, contributor, key, value, unit,
-  // fraction, cumulative_fraction, flags. The assertion is that the digits parse back to the
-  // same double, not that they are spelled the way the literal above was -- the shortest form
-  // of 38955600.123456789 is 38955600.12345679, and both name the same value.
+  // fraction, cumulative_fraction, flags, pinned. The assertion is that the digits parse back to
+  // the same double, not that they are spelled the way the literal above was -- the shortest
+  // form of 38955600.123456789 is 38955600.12345679, and both name the same value.
   const std::vector<std::string> row = csvFields(asCsv(ranking), 1);
-  ASSERT_EQ(row.size(), 10u);
+  ASSERT_EQ(row.size(), 11u);
   EXPECT_EQ(std::strtod(row[0].c_str(), nullptr), ranking.time);
   EXPECT_EQ(std::strtod(row[5].c_str(), nullptr), ranking.contributors[0].value);
   EXPECT_EQ(std::strtod(row[8].c_str(), nullptr), ranking.contributors[0].cumulativeFraction);

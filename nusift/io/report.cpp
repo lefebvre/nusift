@@ -177,19 +177,40 @@ void writeTextRows(std::ostream& out, const Ranking& ranking) {
   // Wide enough for the heading too, or the header row shifts right of the values it labels.
   static constexpr std::string_view kLabelHeading = "contributor";
   std::size_t labelWidth = kLabelHeading.size();
+  // And wide enough for the largest rank shown. Four holds every ranking that is only a top-N,
+  // but a pinned row reaches past the cut and reports where it truly stands -- 12358th, in a
+  // gamma-line table -- and a rank that overruns its column shifts the whole row right of it.
+  int rankWidth = 4;
   for (const Contributor& c : ranking.contributors) {
     labelWidth = std::max(labelWidth, c.label.size());
+    rankWidth = std::max(rankWidth, static_cast<int>(std::to_string(c.rank).size()));
   }
 
-  out << "   #  " << std::left << std::setw(static_cast<int>(labelWidth)) << kLabelHeading
-      << std::right << std::setw(13) << unitName(ranking.unit) << std::setw(9) << "frac"
-      << std::setw(9) << "cum" << '\n';
+  out << std::right << std::setw(rankWidth) << "#" << "  " << std::left
+      << std::setw(static_cast<int>(labelWidth)) << kLabelHeading << std::right << std::setw(13)
+      << unitName(ranking.unit) << std::setw(9) << "frac" << std::setw(9) << "cum" << '\n';
 
+  bool separated = false;
   for (const Contributor& c : ranking.contributors) {
-    out << std::right << std::setw(4) << c.rank << "  " << std::left
-        << std::setw(static_cast<int>(labelWidth)) << c.label << std::right << std::setw(13)
-        << sci(c.value) << std::setw(9) << percent(c.fraction) << std::setw(9)
-        << percent(c.cumulativeFraction);
+    // The pinned rows are a tail, not a continuation of the ranking: their ranks jump, and run
+    // together with the prefix above they would read as one list with numbers missing from it.
+    // The heading is what says the rows below were asked for rather than reached.
+    if (c.pinned && !separated) {
+      out << "  pinned:\n";
+      separated = true;
+    }
+
+    // A contributor with no rank contributes nothing at this time and holds no place in the
+    // ordering; printing a 0 there would look like one. Its cumulative is meaningless for the
+    // same reason -- there is no "everything down to it" -- while its own share, zero, is not.
+    if (c.rank > 0) {
+      out << std::right << std::setw(rankWidth) << c.rank;
+    } else {
+      out << std::right << std::setw(rankWidth) << "-";
+    }
+    out << "  " << std::left << std::setw(static_cast<int>(labelWidth)) << c.label << std::right
+        << std::setw(13) << sci(c.value) << std::setw(9) << percent(c.fraction) << std::setw(9)
+        << (c.rank > 0 ? percent(c.cumulativeFraction) : std::string("-"));
     if ((c.flags & kFlagUnmodeledContinuum) != 0) {
       out << "  !";
     }
@@ -212,6 +233,16 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
         << " further contributor" << (ranking.omittedCount == 1 ? "" : "s") << " omitted\n";
   } else if (!ranking.contributors.empty()) {
     out << '\n' << "  shown rows cover the entire total\n";
+  }
+
+  // Only a pinned row can be rankless, and a dash in a column of numbers deserves one line of
+  // explanation. It is also a real answer worth stating plainly: a pure beta emitter pinned in
+  // an exposure ranking is not missing from the table, it contributes nothing to the metric.
+  const bool anyRankless = std::any_of(ranking.contributors.begin(), ranking.contributors.end(),
+                                       [](const Contributor& c) { return c.rank == 0; });
+  if (anyRankless) {
+    out << "  a pinned row with no rank contributes nothing to this " << metricName(ranking.metric)
+        << " at this time\n";
   }
 
   // The magnitude first, because it is what decides whether the count matters at all. A
@@ -256,6 +287,17 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
     }
     out << "\n    (see `nusift data info` for the store's photon coverage)\n";
   }
+}
+
+// The best place a contributor holds anywhere on the grid, or 0 if it never holds one at all.
+int bestRankOf(const RankTrack& track) {
+  int best = 0;
+  for (const int rank : track.rank) {
+    if (rank > 0 && (best == 0 || rank < best)) {
+      best = rank;
+    }
+  }
+  return best;
 }
 
 void writeForecastText(std::ostream& out, const std::vector<DominanceWindow>& windows,
@@ -304,12 +346,46 @@ void writeForecastText(std::ostream& out, const std::vector<DominanceWindow>& wi
   for (const RankTrack& track : tracks) {
     trackWidth = std::max(trackWidth, track.label.size());
   }
-  out << "\n  ever near the top:\n";
-  for (const RankTrack& track : tracks) {
-    out << "    " << std::left << std::setw(static_cast<int>(trackWidth)) << track.label
-        << std::right << "  peaks at " << std::setw(10)
-        << formatDuration(table.times[static_cast<std::size_t>(track.peakTimeIndex)]) << "  ("
-        << percent(track.peakFraction) << " of the total)\n";
+
+  // The pinned tracks are separated for the same reason a pinned ranking row is: they are here
+  // because someone asked after them, and listing them among contributors the forecast found
+  // would say they came close when the whole point may be that they never did.
+  for (const bool pinned : {false, true}) {
+    const bool any = std::any_of(tracks.begin(), tracks.end(), [pinned](const RankTrack& track) {
+      return track.pinned == pinned;
+    });
+    if (!any) {
+      continue;
+    }
+    out << (pinned ? "\n  pinned:\n" : "\n  ever near the top:\n");
+    for (const RankTrack& track : tracks) {
+      if (track.pinned != pinned) {
+        continue;
+      }
+      out << "    " << std::left << std::setw(static_cast<int>(trackWidth)) << track.label
+          << std::right;
+
+      // Best place held ANYWHERE on the grid, which need not be where the contributor peaks:
+      // a share is measured against the total, and a shrinking total can lift a rank while the
+      // share falls. Said as "anywhere" for that reason -- read as a property of the peak it
+      // would be two different times reported as one.
+      //
+      // Not worth stating for a contributor the forecast surfaced, since it reached the top by
+      // definition, but for a pinned one it is the number the reader came for: 3rd at best is a
+      // different situation from 40th at best, and both peak somewhere.
+      const int best = bestRankOf(track);
+      if (best == 0) {
+        out << "  contributes nothing over this grid\n";
+        continue;
+      }
+      out << "  peaks at " << std::setw(10)
+          << formatDuration(table.times[static_cast<std::size_t>(track.peakTimeIndex)]) << "  ("
+          << percent(track.peakFraction) << " of the total)";
+      if (pinned) {
+        out << ", best rank anywhere " << best;
+      }
+      out << '\n';
+    }
   }
 }
 
@@ -333,7 +409,9 @@ void writeForecastJson(std::ostream& out, const std::vector<DominanceWindow>& wi
     const RankTrack& track = tracks[i];
     out << "    {\"label\": \"" << escapeJson(track.label) << "\", \"key\": " << track.id.key
         << ", \"peak_fraction\": " << jsonNumber(track.peakFraction) << ", \"peak_time_s\": "
-        << jsonNumber(table.times[static_cast<std::size_t>(track.peakTimeIndex)]) << "}"
+        << jsonNumber(table.times[static_cast<std::size_t>(track.peakTimeIndex)])
+        << ", \"best_rank\": " << bestRankOf(track)
+        << ", \"pinned\": " << (track.pinned ? "true" : "false") << "}"
         << (i + 1 < tracks.size() ? ",\n" : "\n");
   }
   out << "  ]\n}\n";
@@ -350,7 +428,7 @@ void writeForecastCsv(std::ostream& out, const std::vector<DominanceWindow>& win
 void writeCsvRows(std::ostream& out, const Ranking& ranking, bool withHeader) {
   if (withHeader) {
     out << "time_s,time_end_s,rank,contributor,key,value,unit,fraction,cumulative_fraction,"
-           "flags\n";
+           "flags,pinned\n";
   }
   for (const Contributor& c : ranking.contributors) {
     out << exact(ranking.time) << ',';
@@ -359,9 +437,14 @@ void writeCsvRows(std::ostream& out, const Ranking& ranking, bool withHeader) {
     }
     // The unit is not quoted: it comes from a closed enum of spellings that contain no comma,
     // so unlike a label it cannot acquire one.
+    //
+    // `pinned` is last so that adding it did not renumber the columns anyone already reads by
+    // position, and it is here at all because without it a loaded table cannot tell a row that
+    // placed from one that was fetched from below the cut -- which is the difference between a
+    // top-N and a top-N plus an aside.
     out << ',' << c.rank << ',' << csvField(c.label) << ',' << c.id.key << ',' << exact(c.value)
         << ',' << unitName(ranking.unit) << ',' << exact(c.fraction) << ','
-        << exact(c.cumulativeFraction) << ',' << c.flags << '\n';
+        << exact(c.cumulativeFraction) << ',' << c.flags << ',' << (c.pinned ? 1 : 0) << '\n';
   }
 }
 
@@ -395,7 +478,7 @@ void writeJsonRanking(std::ostream& out, const Ranking& ranking, const ReportCon
         << "\", \"key\": " << c.id.key << ", \"value\": " << jsonNumber(c.value)
         << ", \"fraction\": " << jsonNumber(c.fraction)
         << ", \"cumulative_fraction\": " << jsonNumber(c.cumulativeFraction)
-        << ", \"flags\": " << c.flags << "}";
+        << ", \"flags\": " << c.flags << ", \"pinned\": " << (c.pinned ? "true" : "false") << "}";
     out << (i + 1 < ranking.contributors.size() ? ",\n" : "\n");
   }
   out << pad << "  ]\n";
