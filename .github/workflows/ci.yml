@@ -48,11 +48,21 @@ jobs:
       - name: Test
         run: ctest --test-dir build -L unit --output-on-failure
 
-  # Address + UB sanitizers over the unit suite. The suite is 73 ms uninstrumented, so this
-  # costs a build and little else, and it is the only thing in CI that watches the raw-pointer
-  # span arithmetic the CSR line storage is built on -- NuclearData::lines hands out a span cut
-  # from a flat array by offset, and an off-by-one there reads valid memory belonging to the
-  # next nuclide, which no assertion on the values could catch.
+      # The validation label is the other half: it runs against the committed store and checks
+      # that the evaluation NuSIFT ships reproduces published physics. Separate from the unit
+      # step so a failure says which of the two questions was answered wrongly.
+      - name: Validate against the shipped store
+        run: ctest --test-dir build -L validation --output-on-failure
+
+  # Address + UB sanitizers over the unit and validation suites. The suite is 73 ms
+  # uninstrumented, so this costs a build and little else, and it is the only thing in CI that
+  # watches the raw-pointer span arithmetic the CSR line storage is built on -- NuclearData::lines
+  # hands out a span cut from a flat array by offset, and an off-by-one there reads valid memory
+  # belonging to the next nuclide, which no assertion on the values could catch.
+  #
+  # The validation label is included here specifically because it is the only suite that walks
+  # the spectra of all 3828 staged nuclides, which is where such an off-by-one would actually be
+  # reached: the census counts every line of every nuclide in the real store.
   #
   # detect_leaks is off: cram and HDF5 both hold static allocations alive to exit by design,
   # and a leak check here would report their bookkeeping rather than anything NuSIFT owns.
@@ -75,7 +85,7 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build-asan -L unit --output-on-failure
+        run: ctest --test-dir build-asan -L 'unit|validation' --output-on-failure
 
   # The RUNTIME configuration -- the only one that installs. Builds and installs cram against
   # a system Eigen, then builds nusift against that installed cram, then runs the package
@@ -139,6 +149,8 @@ jobs:
         run: cmake --build build --config Release
       - name: Test
         run: ctest --test-dir build -C Release -L unit --output-on-failure
+      - name: Validate against the shipped store
+        run: ctest --test-dir build -C Release -L validation --output-on-failure
 
   # The version lives in exactly one place -- project(VERSION) in the top-level CMakeLists --
   # and a release tag is a claim about it. This makes a disagreeing tag fail rather than ship
@@ -181,7 +193,11 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libhdf5-dev
           python -m pip install --upgrade pip
-          python -m pip install nanobind numpy pytest
+          # radioactivedecay is the cross-code reference for the validation sweeps, and it is
+          # pinned: its ICRP-107 data is frozen, but an unpinned upgrade that moved a branching
+          # would surface as a mysterious failure on an unrelated commit. The pin is recorded in
+          # validation/checks.py and printed in the generated report.
+          python -m pip install nanobind numpy pytest radioactivedecay==0.6.1
 
       - name: Build the extension
         run: |
@@ -197,6 +213,22 @@ jobs:
         env:
           PYTHONPATH: python
         run: python -m pytest python/tests -q
+
+      # docs/validation.md and its figures are generated from the committed store. Regenerating
+      # them here and failing on a diff is what keeps the published numbers honest: a change in
+      # the physics, the data, or the reference tables that moves a residual has to be committed
+      # alongside the change that caused it, rather than leaving the document quietly wrong.
+      #
+      # The generator is deterministic by construction -- no wall-clock, fixed formatting, and
+      # geometry that never measures a font -- so a diff here means a number moved, not that the
+      # machine did.
+      - name: The validation report must match what is committed
+        env:
+          PYTHONPATH: python
+        run: |
+          python validation/make_report.py
+          git diff --exit-code -- docs/validation.md docs/figures/ \
+            || (echo "::error::validation report is stale; run validation/make_report.py and commit the result" && exit 1)
 
   # The STAGING configuration -- the second of the two build configurations, and the only one
   # that touches ENDFtk. Slow, because it compiles ENDFtk, spdlog, and range-v3 from source,

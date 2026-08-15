@@ -132,6 +132,13 @@ NuSIFT sits **0.8% low** on Co-60 and **0.9% low** on Ba-137m. One uniform offse
 table, not a Co-60 problem. The Cs-137 comparison only *looked* cleaner because 3.3 is quoted to
 two significant figures and cannot resolve a percent.
 
+That comparison is not confined to these two nuclides. [validation.md](validation.md) applies
+each published table's own low-energy cutoff to fifty-odd nuclides across two independent
+tabulations and reports every residual, regenerated on each change. It is also where the size of
+the cutoff convention is made visible: summing the whole spectrum against a table that counts
+only photons above 20 keV disagrees by up to a factor of ten on the X-ray emitters, none of it
+physics.
+
 The residual is **not** scatter that an uncollided calculation omits. These constants are vacuum
 quantities by definition: "a point source of a unit activity of the nuclide in a vacuum … no
 self-attenuation, no air scatter" ([Peplow 2020](https://doi.org/10.1097/HP.0000000000001136)).
