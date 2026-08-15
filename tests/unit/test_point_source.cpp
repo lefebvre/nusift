@@ -66,9 +66,32 @@ TEST(AirCoefficients, ClampsOutsideTheTabulatedRange) {
 // Two nuclides whose gamma constants are published everywhere. These are the tests that say
 // the exposure model is right rather than merely self-consistent, and they are the reason the
 // NIST tables are entered at NIST's own grid.
+//
+// WHICH published value, though. Tabulated constants disagree with each other by more than
+// any of them disagrees with NuSIFT, and the spread is convention rather than physics:
+//
+//   * The roentgen depends on W/e, revised from 33.7 to 33.85 J/C (ICRU 1979) and then to
+//     33.97. Identical physics tabulated before that revision reads about 0.8% higher.
+//   * An air KERMA rate constant uses the mass energy-TRANSFER coefficient, i.e. total kerma.
+//     Exposure needs mass energy-ABSORPTION, i.e. collision kerma. Worth 0.3% at 1.25 MeV.
+//   * Tabulations differ on which photons they include and on whose mu/rho evaluation.
+//
+// The reference used below is Ninkovic & Adrovic's recalculation, which exists precisely
+// because "published data are in strong disagreement". Their 309.0 uGy*m^2/(GBq*h) for Co-60
+// is 13.05 R*cm^2/(h*mCi) in the modern roentgen and 13.15 in the pre-1979 one -- the latter
+// being the classic 13.2 that older tables quote. Same physics, different decade.
+//
+// None of these are scatter. Published constants are vacuum quantities by definition: a point
+// source in a vacuum, no self-attenuation, no air scatter.
 
-// Co-60: 1.173 and 1.333 MeV, both at essentially unit intensity. Published Gamma is
-// 13.2 R*cm^2/(h*mCi).
+// Co-60: 1.173 and 1.333 MeV, both at essentially unit intensity.
+//
+// Nothing else in the spectrum matters. Gamma is 194 * sum(y E mu_en) to three digits, and it
+// is pinned there: forcing both intensities to exactly 1.0 moves it +0.07%, collapsing both
+// lines onto the 1.25 MeV NIST grid point (removing interpolation entirely) moves it -0.00%,
+// and interpolating linearly instead of log-log moves it +0.12%. No plausible change to the
+// decay data or to the interpolation reaches a quarter of a percent, so any disagreement with
+// a published value lives in the conversion convention above rather than in this file.
 TEST(PointSource, Cobalt60GammaConstantMatchesPublishedValue) {
   const std::vector<GammaLine> lines = {
       {1173228.0, 0.9985, SpectrumType::Gamma},
@@ -76,14 +99,21 @@ TEST(PointSource, Cobalt60GammaConstantMatchesPublishedValue) {
   };
   const double published = gammaConstant(spanOf(lines)) * kToPublishedUnits;
 
-  // Comes out near 12.9 against a published 13.2. The residual is the model's, not an error:
-  // published constants fold in a small scatter contribution that an uncollided calculation
-  // omits, and differ slightly by which mu_en/rho evaluation they used.
-  EXPECT_NEAR(published, 13.2, 13.2 * 0.05) << "computed " << published;
+  // 12.91 against 13.05. Of that gap, 0.3% is the transfer/absorption difference and the rest
+  // is the air-coefficient evaluation -- and Ba-137m carries the same 0.9% offset, so it is
+  // one uniform bias in the air table rather than anything specific to Co-60.
+  constexpr double kModernRecalculation = 13.05;
+  EXPECT_NEAR(published, kModernRecalculation, kModernRecalculation * 0.03)
+      << "computed " << published;
 }
 
 // Ba-137m carries the 661.657 keV line that everyone attributes to Cs-137. Per Ba-137m decay
-// its intensity is 0.898, giving a gamma constant near 3.38.
+// its intensity is 0.899, giving 3.38 from the gamma alone.
+//
+// The shipped store also carries the Ba K X-rays near 32 keV, which lift the whole-spectrum
+// constant to 3.47. That is why published Cs-137 values fall into a ~3.2 family (gamma only)
+// and a ~3.3 family (X-rays included). This test deliberately isolates the gamma so that the
+// number means one thing and does not move when the X-ray intensities are re-evaluated.
 TEST(PointSource, Barium137mGammaConstantMatchesPublishedValue) {
   const std::vector<GammaLine> lines = {{661657.0, 0.8994, SpectrumType::Gamma}};
   const double published = gammaConstant(spanOf(lines)) * kToPublishedUnits;
@@ -96,6 +126,12 @@ TEST(PointSource, Barium137mGammaConstantMatchesPublishedValue) {
 // 662 keV line comes from its Ba-137m daughter, populated in 94.7% of decays. NuSIFT puts the
 // line on Ba-137m, where it physically belongs, and the published value falls out of the
 // equilibrium activity ratio without anyone having to fold the branching into a constant.
+//
+// This is an identity rather than an independent check, and deliberately so: a tabulated
+// "Cs-137" constant IS the Ba-137m constant times the branch. Unger & Trubey say as much --
+// their Cs-137 entry is the product of 94.6% and their computed Ba-137m value, added as a
+// convenience, with a warning not to double-count it against a data set that also carries
+// Ba-137m activity. Attributing each line to its emitter makes that error unrepresentable.
 TEST(PointSource, Caesium137SystemReproducesItsPublishedConstantThroughEquilibrium) {
   const std::vector<GammaLine> barium = {{661657.0, 0.8994, SpectrumType::Gamma}};
   const double gammaBa137m = gammaConstant(spanOf(barium)) * kToPublishedUnits;
