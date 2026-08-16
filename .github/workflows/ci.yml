@@ -7,15 +7,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  # The cram ref CI builds and installs for the install-consume job.
-  #
-  # TODO: flip to a release tag once cram PR #15 ("Close install export gap") is merged and
-  # tagged. Until then no released cram carries install rules at all, so there is nothing for
-  # find_package(cram) to find and this job has to build the branch. Everything else in this
-  # workflow uses the pinned tag in cmake/dep_versions.cmake via the fetch fallback.
-  NUSIFT_CRAM_CI_REF: close-install-export-gap
-
 jobs:
   # Formatting is a gate rather than a parallel job: a reformat churns every other job's
   # diff, so it is cheaper to fail here first.
@@ -105,9 +96,16 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libeigen3-dev libhdf5-dev
 
+      # The tag comes out of dep_versions.cmake rather than being written here, so this
+      # prebuilt-and-installed cram cannot drift from the one the fetch fallback compiles
+      # against in every other job -- which would turn this job from an export check into a
+      # test of a cram no other configuration uses.
       - name: Build and install cram
         run: |
-          git clone --depth 1 -b "$NUSIFT_CRAM_CI_REF" \
+          ref=$(grep -oP 'NUSIFT_CRAM_VERSION\s+"\K[^"]+' cmake/dep_versions.cmake)
+          test -n "$ref" || (echo "::error::no cram tag in cmake/dep_versions.cmake" && exit 1)
+          echo "Building cram $ref"
+          git clone --depth 1 -b "$ref" \
             https://github.com/lefebvre/cram-depletion.git cram-src
           cmake -S cram-src -B cram-build -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
@@ -235,10 +233,16 @@ jobs:
   # but it is the only thing that verifies the staging tool at all: nothing in the runtime
   # build references a single ENDFtk symbol.
   #
-  # Linux only. cram builds ENDFtk with SPDLOG_USE_STD_FORMAT, and njoy's tools::Log forwards
-  # its arguments by value into spdlog, so the format string reaches std::format_string as a
-  # runtime value rather than a compile-time constant. MSVC rejects that (C7595) while
-  # libstdc++ accepts it, and the failure is inside cram's own translation units.
+  # Linux only, but no longer because it has to be. Through cram v1.x this configuration could
+  # not compile on MSVC at all: cram forced SPDLOG_USE_STD_FORMAT, and njoy's tools::Log
+  # forwarded its arguments by value into spdlog, so the format string reached
+  # std::format_string as a runtime value rather than a compile-time constant -- rejected by
+  # MSVC (C7595), accepted by libstdc++ only because its <format> was incomplete. cram v2.0.0
+  # fixes it upstream (njoy/tools v0.4.4 takes an explicit fmt::format_string, declared ahead
+  # of ENDFtk's own pin), and the staging tool has been built and run against the cram tapes
+  # on MSVC 19.44. A Windows counterpart to this job would therefore work now; it is left out
+  # only because this job compiles ENDFtk, spdlog, and range-v3 from source and doubling that
+  # cost buys a toolchain difference nothing in NuSIFT's own staging code is sensitive to.
   #
   # This job deliberately does NOT install: a staging build fetches ENDFtk, which is never
   # installed, so it can never be exported. The install-consume job covers that side.
@@ -263,7 +267,9 @@ jobs:
       # code assumes. cram ships two small tapes for exactly this.
       - name: Stage a real ENDF tape end to end
         run: |
-          git clone --depth 1 -b "$NUSIFT_CRAM_CI_REF" \
+          ref=$(grep -oP 'NUSIFT_CRAM_VERSION\s+"\K[^"]+' cmake/dep_versions.cmake)
+          test -n "$ref" || (echo "::error::no cram tag in cmake/dep_versions.cmake" && exit 1)
+          git clone --depth 1 -b "$ref" \
             https://github.com/lefebvre/cram-depletion.git cram-tapes
           D=cram-tapes/tests/integration/data
           ./build-staging/nusift_apps/nusift_stage_data \
