@@ -12,21 +12,31 @@
 # Two independent knobs, because cram is consumed two ways.
 #
 # NUSIFT_CRAM_MIN_VERSION is the find_package() request against an INSTALLED cram.
-# cram's package version file uses SameMajorVersion compatibility, so "1.0" is
-# satisfied by any 1.x at or above it.
+# cram's package version file uses SameMajorVersion compatibility, so "2.0" is
+# satisfied by any 2.x at or above it -- and NOT by a 1.x. The two knobs therefore have
+# to cross a major boundary together: leaving the floor at 1.0 while fetching 2.0.0
+# would not fail, it would quietly accept an installed cram whose headers no longer
+# match the ones the fetch path compiles against.
 #
 # NUSIFT_CRAM_VERSION is the git tag fetched when no installed cram is found. It is a
 # RELEASE TAG, never a branch: the CRAM solver is the numerical core of every number
 # NuSIFT reports, so a floating dependency could silently shift the golden baselines.
 #
-# Bump both together once cram's burnup API (DepletionSystem, Integrator,
-# loadDepletionChainXml) is tagged; nothing here depends on it yet. If activation work
-# begins while that is still untagged, pin an immutable commit SHA here -- never a branch
-# name -- and set GIT_SHALLOW FALSE, which a bare SHA requires.
+# 2.0.0 is a major bump for a source-compatibility break rather than a behavioral one:
+# cram dropped the default member initializers on Zai, DecayMode, DecayData::halfLife,
+# and FissionYields::energy, so that -Wmissing-field-initializers demands each field at
+# every braced initialization instead of defaulting it to a zero that reads as a valid
+# nuclide. NuSIFT supplies all of them (see nusift/nucdata/nuclear_data.cpp); the
+# solver results are unchanged.
+#
+# cram's burnup API (DepletionSystem, Integrator, loadDepletionChainXml) is still not
+# tagged and nothing here depends on it yet. If activation work begins while that is
+# still untagged, pin an immutable commit SHA here -- never a branch name -- and set
+# GIT_SHALLOW FALSE, which a bare SHA requires.
 set(NUSIFT_CRAM_REPO        "https://github.com/lefebvre/cram-depletion.git")
-set(NUSIFT_CRAM_VERSION     "v1.0.1" CACHE STRING
+set(NUSIFT_CRAM_VERSION     "v2.0.0" CACHE STRING
     "cram-depletion release tag to fetch when no installed cram is found")
-set(NUSIFT_CRAM_MIN_VERSION "1.0" CACHE STRING
+set(NUSIFT_CRAM_MIN_VERSION "2.0" CACHE STRING
     "Minimum acceptable version of an installed cram-depletion package")
 
 # --- CLI11: command-line parsing for the nusift driver ----------------------

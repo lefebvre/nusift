@@ -86,10 +86,14 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
     if (a.halfLife[i] <= 0.0) {
       continue;
     }
-    cram::DecayData decay;
-    decay.halfLife = a.halfLife[i];
-    decay.decayConstant = units::decayConstant(a.halfLife[i]);
-    decay.gammaEnergyPerDecay = a.emEnergyEv.empty() ? 0.0 : a.emEnergyEv[i];
+    // Braced, not member-assigned after a bare declaration: cram removed the default
+    // initializer on halfLife precisely so -Wmissing-field-initializers catches an omitted
+    // one, and a bare `cram::DecayData decay;` opts out of that check by leaving the field
+    // indeterminate instead. modes is appended to below rather than supplied here, which is
+    // why it keeps its initializer upstream and needs no entry.
+    cram::DecayData decay{.halfLife = a.halfLife[i],
+                          .decayConstant = units::decayConstant(a.halfLife[i]),
+                          .gammaEnergyPerDecay = a.emEnergyEv.empty() ? 0.0 : a.emEnergyEv[i]};
     for (int m = a.modeOffset[i]; m < a.modeOffset[i + 1]; ++m) {
       decay.modes.push_back(cram::DecayMode{a.modeRtyp[m], a.modeBranching[m], a.modeFinalState[m],
                                             a.modeIsFission[m] != 0});
@@ -100,8 +104,10 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
   // Independent fission yields. Loaded now even though seeding from fission lands later, so
   // that a store round-trip is lossless and the chain is complete the moment it is needed.
   for (int s = 0; s < a.yieldSetCount(); ++s) {
-    cram::FissionYields yields;
-    yields.energy = a.nfyEnergyEv[s];
+    // Braced for the same reason as DecayData above, and it matters more here: an omitted
+    // energy is not a missing value to cram but a meaningful one -- 0 eV classifies the set
+    // as spontaneous fission and sends every nearestYields() lookup to the wrong table.
+    cram::FissionYields yields{.energy = a.nfyEnergyEv[s]};
     for (int p = a.nfySetOffset[s]; p < a.nfySetOffset[s + 1]; ++p) {
       yields.products.emplace_back(toCram(Zai::fromKey(a.nfyProductKey[p])), a.nfyProductYield[p]);
     }
