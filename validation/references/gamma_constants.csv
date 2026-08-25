@@ -23,7 +23,7 @@ K-43,127.8,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,
 Cr-51,4.22,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,single 320 keV line at 10% intensity
 Fe-52,97.24,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,
 Fe-59,145.9,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,
-Co-57,14.11,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,the tables disagree here rather than the model: the air interpolation is convex through 100-150 keV and can only bias the 122 and 136 keV values high; Tc-99m's 141 keV line lands on the other side of the same source
+Co-57,14.11,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,the tables disagree here rather than the model: the Smith & Stabin row below lands within a percent; the air interpolation is convex through 100-150 keV and can only bias the 122 and 136 keV values high; Tc-99m's 141 keV line lands on the other side of the same source
 Co-58,129.0,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,
 Co-60,309.0,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,the reference the unit suite also pins
 Ga-67,19.45,uGy.m2/(GBq.h),20000,0.08,gate,ninkovic2012,,,22% of the constant below 100 keV
@@ -64,6 +64,7 @@ Ba-137m,3.43,R.cm2/(h.mCi),15000,0.08,gate,smith2012,,,the bare isomer; the sour
 Ce-141,0.453,R.cm2/(h.mCi),15000,0.08,gate,smith2012,,,
 Ra-226,0.0394,R.cm2/(h.mCi),15000,0.08,gate,smith2012,,,the bare nuclide; brachytherapy tabulations quote the daughters in equilibrium behind platinum and are 200x larger
 Hg-203,1.3,R.cm2/(h.mCi),15000,0.08,gate,smith2012,,,
+Co-57,0.563,R.cm2/(h.mCi),15000,0.08,report,smith2012,,,duplicate of the Ninkovic row at a different cutoff; the cross-source check that settles which table Co-57's residual belongs to
 Tc-99m,0.795,R.cm2/(h.mCi),15000,0.08,report,smith2012,,,duplicate of the Ninkovic row at a different cutoff; kept as a cross-source check
 Sn-113,1.21,R.cm2/(h.mCi),15000,0.08,report,smith2012,,,97% of the constant below 100 keV
 Ba-133,3.04,R.cm2/(h.mCi),15000,0.08,report,smith2012,,,38% of the constant below 100 keV

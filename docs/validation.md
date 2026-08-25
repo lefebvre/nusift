@@ -41,7 +41,8 @@ and the roentgen conversion, against numbers nothing in NuSIFT was tuned to.
 Two independent tabulations are used, in their own units and each with its own stated
 low-energy cutoff: Ninković & Adrović (2012) in µGy·m²/(GBq·h) above 20 keV, and Smith &
 Stabin (2012) in R·cm²/(h·mCi) above 15 keV. Each nuclide appears once, under whichever
-carries it. That the two disagree with each other by about a percent where they overlap
+carries it, except Tc-99m and Co-57, which are kept under both as cross-source checks.
+That the two disagree with each other by about a percent where they overlap
 — Ninković's Co-60 is 13.05 R·cm²/(h·mCi) against Smith & Stabin's 12.9 — is the point
 [exposure.md §4](exposure.md) makes about published constants, and NuSIFT lands between
 them.
@@ -67,7 +68,7 @@ all of it convention rather than disagreement.
 | Cr-51 | 4.22 | 4.206 | uGy.m2/(GBq.h) | -0.32% | gated | ninkovic2012 | single 320 keV line at 10% intensity |
 | Fe-52 | 97.24 | 97 | uGy.m2/(GBq.h) | -0.25% | gated | ninkovic2012 |  |
 | Fe-59 | 145.9 | 146.8 | uGy.m2/(GBq.h) | +0.64% | gated | ninkovic2012 |  |
-| Co-57 | 14.11 | 13.35 | uGy.m2/(GBq.h) | -5.41% | gated | ninkovic2012 | the tables disagree here rather than the model: the air interpolation is convex through 100-150 keV and can only bias the 122 and 136 keV values high; Tc-99m's 141 keV line lands on the other side of the same source |
+| Co-57 | 14.11 | 13.35 | uGy.m2/(GBq.h) | -5.41% | gated | ninkovic2012 | the tables disagree here rather than the model: the Smith & Stabin row below lands within a percent; the air interpolation is convex through 100-150 keV and can only bias the 122 and 136 keV values high; Tc-99m's 141 keV line lands on the other side of the same source |
 | Co-58 | 129 | 128.9 | uGy.m2/(GBq.h) | -0.06% | gated | ninkovic2012 |  |
 | Co-60 | 309 | 305.6 | uGy.m2/(GBq.h) | -1.09% | gated | ninkovic2012 | the reference the unit suite also pins |
 | Ga-67 | 19.45 | 18.9 | uGy.m2/(GBq.h) | -2.83% | gated | ninkovic2012 | 22% of the constant below 100 keV |
@@ -108,6 +109,7 @@ all of it convention rather than disagreement.
 | Ce-141 | 0.453 | 0.4429 | R.cm2/(h.mCi) | -2.23% | gated | smith2012 |  |
 | Ra-226 | 0.0394 | 0.0373 | R.cm2/(h.mCi) | -5.33% | gated | smith2012 | the bare nuclide; brachytherapy tabulations quote the daughters in equilibrium behind platinum and are 200x larger |
 | Hg-203 | 1.3 | 1.312 | R.cm2/(h.mCi) | +0.91% | gated | smith2012 |  |
+| Co-57 | 0.563 | 0.5638 | R.cm2/(h.mCi) | +0.13% | reported | smith2012 | duplicate of the Ninkovic row at a different cutoff; the cross-source check that settles which table Co-57's residual belongs to |
 | Tc-99m | 0.795 | 0.7782 | R.cm2/(h.mCi) | -2.12% | reported | smith2012 | duplicate of the Ninkovic row at a different cutoff; kept as a cross-source check |
 | Sn-113 | 1.21 | 1.023 | R.cm2/(h.mCi) | -15.49% | reported | smith2012 | 97% of the constant below 100 keV |
 | Ba-133 | 3.04 | 3.019 | R.cm2/(h.mCi) | -0.71% | reported | smith2012 | 38% of the constant below 100 keV |
