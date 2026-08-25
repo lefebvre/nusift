@@ -52,8 +52,12 @@ shielding values for over 1,100 radionuclides.* Health Physics 102(3), 271–291
 The second gamma-constant table, in R·cm²/(h·mCi), based on ICRP-107 decay data, with a stated
 **15 keV** cutoff — different from Ninković's 20 keV, which is why the cutoff is carried per row
 rather than set once. It supplies the nuclides Ninković does not cover. The RADAR web copy of
-this table is no longer served (HTTP 404, behind a mismatched certificate); the values here are
-read from the article's own Table 1, not from a secondary quotation of it.
+this table is no longer served (HTTP 404, behind a mismatched certificate), but the Internet
+Archive holds the authors' file — capture of 2025-04-19 of
+`doseinfo-radar.com/Exposure_Rate_Constants_and_Lead_Shielding_Values 4.pdf` — and every value
+here is read from that article's own Table 1, by eye, not from a secondary quotation of it. The
+paper states its conventions in one sentence: photons of at least 15 keV and yields of at least
+10⁻⁴, bremsstrahlung neglected.
 
 Two traps in its Table 1, both verified by eye rather than from a text layer, whose exponents
 are corrupted by line-wrapping: Rb-86m is printed *above* Rb-86 and the two are easily
@@ -124,10 +128,10 @@ turning over there is the least accurate thing the exposure model does — but i
 Through the 100–150 keV interval the tabulated μ_en/ρ is convex in log-log, so the chord lies
 above the curve and the interpolation can only bias a 122 or 136 keV value *high*, by order a
 percent at most. Co-57, carried entirely by those two lines, sits −5.4% against Ninković, and
-Tc-99m's 141 keV line lands on the other side of the same source; neither is the interpolation,
-and the pair says the tables disagree here more than either disagrees with the model. Converted,
-NuSIFT's Co-57 is 0.56 R·cm²/(h·mCi); a Smith & Stabin row for Co-57, read from the article as
-the others were, is what would settle which table is off.
+Tc-99m's 141 keV line lands on the other side of the same source; neither is the interpolation.
+The Smith & Stabin row for Co-57, kept as a second cross-source check, settles it: 0.5638
+R·cm²/(h·mCi) computed against 0.563 published, +0.1%. The two tables disagree with each other
+on Co-57 by five and a half percent, and NuSIFT lands on one of them.
 
 A row is **not gated** when more than 30% of its above-20-keV constant comes from photons below
 100 keV. That criterion is a property of the spectrum, decided before the residual is consulted,
