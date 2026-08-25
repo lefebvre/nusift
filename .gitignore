@@ -42,3 +42,9 @@ python/nusift/*.so
 python/nusift/*.dll
 python/nusift/*.dylib
 python/nusift/data/
+
+# Machine-local preset overrides (vcpkg root, compiler paths). Never committed.
+CMakeUserPresets.json
+
+# The review document is kept beside the tree, never in it.
+CODE_REVIEW.md
