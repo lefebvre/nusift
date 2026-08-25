@@ -67,7 +67,7 @@ all of it convention rather than disagreement.
 | Cr-51 | 4.22 | 4.206 | uGy.m2/(GBq.h) | -0.32% | gated | ninkovic2012 | single 320 keV line at 10% intensity |
 | Fe-52 | 97.24 | 97 | uGy.m2/(GBq.h) | -0.25% | gated | ninkovic2012 |  |
 | Fe-59 | 145.9 | 146.8 | uGy.m2/(GBq.h) | +0.64% | gated | ninkovic2012 |  |
-| Co-57 | 14.11 | 13.35 | uGy.m2/(GBq.h) | -5.41% | gated | ninkovic2012 | 122 and 136 keV sit in the Compton minimum where the air table is at its coarsest |
+| Co-57 | 14.11 | 13.35 | uGy.m2/(GBq.h) | -5.41% | gated | ninkovic2012 | the tables disagree here rather than the model: the air interpolation is convex through 100-150 keV and can only bias the 122 and 136 keV values high; Tc-99m's 141 keV line lands on the other side of the same source |
 | Co-58 | 129 | 128.9 | uGy.m2/(GBq.h) | -0.06% | gated | ninkovic2012 |  |
 | Co-60 | 309 | 305.6 | uGy.m2/(GBq.h) | -1.09% | gated | ninkovic2012 | the reference the unit suite also pins |
 | Ga-67 | 19.45 | 18.9 | uGy.m2/(GBq.h) | -2.83% | gated | ninkovic2012 | 22% of the constant below 100 keV |

@@ -180,7 +180,9 @@ NuSIFT exposure ranking by nuclide
    4  Te-134        2.8448e+08     5.3%    44.2%
 
   shown rows cover 44.2% of the total; 424 further contributors omitted
-  ! 1.9% of the emitted photon energy is in spectra NuSIFT does not model,
+  ! 1.9% of the emitted photon energy is in spectra NuSIFT does not model. The exposure
+    understatement is of that order, and larger where the missing spectrum is
+    softer than the lines, as bremsstrahlung usually is (348 nuclides):
 ```
 
 Every input that shaped the answer is in the header: the fissile nuclide, the resolved energy,

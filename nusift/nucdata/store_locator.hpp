@@ -20,6 +20,12 @@
 // that would produce a store, because "no data store found" on its own leaves a new user
 // with nowhere to go.
 //
+// A directory in step 4 or 5 that holds more than one store is ambiguous by nature. The first
+// by name is used, and the choice is echoed in every report header -- but a source tree with
+// locally staged fixtures beside the committed store makes that the wrong one, silently, so
+// the search also says what it passed over when given somewhere to say it.
+//
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -29,6 +35,10 @@ struct StoreSearch {
   std::string explicitPath;             // from --store; empty if not given
   std::vector<std::string> extraPaths;  // caller-injected candidates
   std::string executablePath;           // argv[0], for deriving the install prefix
+  // Where to report a directory that held more than one store, naming the one used and the
+  // ones passed over. Null means nobody is listening, which is the library default; the CLI
+  // hands in stderr and the Python binding routes it through the warnings module.
+  std::ostream* warnings = nullptr;
 };
 
 // Returns the first store found. Throws InputError listing everywhere it looked when there

@@ -43,6 +43,7 @@ struct NuclearData::Impl {
   std::vector<GammaLine> lines;
 
   FissionYieldTable yields;
+  std::vector<Zai> sfWithoutYields;
 
   bool hasLines = false;
   bool hasAwr = false;
@@ -125,6 +126,24 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
           FissionProduct{Zai::fromKey(a.nfyProductKey[p]), a.nfyProductYield[p]});
     }
     impl.yields.add(std::move(set));
+  }
+
+  // A fission branch with no yields is the one production the matrix drops without a trace:
+  // the parent's whole decay constant stays on the diagonal, and cram skips the products when
+  // nearestEntry() finds no set at any energy. Recorded here, from the same arrays, so the
+  // count `data info` prints and the one staging warns about are the same count.
+  for (int i = 0; i < staged; ++i) {
+    if (a.halfLife[i] <= 0.0) {
+      continue;
+    }
+    bool fissions = false;
+    for (int m = a.modeOffset[i]; m < a.modeOffset[i + 1]; ++m) {
+      fissions = fissions || (a.modeIsFission[m] != 0 && a.modeBranching[m] > 0.0);
+    }
+    const Zai zai = Zai::fromKey(a.nuclideKey[i]);
+    if (fissions && impl.yields.nearest(zai, kSpontaneousEv) == nullptr) {
+      impl.sfWithoutYields.push_back(zai);
+    }
   }
 
   // Register every reachable daughter that was not staged. Without this the matrix would
@@ -256,6 +275,10 @@ double NuclearData::unmodeledPhotonFraction(int index) const {
 
 const FissionYieldTable& NuclearData::fissionYields() const {
   return impl_->yields;
+}
+
+std::vector<Zai> NuclearData::spontaneousFissionWithoutYields() const {
+  return impl_->sfWithoutYields;
 }
 
 const StoreProvenance& NuclearData::provenance() const {

@@ -272,6 +272,39 @@ TEST(PointSource, ANuclideWithNoLinesHasNoExposure) {
   const PointSourceGeometry geometry;
   EXPECT_DOUBLE_EQ(exposureRate(spanOf(none), 1.0e15, geometry), 0.0);
   EXPECT_DOUBLE_EQ(gammaConstant(spanOf(none)), 0.0);
+  EXPECT_DOUBLE_EQ(meanOpticalDepth(spanOf(none), geometry), 0.0);
+}
+
+// --- the air path ----------------------------------------------------------
+
+// A single line's optical depth is mu(E) rho d, the quantity buildup is tabulated against; a
+// spectrum's is the mean over its lines weighted by the exposure each delivers, so it sits
+// between the lines' own depths and nearer the one that carries the exposure.
+TEST(PointSource, MeanOpticalDepthIsExposureWeighted) {
+  const std::vector<GammaLine> soft = {{1.0e5, 1.0, SpectrumType::Gamma}};
+  const std::vector<GammaLine> hard = {{2.0e6, 1.0, SpectrumType::Gamma}};
+  const std::vector<GammaLine> both = {{1.0e5, 1.0, SpectrumType::Gamma},
+                                       {2.0e6, 1.0, SpectrumType::Gamma}};
+  PointSourceGeometry geometry;
+  geometry.distanceM = 50.0;
+
+  const double softDepth = meanOpticalDepth(spanOf(soft), geometry);
+  const double hardDepth = meanOpticalDepth(spanOf(hard), geometry);
+  const double expectedSoft = airMassAttenuation(1.0e5) * geometry.airDensityKgM3 * 50.0;
+  EXPECT_NEAR(softDepth, expectedSoft, expectedSoft * 1e-12);
+  EXPECT_GT(softDepth, hardDepth) << "air is thicker to a 100 keV photon than to a 2 MeV one";
+
+  // At 50 m the 2 MeV photon delivers many times the exposure of the 100 keV one, so the mean
+  // sits much nearer its depth than the soft line's.
+  const double mixed = meanOpticalDepth(spanOf(both), geometry);
+  EXPECT_GT(mixed, hardDepth);
+  EXPECT_LT(mixed, softDepth);
+  EXPECT_LT(mixed - hardDepth, softDepth - mixed);
+
+  // No attenuation means no path to be thick, whatever the distance.
+  PointSourceGeometry vacuum = geometry;
+  vacuum.airAttenuation = false;
+  EXPECT_DOUBLE_EQ(meanOpticalDepth(spanOf(both), vacuum), 0.0);
 }
 
 // --- units and guards ------------------------------------------------------

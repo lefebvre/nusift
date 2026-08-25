@@ -9,6 +9,7 @@
 #include <string>
 
 #include "nusift/core/error.hpp"
+#include "nusift/io/number_format.hpp"
 #include "nusift/io/time_spec.hpp"
 #include "nusift/triage/response.hpp"
 
@@ -17,30 +18,11 @@ namespace {
 
 constexpr const char* kModule = "report";
 
+// The text format's %.4e is a display choice for a terminal and stays one; CSV and JSON are
+// written with shortestRoundTrip(), because they exist to be parsed again.
 std::string sci(double value) {
   char buffer[32];
   std::snprintf(buffer, sizeof(buffer), "%.4e", value);
-  return buffer;
-}
-
-// The shortest decimal that reads back as the same double.
-//
-// CSV and JSON exist to be parsed again, so surviving the round trip is the requirement, not a
-// nicety: `--at 1.23456789y` printed at six significant digits comes back as a different time
-// than the one the report describes. The text format's %.4e is a display choice for a terminal
-// and stays one.
-//
-// The ladder is what keeps the output readable. %.17g always round-trips but renders 0.99999
-// as 0.99999000000000005; trying the shorter forms first prints the digits the value actually
-// has and falls back only when they are not enough.
-std::string exact(double value) {
-  char buffer[40];
-  for (const int digits : {15, 16, 17}) {
-    std::snprintf(buffer, sizeof(buffer), "%.*g", digits, value);
-    if (std::strtod(buffer, nullptr) == value) {
-      break;
-    }
-  }
   return buffer;
 }
 
@@ -48,7 +30,30 @@ std::string exact(double value) {
 // document that fails to parse -- in whatever consumes the report rather than here. `null` is
 // what every parser accepts for "this is not a number".
 std::string jsonNumber(double value) {
-  return std::isfinite(value) ? exact(value) : std::string("null");
+  return std::isfinite(value) ? shortestRoundTrip(value) : std::string("null");
+}
+
+// Half a mean free path is where scattered photons stop being a percent-level correction:
+// there they are tens of percent of the uncollided value, and at one mean free path they
+// exceed it. Below this the omission is smaller than the spread between published constants
+// and does not earn a paragraph.
+constexpr double kThickAirPathMfp = 0.5;
+
+// The buildup caveat, for an exposure whose air path is thick and whose buildup was left at
+// 1.0. A caller who set a factor has made their own assumption about scatter and is not told
+// again; a caller who set none has, by default, left the scattered photons out, and past this
+// optical depth that is the largest thing the number is missing.
+void writeThickAirPathNote(std::ostream& out, Metric metric, double opticalDepth, double buildup) {
+  if (metric != Metric::Exposure || buildup != 1.0 || !(opticalDepth > kThickAirPathMfp)) {
+    return;
+  }
+  char depth[32];
+  std::snprintf(depth, sizeof(depth), "%.2g", opticalDepth);
+  out << "  ! the air path is " << depth
+      << " mean free paths at the energies carrying this exposure, and buildup\n"
+      << "    is 1.0, so scattered photons are left out. Past about half a mean free path they\n"
+      << "    add tens of percent to the uncollided value, and beyond one they exceed it. Set\n"
+      << "    --buildup to include them.\n";
 }
 
 // RFC 4180 quoting. Labels today are nuclide names and energies and carry no commas, but that
@@ -248,10 +253,16 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
   // The magnitude first, because it is what decides whether the count matters at all. A
   // hundred flagged nuclides contributing 0.01% of the photon output is a footnote; three
   // contributing 30% is a reason not to trust the number above.
+  //
+  // Stated as the order of the understatement rather than as its size. The fraction is one of
+  // emitted ENERGY, and exposure per unit energy follows mu_en/rho, which climbs steeply below
+  // 100 keV -- so a continuum softer than the lines, as bremsstrahlung usually is, costs more
+  // exposure than its share of the energy says.
   if (ranking.unmodeledEnergyFraction > 0.0) {
     out << "  ! " << percent(ranking.unmodeledEnergyFraction)
-        << " of the emitted photon energy is in spectra NuSIFT does not model,\n"
-        << "    so these exposures are understated by roughly that much";
+        << " of the emitted photon energy is in spectra NuSIFT does not model. The exposure\n"
+        << "    understatement is of that order, and larger where the missing spectrum is\n"
+        << "    softer than the lines, as bremsstrahlung usually is";
     // Terminated here unless the named list below continues the sentence. Left open, the line
     // runs into whatever is written next -- and with several --at times that is the blank line
     // writeRankings lays between rankings, which then disappears.
@@ -287,6 +298,8 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
     }
     out << "\n    (see `nusift data info` for the store's photon coverage)\n";
   }
+
+  writeThickAirPathNote(out, ranking.metric, ranking.meanOpticalDepth, ranking.buildup);
 }
 
 // The best place a contributor holds anywhere on the grid, or 0 if it never holds one at all.
@@ -420,8 +433,9 @@ void writeForecastJson(std::ostream& out, const std::vector<DominanceWindow>& wi
 void writeForecastCsv(std::ostream& out, const std::vector<DominanceWindow>& windows) {
   out << "label,key,start_s,end_s,peak_fraction\n";
   for (const DominanceWindow& window : windows) {
-    out << csvField(window.label) << ',' << window.id.key << ',' << exact(window.startSeconds)
-        << ',' << exact(window.endSeconds) << ',' << exact(window.peakFraction) << '\n';
+    out << csvField(window.label) << ',' << window.id.key << ','
+        << shortestRoundTrip(window.startSeconds) << ',' << shortestRoundTrip(window.endSeconds)
+        << ',' << shortestRoundTrip(window.peakFraction) << '\n';
   }
 }
 
@@ -431,9 +445,9 @@ void writeCsvRows(std::ostream& out, const Ranking& ranking, bool withHeader) {
            "flags,pinned\n";
   }
   for (const Contributor& c : ranking.contributors) {
-    out << exact(ranking.time) << ',';
+    out << shortestRoundTrip(ranking.time) << ',';
     if (ranking.domain == Domain::Interval) {
-      out << exact(ranking.timeEnd);
+      out << shortestRoundTrip(ranking.timeEnd);
     }
     // The unit is not quoted: it comes from a closed enum of spellings that contain no comma,
     // so unlike a label it cannot acquire one.
@@ -442,9 +456,10 @@ void writeCsvRows(std::ostream& out, const Ranking& ranking, bool withHeader) {
     // position, and it is here at all because without it a loaded table cannot tell a row that
     // placed from one that was fetched from below the cut -- which is the difference between a
     // top-N and a top-N plus an aside.
-    out << ',' << c.rank << ',' << csvField(c.label) << ',' << c.id.key << ',' << exact(c.value)
-        << ',' << unitName(ranking.unit) << ',' << exact(c.fraction) << ','
-        << exact(c.cumulativeFraction) << ',' << c.flags << ',' << (c.pinned ? 1 : 0) << '\n';
+    out << ',' << c.rank << ',' << csvField(c.label) << ',' << c.id.key << ','
+        << shortestRoundTrip(c.value) << ',' << unitName(ranking.unit) << ','
+        << shortestRoundTrip(c.fraction) << ',' << shortestRoundTrip(c.cumulativeFraction) << ','
+        << c.flags << ',' << (c.pinned ? 1 : 0) << '\n';
   }
 }
 
@@ -462,6 +477,14 @@ void writeJsonRanking(std::ostream& out, const Ranking& ranking, const ReportCon
   out << pad << "  \"total\": " << jsonNumber(ranking.total) << ",\n";
   out << pad << "  \"covered_fraction\": " << jsonNumber(ranking.coveredFraction) << ",\n";
   out << pad << "  \"omitted_count\": " << ranking.omittedCount << ",\n";
+  // The two caveats the text footer states, as numbers a script can act on: how much of the
+  // photon energy the model does not carry, and how thick the air path was left uncorrected.
+  if (ranking.metric == Metric::Exposure) {
+    out << pad << "  \"unmodeled_energy_fraction\": " << jsonNumber(ranking.unmodeledEnergyFraction)
+        << ",\n";
+    out << pad << "  \"mean_optical_depth\": " << jsonNumber(ranking.meanOpticalDepth) << ",\n";
+    out << pad << "  \"buildup\": " << jsonNumber(ranking.buildup) << ",\n";
+  }
   if (!context.seedProvenance.empty()) {
     out << pad << "  \"seed\": \"" << escapeJson(context.seedProvenance) << "\",\n";
   }
@@ -507,9 +530,18 @@ void writeForecast(std::ostream& out, const std::vector<DominanceWindow>& window
                    const std::vector<RankTrack>& tracks, const ResponseTable& table,
                    const ReportContext& context, ReportFormat format) {
   switch (format) {
-    case ReportFormat::Text:
+    case ReportFormat::Text: {
       writeForecastText(out, windows, tracks, table, context);
+      // Judged at the thickest point on the grid: the spectrum hardens and softens as the
+      // leaders turn over, and a forecast that is fine at one end and not at the other should
+      // say so rather than average the caveat away.
+      double thickest = 0.0;
+      for (const double depth : table.meanOpticalDepth) {
+        thickest = std::max(thickest, depth);
+      }
+      writeThickAirPathNote(out, table.metric, thickest, table.geometry.buildup);
       break;
+    }
     case ReportFormat::Csv:
       writeForecastCsv(out, windows);
       break;

@@ -35,6 +35,10 @@ Ranking rank(const ResponseTable& table, int timeIndex, const RankRequest& reque
     ranking.unmodeledEnergyFraction =
         table.unmodeledEnergyFraction[static_cast<std::size_t>(timeIndex)];
   }
+  if (!table.meanOpticalDepth.empty()) {
+    ranking.meanOpticalDepth = table.meanOpticalDepth[static_cast<std::size_t>(timeIndex)];
+  }
+  ranking.buildup = table.geometry.buildup;
 
   const std::span<const double> values = table.valuesAt(timeIndex);
   const int nC = table.contributorCount();

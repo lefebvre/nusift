@@ -107,6 +107,11 @@ for c in tab.rank(at="30d", top=5).contributors:
 for w in tab.dominance_windows():
     print(f"{w.label} leads {nusift.format_duration(w.start_s)} "
           f"to {nusift.format_duration(w.end_s)}")
+
+# Totals over a window -- decays, or roentgen accrued -- in closed form, guard included
+window = nusift.integrate(nd, inv, "1d", "30d")
+for c in nusift.response(nd, window, metric="activity").rank(top=5).contributors:
+    print(f"{c.label:10s} {c.value:.3e} decays")
 ```
 
 `res.atoms` and `tab.values` are zero-copy NumPy views over the C++ storage rather than
@@ -184,13 +189,15 @@ build that found both cram and Eigen and is not staging.
 This costs nothing in practice: staging is a one-time offline step that reads ENDF tapes and
 writes an HDF5 store, which is then committed and shipped. Production runs never link ENDFtk.
 
-**The staging configuration does not build with MSVC.** It is a GCC/Clang path only. cram
-builds ENDFtk with `SPDLOG_USE_STD_FORMAT`, and njoy's `tools::Log` forwards its arguments by
-value into spdlog, so the format string reaches `std::format_string` as a runtime value rather
-than a compile-time constant. MSVC rejects that (`error C7595`); libstdc++ accepts it. The
-failure is in cram's own translation units, before anything of NuSIFT's is reached, so there
-is nothing to work around on this side. Stage on Linux, WSL, or macOS. The runtime
-configuration — the library, the CLI, and the tests — builds fine on MSVC.
+**Staging on MSVC needs cram 2.0.0 or later**, which is what `cmake/dep_versions.cmake` pins.
+Earlier cram releases built ENDFtk with `SPDLOG_USE_STD_FORMAT`, and njoy's `tools::Log`
+forwarded its arguments by value into spdlog, so the format string reached
+`std::format_string` as a runtime value rather than a compile-time constant; MSVC rejects that
+(`error C7595`) where libstdc++ accepted it. cram 2.0.0 takes an explicit `fmt::format_string`
+through njoy/tools 0.4.4, and the staging tool has been built and run against cram's test
+tapes on MSVC 19.44. CI still exercises staging on Linux only, because that job compiles
+ENDFtk, spdlog, and range-v3 from source, and doubling that cost would buy a toolchain
+difference nothing in NuSIFT's own staging code is sensitive to.
 
 ## Consuming
 

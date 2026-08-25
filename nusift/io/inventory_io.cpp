@@ -14,6 +14,7 @@
 
 #include "nusift/core/error.hpp"
 #include "nusift/core/nuclide_name.hpp"
+#include "nusift/io/number_format.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 
 namespace nusift {
@@ -387,9 +388,10 @@ void writeInventoryCsv(std::ostream& out, const Inventory& inventory, const Nucl
     const int index = data.indexOf(zai);
     Quantity used = unit;
     const double value = index >= 0 ? emitValue(entry.atoms, unit, index, data, used) : entry.atoms;
-    char buffer[64];
-    std::snprintf(buffer, sizeof(buffer), "%.10g", value);
-    out << formatNuclideName(zai) << ',' << buffer << ',' << quantityName(used) << '\n';
+    // Every digit the value has, and no more: an inventory written here is read back as the
+    // seed of a later run, and a count rounded on the way out is a different inventory.
+    out << formatNuclideName(zai) << ',' << shortestRoundTrip(value) << ',' << quantityName(used)
+        << '\n';
   }
 }
 
@@ -406,10 +408,9 @@ void writeInventoryJson(std::ostream& out, const Inventory& inventory, const Nuc
       out << ",\n";
     }
     firstEntry = false;
-    char buffer[64];
-    std::snprintf(buffer, sizeof(buffer), "%.10g", value);
-    out << "  {\"nuclide\": \"" << formatNuclideName(zai) << "\", \"quantity\": " << buffer
-        << ", \"unit\": \"" << quantityName(used) << "\"}";
+    out << "  {\"nuclide\": \"" << formatNuclideName(zai)
+        << "\", \"quantity\": " << shortestRoundTrip(value) << ", \"unit\": \""
+        << quantityName(used) << "\"}";
   }
   out << "\n]\n";
 }

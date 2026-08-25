@@ -87,7 +87,7 @@ header — because for a triage answer, what produced it is part of it.
 
 Implemented and exercised end to end: decay from an inventory or from fission, instantaneous
 and time-integrated activity, point-source photon exposure, ranking by four aggregates,
-dominance forecasting, and a Python binding for the instantaneous path.
+dominance forecasting, and Python bindings for both the instantaneous and the interval path.
 
 Not modelled, each of which would *raise* a reported exposure: scattered photons beyond an
 explicit `--buildup` factor, source self-absorption, bremsstrahlung and any continuous photon

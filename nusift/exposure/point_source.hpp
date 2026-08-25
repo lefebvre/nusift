@@ -41,6 +41,7 @@
 #include <span>
 
 #include "nusift/nucdata/photon_lines.hpp"
+#include "nusift/units.hpp"
 
 namespace nusift::exposure {
 
@@ -80,15 +81,26 @@ double exposureRate(LineSpectrum lines, double activityBq, const PointSourceGeom
 // geometry, so it is computed once per nuclide rather than once per nuclide per time.
 double exposureRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& geometry);
 
+// The optical depth of the air path in mean free paths, mu_air(E) * d, averaged over the lines
+// with each weighted by the exposure it actually delivers at the point of interest.
+//
+// Buildup is a function of exactly this quantity, so it is the number that says whether
+// leaving the factor at 1.0 is a small omission or a large one. At a metre it is a few
+// hundredths and the scattered photons are a percent-level correction; past about half a mean
+// free path they are tens of percent of the uncollided value, and beyond one they exceed it.
+// Zero with attenuation off, where there is no path to be thick, and zero for a spectrum that
+// delivers nothing.
+double meanOpticalDepth(LineSpectrum lines, const PointSourceGeometry& geometry);
+
 // Roentgen to absorbed dose in air, and to equivalent dose with a photon radiation weighting
 // factor of 1. Both are the same number; they are named separately because the quantities are
-// different and conflating them in a report is how a dose gets misread.
-constexpr double kGrayPerRoentgen = 0.00876;
+// different and conflating them in a report is how a dose gets misread. The constant itself is
+// units::kGyPerR -- one spelling of the roentgen, in the one file that owns every conversion.
 constexpr double roentgenToGray(double roentgen) {
-  return roentgen * kGrayPerRoentgen;
+  return roentgen * units::kGyPerR;
 }
 constexpr double roentgenToSievert(double roentgen) {
-  return roentgen * kGrayPerRoentgen;
+  return roentgen * units::kGyPerR * units::kRadiationWeightingPhoton;
 }
 
 }  // namespace nusift::exposure

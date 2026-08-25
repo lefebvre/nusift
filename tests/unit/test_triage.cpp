@@ -5,6 +5,7 @@
 
 #include "nusift/core/error.hpp"
 #include "nusift/engine/decay_engine.hpp"
+#include "nusift/exposure/air_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/triage/ranking.hpp"
@@ -578,7 +579,39 @@ TEST(ResponseExposure, SievertIsTheRoentgenValueConverted) {
 
   const double inR = buildResponse(data, result, roentgen).totals[0];
   const double inSv = buildResponse(data, result, sievert).totals[0];
-  EXPECT_NEAR(inSv, inR * exposure::kGrayPerRoentgen, inSv * 1e-12);
+  EXPECT_NEAR(inSv, inR * units::kGyPerR, inSv * 1e-12);
+}
+
+// The table carries the optical depth of the air path -- mu(E) rho d for a single line -- and
+// the geometry it was built in, because both are part of what an exposure number means: the
+// caveat about scattered photons is judged on the first, and a report states the second.
+TEST(ResponseExposure, CarriesTheAirPathAndTheGeometryItWasBuiltIn) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec spec;
+  spec.metric = Metric::Exposure;
+  spec.unit = Unit::RoentgenPerHour;
+  spec.geometry.distanceM = 100.0;
+  const ResponseTable table = buildResponse(data, result, spec);
+
+  ASSERT_EQ(table.meanOpticalDepth.size(), 1u);
+  const double expected =
+      exposure::airMassAttenuation(661657.0) * spec.geometry.airDensityKgM3 * 100.0;
+  EXPECT_NEAR(table.meanOpticalDepth[0], expected, expected * 1e-12);
+  EXPECT_EQ(table.geometry.distanceM, 100.0);
+  EXPECT_EQ(rank(table, 0, RankRequest{}).meanOpticalDepth, table.meanOpticalDepth[0]);
+
+  spec.geometry.airAttenuation = false;
+  EXPECT_EQ(buildResponse(data, result, spec).meanOpticalDepth[0], 0.0);
+
+  // Activity has no air path, and the table must not carry one that reads as a measurement.
+  ResponseSpec activity;
+  activity.metric = Metric::Activity;
+  activity.unit = Unit::Becquerel;
+  EXPECT_TRUE(buildResponse(data, result, activity).meanOpticalDepth.empty());
 }
 
 // Exposure is computed in R/h, and an interval weights atom-SECONDS, so the accrued total is
@@ -658,19 +691,22 @@ TEST(ResponseExposure, RefusesAUnitThatDoesNotMeasureTheMetric) {
 
 // --- per-line aggregation ----------------------------------------------------
 
-// An emitter with three lines of very different strength, so thresholding and ordering are
-// both observable.
-NuclearData chainWithThreeLines() {
+// An emitter with two strong lines and two below the column floor, so thresholding and
+// ordering are both observable. The 500 keV line at 2e-7 is about 1e-7 of the emitter's
+// exposure: far enough under the 1e-6 floor to be dropped as a column, and far enough above
+// round-off that a total which forgot it would miss the tolerance below by four decades.
+NuclearData chainWithStrongAndTraceLines() {
   StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
-  synth::addLines(arrays, 1, {1332492.0, 661657.0, 100.0}, {0.5, 0.9, 1.0e-9});
+  synth::addLines(arrays, 1, {1332492.0, 661657.0, 5.0e5, 100.0}, {0.5, 0.9, 2.0e-7, 1.0e-9});
   return NuclearData::fromArrays(std::move(arrays));
 }
 
 // Splitting a nuclide's exposure across its lines must not change the total. This is the
 // invariant that says per-line aggregation is a finer view of the same quantity rather than a
-// second, separately-derived calculation.
+// second, separately-derived calculation -- and it holds exactly, dropped columns included,
+// because a line the table declines to carry still contributes to what it reports as the whole.
 TEST(ResponseLines, LineTotalMatchesTheNuclideTotal) {
-  const NuclearData data = chainWithThreeLines();
+  const NuclearData data = chainWithStrongAndTraceLines();
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
   const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
@@ -684,12 +720,12 @@ TEST(ResponseLines, LineTotalMatchesTheNuclideTotal) {
 
   const double nuclideTotal = buildResponse(data, result, byNuclide).totals[0];
   const double lineTotal = buildResponse(data, result, byLine).totals[0];
-  EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-9);
+  EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12);
 }
 
 // The strongest line by emitted exposure leads, and every column names its emitter and energy.
 TEST(ResponseLines, RanksIndividualLinesAndLabelsThem) {
-  const NuclearData data = chainWithThreeLines();
+  const NuclearData data = chainWithStrongAndTraceLines();
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
   const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
@@ -718,7 +754,7 @@ TEST(ResponseLines, RanksIndividualLinesAndLabelsThem) {
 // A full evaluation carries 86000 lines and most contribute nothing. The threshold is relative
 // to the emitter, so a minor nuclide keeps its own spectrum instead of vanishing wholesale.
 TEST(ResponseLines, DropsLinesFarBelowTheirEmittersTotal) {
-  const NuclearData data = chainWithThreeLines();
+  const NuclearData data = chainWithStrongAndTraceLines();
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
   const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
@@ -729,14 +765,15 @@ TEST(ResponseLines, DropsLinesFarBelowTheirEmittersTotal) {
   spec.aggregate = Aggregate::GammaLine;
   const ResponseTable table = buildResponse(data, result, spec);
 
-  // Three lines were staged; the 100 eV line at 1e-9 intensity is far below the floor.
+  // Four lines were staged; the 500 keV line at 2e-7 and the 100 eV line at 1e-9 are both far
+  // below the floor, and neither gets a column.
   EXPECT_EQ(table.contributorCount(), 2);
 }
 
 // A photon line has no activity of its own -- it is a way its emitter's decays get out. Asking
 // for activity by line is a category error, not a rounding one.
 TEST(ResponseLines, RefusesActivityRankedByLine) {
-  const NuclearData data = chainWithThreeLines();
+  const NuclearData data = chainWithStrongAndTraceLines();
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
   const DecayResult result = decay(data, inv, std::vector<double>{100.0});
@@ -756,7 +793,7 @@ TEST(ResponseLines, RefusesActivityRankedByLine) {
 // Integrated over a window, per-line columns must still sum to the per-nuclide total -- the
 // same invariant, in the other domain.
 TEST(ResponseLines, IntervalLineTotalMatchesTheNuclideTotal) {
-  const NuclearData data = chainWithThreeLines();
+  const NuclearData data = chainWithStrongAndTraceLines();
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
 
@@ -773,7 +810,7 @@ TEST(ResponseLines, IntervalLineTotalMatchesTheNuclideTotal) {
       buildIntervalResponse(data, keys, integral, 0.0, 2000.0, byNuclide).totals[0];
   const double lineTotal =
       buildIntervalResponse(data, keys, integral, 0.0, 2000.0, byLine).totals[0];
-  EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-9);
+  EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12);
 }
 
 // Matching totals is not enough to say an interval was aggregated by line: per-nuclide columns
@@ -781,7 +818,7 @@ TEST(ResponseLines, IntervalLineTotalMatchesTheNuclideTotal) {
 // and a labelled emitter, or `--by line` over a window silently answers a different question
 // from the same flag over an instant.
 TEST(ResponseLines, IntervalColumnsAreLinesRatherThanNuclides) {
-  const NuclearData data = chainWithThreeLines();
+  const NuclearData data = chainWithStrongAndTraceLines();
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
 

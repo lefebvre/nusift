@@ -101,7 +101,9 @@ A full evaluation carries on the order of 86000 lines (the figure the threshold 
 against) and a fission seed reaches thousands of emitters, so columns are thresholded: a line contributing less than **1e-6 of its own emitter's** exposure is
 dropped. Relative to the emitter rather than to the global total, deliberately — a global
 threshold would erase the entire spectrum of every minor nuclide, and *"which line dominates this
-nuclide"* is a question people ask.
+nuclide"* is a question people ask. A dropped line still counts toward the table's total — it
+contributes, it just has no column — so the total by line is the total by nuclide exactly, and
+the coverage a line ranking reports stays a true fraction of the whole.
 
 ## 4. What a ranking guarantees
 
@@ -179,6 +181,12 @@ and the report footnotes the ranking with the **activity-weighted** magnitude of
 The flag is set for exposure only: an incomplete photon spectrum understates an exposure and says
 nothing whatever about a count of decays, so an activity report carrying it would end with a
 paragraph about a metric it never computed.
+
+An exposure ranking carries one more footnote, for the omission the model makes by default: when
+the air path is thicker than about half a mean free path at the energies carrying the exposure
+and `--buildup` was left at 1.0, the report says so and gives the optical depth — see
+[Exposure §7](exposure.md#7-what-is-not-modelled-and-what-it-costs). Both caveats travel with the
+JSON output, as `unmodeled_energy_fraction`, `mean_optical_depth`, and `buildup`.
 
 ## 5. The same atoms, ranked twice
 

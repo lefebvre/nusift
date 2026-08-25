@@ -84,6 +84,13 @@ struct Ranking {
   // needing the table it came from.
   double unmodeledEnergyFraction = 0.0;
 
+  // Exposure only: the optical depth of the air path in mean free paths at this time, weighted
+  // by the exposure each contributor delivers, and the buildup factor the table was built
+  // with. Together they let a report say when scattered photons were left out of a path thick
+  // enough for that to matter -- again without needing the table.
+  double meanOpticalDepth = 0.0;
+  double buildup = 1.0;
+
   std::vector<Contributor> contributors;
 };
 

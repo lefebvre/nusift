@@ -213,8 +213,24 @@ Each of these would **raise** a reported exposure, so every NuSIFT exposure is a
 the direction of all four:
 
 **Scattered photons.** The default buildup factor is 1.0 — uncollided fluence only. For a bare
-source at a metre in air this is a small correction; through any shielding it is not, which is
-why `--buildup` is exposed rather than hidden inside a default.
+source at a metre in air this is a percent-level correction; at range it is not. Buildup is a
+function of the optical depth of the path, μ_air(E)·d, and every exposure table carries that
+depth averaged over the lines by the exposure each delivers. At a metre it is a few hundredths
+of a mean free path; at 100 m a 662 keV photon sees 0.9 and a 100 keV photon 1.9. Past about
+half a mean free path the scattered photons are tens of percent of the uncollided value, and
+beyond one they exceed it, so a report whose path is that thick and whose buildup was left at
+1.0 says so:
+
+```
+! the air path is 1.9 mean free paths at the energies carrying this exposure, and buildup
+  is 1.0, so scattered photons are left out. Past about half a mean free path they
+  add tens of percent to the uncollided value, and beyond one they exceed it. Set
+  --buildup to include them.
+```
+
+The factor is one scalar applied to every line, which is an approximation of its own — buildup
+is energy-dependent — so `--buildup` makes the assumption visible rather than making it right.
+An energy-dependent buildup is the step past this model, not something it does.
 
 **Source self-absorption.** A point source has no volume to absorb its own photons. A real source
 with mass attenuates its own soft lines heavily.
@@ -223,13 +239,17 @@ with mass attenuates its own soft lines heavily.
 missing is measured per nuclide at staging time and reported alongside the ranking:
 
 ```
-! 1.9% of the emitted photon energy is in spectra NuSIFT does not model,
-  so these exposures are understated by roughly that much
+! 1.9% of the emitted photon energy is in spectra NuSIFT does not model. The exposure
+  understatement is of that order, and larger where the missing spectrum is
+  softer than the lines, as bremsstrahlung usually is
 ```
 
 That percentage is **activity-weighted**, not a count of flagged nuclides — a nuclide with a large
 unmodelled fraction but negligible activity contributes negligibly to it, which is the whole point
-of reporting a magnitude rather than a tally.
+of reporting a magnitude rather than a tally. It is a fraction of emitted *energy*, and exposure
+per unit energy is not flat: μ_en/ρ climbs steeply below 100 keV, so a continuum softer than the
+lines costs more exposure than its share of the energy. The footnote therefore says "of that
+order" and which way the error leans, rather than claiming an equality it cannot.
 
 **Beta, alpha, and neutron dose entirely.** NuSIFT reports photon exposure. A pure beta emitter
 contributes exactly zero to it while being perfectly capable of dominating a contact dose.

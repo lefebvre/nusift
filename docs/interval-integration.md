@@ -313,10 +313,17 @@ logic at all, and the only place a half-life influences a report is as a tiebrea
 near-equal contributors in the ranking. A log grid dense enough to resolve early churn is the
 user's responsibility, and dominance windows can only ever be as sharp as the grid.
 
-**It has no Python binding.** `nusift.decay()` exposes `result.integrated_atoms`, which is the
-*cumulative* G(t) from zero, and `nusift.response()` builds instant-domain tables only. Getting
-an interval from Python today means differencing two cumulative rows yourself — which is the
-unguarded path of §6, without the guard. For narrow late windows, prefer the CLI.
+**From Python, use `nusift.integrate()`, not a difference of cumulative rows.**
+`nusift.decay()` exposes `result.integrated_atoms`, the *cumulative* G(t) from zero, and
+differencing two of its rows is the unguarded subtraction of §6. `nusift.integrate(nd, inv, t1,
+t2)` is `intervalIntegral()` itself, guard included, and `nusift.response()` given its result
+builds an interval-domain table with the units gated the way the CLI gates them:
+
+```python
+window = nusift.integrate(nd, inv, "1d", "30d")
+tab = nusift.response(nd, window, metric="exposure", units="R")
+tab.rank(top=5)
+```
 
 **Not modelled at all** (unchanged from the instantaneous path): scatter buildup beyond an
 explicit `--buildup` factor, source self-absorption, bremsstrahlung, and beta or neutron dose.
@@ -380,11 +387,13 @@ Identical to every digit printed — and the two legs took different code paths,
 | `AdjacentIntervalsAreAdditive` | Adjacent windows sum to the whole — catches a restart that carries the wrong inventory into the second leg, which no single-window test would see |
 | `NarrowLateIntervalSurvivesCancellation` | A 1 s window at ~30 y matches a stable closed form, *and* beats the unguarded subtraction |
 | `RejectsBackwardsInterval` | Zero-width and reversed windows are input errors, not silent zeros |
-| `IntervalLineTotalMatchesTheNuclideTotal` | Aggregating an interval by gamma line totals the same as by nuclide |
+| `IntervalLineTotalMatchesTheNuclideTotal` | Aggregating an interval by gamma line totals the same as by nuclide — exactly, sub-floor lines included |
 | `IntervalColumnsAreLinesRatherThanNuclides` | …and actually produces line columns, not just a matching total |
+| `test_integrate_reaches_the_guarded_path_for_a_narrow_late_window` | The Python binding reaches the re-solve rather than reproducing the subtraction |
 
-In [`tests/unit/test_decay_engine.cpp`](../tests/unit/test_decay_engine.cpp) and
-[`tests/unit/test_triage.cpp`](../tests/unit/test_triage.cpp).
+In [`tests/unit/test_decay_engine.cpp`](../tests/unit/test_decay_engine.cpp),
+[`tests/unit/test_triage.cpp`](../tests/unit/test_triage.cpp), and
+[`python/tests/test_nusift.py`](../python/tests/test_nusift.py).
 
 The cancellation test deserves a note, because its first draft was wrong in an instructive way:
 it used `G(t₂) − G(t₁)` as the reference. That is the very cancellation under test, so it cannot
@@ -408,6 +417,7 @@ evaluated with `expm1` for the second factor, which stays accurate when λΔt is
 | [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `domainScale`, `buildIntervalResponse` |
 | [`nusift/triage/response.hpp`](../nusift/triage/response.hpp) | `Domain`, and the unit/domain pairing rules |
 | [`nusift_apps/nusift.cpp`](../nusift_apps/nusift.cpp) | `runIntegrate`, `parseInterval` |
+| [`python/src/nusift_ext.cpp`](../python/src/nusift_ext.cpp) | `integrate`, and `response` over an `IntervalResult` |
 | [`docs/figures/make_figures.py`](figures/make_figures.py) | Regenerates the two data-driven figures (numpy only) |
 
 ---
