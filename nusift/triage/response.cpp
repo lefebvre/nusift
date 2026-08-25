@@ -71,7 +71,7 @@ double unitScale(Unit unit) {
     case Unit::SievertPerHour:
     case Unit::Gray:
     case Unit::Sievert:
-      return exposure::kGrayPerRoentgen;
+      return units::kGyPerR;
     case Unit::Becquerel:
     case Unit::Decays:
     case Unit::RoentgenPerHour:
@@ -286,6 +286,12 @@ ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> ke
 // exposure is dropped. Relative to the EMITTER rather than to the global total, deliberately --
 // a global threshold would erase the entire spectrum of every minor nuclide, and the question
 // "which line dominates THIS nuclide" is one people ask.
+//
+// Dropped lines still count toward the TOTAL. A total is over everything that contributes,
+// and a line below the floor contributes -- it is only a column this table declines to carry.
+// Keeping it in the total is what makes the total by line the total by nuclide exactly, rather
+// than a number that falls short of it by however many trace lines the spectra happened to
+// hold, and it is what lets the coverage a line ranking reports stay a true fraction.
 ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_t> keys,
                             const std::vector<std::vector<double>>& atomsByTime,
                             const ResponseSpec& spec, Domain domain) {
@@ -302,6 +308,9 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
     int flags = kFlagNone;
   };
   std::vector<Column> columns;
+  // Per nuclide, lambda times what its sub-floor lines deliver per becquerel: the weight of
+  // everything this table does not carry as a column.
+  std::vector<double> droppedWeight(static_cast<std::size_t>(nNuc), 0.0);
 
   for (int i = 0; i < nNuc; ++i) {
     const Zai zai = Zai::fromKey(keys[static_cast<std::size_t>(i)]);
@@ -326,7 +335,11 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
     for (const GammaLine& line : lines) {
       const double perBecquerel =
           line.intensity * exposure::pointExposureCoeff(line.energyEv, spec.geometry);
-      if (perBecquerel <= 0.0 || perBecquerel < floor) {
+      if (perBecquerel <= 0.0) {
+        continue;
+      }
+      if (perBecquerel < floor) {
+        droppedWeight[static_cast<std::size_t>(i)] += lambda * perBecquerel;
         continue;
       }
       columns.push_back(Column{zai.key(), line.energyEv, lambda * perBecquerel, i, flags});
@@ -367,6 +380,10 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
           scale;
       table.values[base + static_cast<std::size_t>(c)] = value;
       total += value;
+    }
+    for (int i = 0; i < nNuc; ++i) {
+      total += droppedWeight[static_cast<std::size_t>(i)] *
+               atomsByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(i)] * scale;
     }
     table.totals[static_cast<std::size_t>(k)] = total;
   }
@@ -411,6 +428,38 @@ std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
     fractions[k] = total > 0.0 ? missingTotal / total : 0.0;
   }
   return fractions;
+}
+
+// The air path's optical depth at each time, averaged over the nuclides by the exposure each
+// delivers. `weightedByTime` holds lambda times the per-becquerel exposure times atoms (or
+// atom-seconds) -- each nuclide's share of the total -- so the unit scale cancels and the
+// domain does not matter.
+std::vector<double> meanOpticalDepths(const NuclearData& data, std::span<const std::int64_t> keys,
+                                      const std::vector<std::vector<double>>& weightedByTime,
+                                      const exposure::PointSourceGeometry& geometry) {
+  const int nNuc = static_cast<int>(keys.size());
+  std::vector<double> depth(static_cast<std::size_t>(nNuc), 0.0);
+  for (int i = 0; i < nNuc; ++i) {
+    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+    if (index >= 0) {
+      depth[static_cast<std::size_t>(i)] = exposure::meanOpticalDepth(data.lines(index), geometry);
+    }
+  }
+
+  std::vector<double> means(weightedByTime.size(), 0.0);
+  for (std::size_t k = 0; k < weightedByTime.size(); ++k) {
+    double weighted = 0.0;
+    double total = 0.0;
+    for (int i = 0; i < nNuc; ++i) {
+      const double share = weightedByTime[k][static_cast<std::size_t>(i)];
+      if (share > 0.0) {
+        weighted += share * depth[static_cast<std::size_t>(i)];
+        total += share;
+      }
+    }
+    means[k] = total > 0.0 ? weighted / total : 0.0;
+  }
+  return means;
 }
 
 // --- naming a contributor to pin ---------------------------------------------
@@ -714,8 +763,10 @@ ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,
           ? assembleLines(data, result.nuclideKeys, rawAtoms, spec, Domain::Instant)
           : assemble(data, result.nuclideKeys, weighted, spec, Domain::Instant);
   table.times = result.times;
+  table.geometry = spec.geometry;
   if (spec.metric == Metric::Exposure) {
     table.unmodeledEnergyFraction = unmodeledEnergyFractions(data, result.nuclideKeys, rawAtoms);
+    table.meanOpticalDepth = meanOpticalDepths(data, result.nuclideKeys, weighted, spec.geometry);
   }
   return table;
 }
@@ -731,30 +782,32 @@ ResponseTable buildIntervalResponse(const NuclearData& data, std::span<const std
   const int nNuc = static_cast<int>(keys.size());
   const std::vector<double> integratedAtoms(integral.begin(), integral.end());
 
-  ResponseTable table;
-  if (spec.aggregate == Aggregate::GammaLine) {
-    // Same split as the instantaneous builder, for the same reason: the line assembler
-    // applies its own per-line weights, so it takes atom-seconds directly rather than the
-    // per-nuclide weighted value every other aggregate folds together.
-    table = assembleLines(data, keys, std::vector<std::vector<double>>{integratedAtoms}, spec,
-                          Domain::Interval);
-  } else {
-    std::vector<double> row(static_cast<std::size_t>(nNuc), 0.0);
-    for (int i = 0; i < nNuc; ++i) {
-      const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
-      // lambda against atom-seconds: a dimensionless count of decays over the window.
-      const double weight = index >= 0 ? weightFor(spec, data, index) : 0.0;
-      row[static_cast<std::size_t>(i)] = weight * integratedAtoms[static_cast<std::size_t>(i)];
-    }
-    table = assemble(data, keys, std::vector<std::vector<double>>{std::move(row)}, spec,
-                     Domain::Interval);
+  // lambda against atom-seconds: a dimensionless count of decays over the window, or the
+  // roentgen accrued once domainScale() has taken the hour back out.
+  std::vector<std::vector<double>> weighted{std::vector<double>(static_cast<std::size_t>(nNuc))};
+  for (int i = 0; i < nNuc; ++i) {
+    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+    const double weight = index >= 0 ? weightFor(spec, data, index) : 0.0;
+    weighted[0][static_cast<std::size_t>(i)] =
+        weight * integratedAtoms[static_cast<std::size_t>(i)];
   }
+
+  // Same split as the instantaneous builder, for the same reason: the line assembler applies
+  // its own per-line weights, so it takes atom-seconds directly rather than the per-nuclide
+  // weighted value every other aggregate folds together.
+  ResponseTable table =
+      spec.aggregate == Aggregate::GammaLine
+          ? assembleLines(data, keys, std::vector<std::vector<double>>{integratedAtoms}, spec,
+                          Domain::Interval)
+          : assemble(data, keys, weighted, spec, Domain::Interval);
 
   table.times = {t1};
   table.timeEnds = {t2};
+  table.geometry = spec.geometry;
   if (spec.metric == Metric::Exposure) {
     table.unmodeledEnergyFraction =
         unmodeledEnergyFractions(data, keys, std::vector<std::vector<double>>{integratedAtoms});
+    table.meanOpticalDepth = meanOpticalDepths(data, keys, weighted, spec.geometry);
   }
   return table;
 }

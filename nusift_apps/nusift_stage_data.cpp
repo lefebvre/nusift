@@ -38,6 +38,7 @@
 #include "nusift/core/nuclide.hpp"
 #include "nusift/core/nuclide_name.hpp"
 #include "nusift/nucdata/data_store.hpp"
+#include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/units.hpp"
 #include "nusift/version.hpp"
 
@@ -424,6 +425,20 @@ int main(int argc, char** argv) {
     // Average light- and heavy-particle decay energies are left unstaged. The store reserves
     // them for decay heat, which is not implemented, and an empty field is honestly "never
     // staged" whereas a column of zeros would read as "no energy".
+
+    // The one coverage gap the decay matrix cannot report for itself: a spontaneous-fission
+    // branch with no yield set of any energy removes the parent's atoms and produces nothing
+    // in their place. Counted by loading the arrays exactly as a run will, so the number here
+    // is the number `nusift data info` prints for the store this writes.
+    const std::vector<Zai> leaking =
+        NuclearData::fromArrays(arrays).spontaneousFissionWithoutYields();
+    if (!leaking.empty()) {
+      std::fprintf(stderr,
+                   "  warning: %zu nuclide(s) have a spontaneous-fission branch but no "
+                   "fission-yield set, so the decay matrix will lose their fissioning atoms "
+                   "(first: %s). Stage the SFY sublibrary with --sfy-dir to close the gap.\n",
+                   leaking.size(), formatNuclideName(leaking.front()).c_str());
+    }
 
     writeStore(output, arrays);
     std::printf("\nwrote %s\n", output.c_str());

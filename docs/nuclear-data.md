@@ -119,6 +119,14 @@ than assuming a grid. At runtime, a request snaps to the **nearest tabulated ene
 for "fast" against an evaluation that tabulates only thermal gets thermal, and the resolved
 energy is printed in the provenance line rather than left implicit.
 
+Spontaneous fission draws on the same table at energy 0, snapping to whatever set the parent has
+if no spontaneous one was staged. A nuclide with a spontaneous-fission branch and **no yield set
+of any energy** is the one gap the matrix cannot report for itself: the branch removes atoms from
+the parent — its whole decay constant sits on the diagonal — and produces nothing in their place.
+The shipped store has 103 such nuclides, every one heavier than A = 180, and decay only ever
+lowers A, so nothing a fission-product source produces can reach one; an actinide inventory can.
+`nusift data info` counts them, staging warns, and the SFY sublibrary (`--sfy-dir`) closes it.
+
 ## 5. The store format
 
 Everything variable-length is CSR-packed: an offset array of length N+1 indexes into a flat
@@ -209,10 +217,11 @@ unstable nuclides:              3562
     of those, >5% continuum:    34
     of those, clamped lines:    1471
   emit photons, no spectrum:    1546
+  SF branch, no yields staged:  103
 nuclides with atomic weights:   3576
 ```
 
-Two of those lines are load-bearing limitations rather than statistics:
+Three of those lines are load-bearing limitations rather than statistics:
 
 **1546 unstable nuclides emit photons with no discrete spectrum in this evaluation.** They have
 an evaluated average photon energy but no lines, so they contribute *exactly zero* to an exposure
@@ -224,6 +233,12 @@ output rather than leaving it to be discovered.
 coefficients are clamped to the end value rather than interpolated. Their contribution is an
 order-of-magnitude figure. Nearly all are soft X-rays, which any real source encapsulation
 absorbs before they reach air — but the count is reported rather than assumed harmless.
+
+**103 nuclides have a spontaneous-fission branch but no fission-yield set of any energy.** The
+branch removes their atoms and produces nothing in their place, so a chain passing through one
+does not conserve atoms (§4). All lie above A = 180, out of reach of any fission-product source;
+an actinide inventory is where the count matters, and `data info` names the nuclides so it can
+be judged against the inventory in hand.
 
 ## 8. Finding the store
 
@@ -239,6 +254,12 @@ and reporting different answers to the same question:
 
 When nothing is found the error names **every** place it looked and gives the command that would
 produce a store, because "no data store found" on its own leaves a new user with nowhere to go.
+
+A directory in step 4 or 5 holding more than one store is ambiguous by nature. The first by name
+is used — which, in a source tree with locally staged fixtures beside the committed evaluation,
+need not be the one meant — so the choice is echoed in every report header, and the CLI warns on
+stderr (the Python binding through the `warnings` module) naming the store used and the ones
+passed over. `--store` or `$NUSIFT_DATA_STORE` settles it.
 
 ## 9. Source map
 

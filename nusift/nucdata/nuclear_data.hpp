@@ -30,6 +30,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <vector>
 
 #include "nusift/core/nuclide.hpp"
 #include "nusift/nucdata/fission_yield.hpp"
@@ -109,6 +110,14 @@ public:
   // Independent fission yields, empty when the store carries none. Exposed as NuSIFT's own
   // value type rather than the chain's, so seeding never needs to reach across the PIMPL.
   const FissionYieldTable& fissionYields() const;
+
+  // Staged nuclides with a spontaneous-fission branch but no fission-yield set of any energy,
+  // ascending by key. The branch removes atoms from the parent -- its whole decay constant sits
+  // on the diagonal -- and with no yields there is nothing to produce in their place, so a
+  // chain passing through one of these does not conserve atoms. A gap in the evaluation's
+  // yield coverage rather than in the solver, and one the matrix cannot report for itself:
+  // `nusift data info` states the count and staging warns about it.
+  std::vector<Zai> spontaneousFissionWithoutYields() const;
 
   const StoreProvenance& provenance() const;
 

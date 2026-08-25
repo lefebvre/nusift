@@ -217,6 +217,7 @@ NuclearData openStore(const CommonOptions& options, const char* argv0, std::stri
   StoreSearch search;
   search.explicitPath = options.storePath;
   search.executablePath = argv0 != nullptr ? argv0 : "";
+  search.warnings = &std::cerr;
   resolved = locateStore(search);
   return NuclearData::open(resolved);
 }
@@ -592,11 +593,17 @@ int runDataInfo(const std::string& storePath, const char* argv0) {
       ++withWeights;
     }
   }
+  // The fourth gap, and the only one that costs atoms rather than photons: a spontaneous-fission
+  // branch with no yield set removes the parent and produces nothing. Counted by the store
+  // itself so the number here and the one staging warns about are the same number.
+  const std::vector<Zai> sfWithoutYields = data.spontaneousFissionWithoutYields();
+
   std::printf("\nunstable nuclides:              %d\n", unstable);
   std::printf("  with discrete photon lines:   %d\n", withLines);
   std::printf("    of those, >5%% continuum:    %d\n", partialContinuum);
   std::printf("    of those, clamped lines:    %d\n", withClampedLines);
   std::printf("  emit photons, no spectrum:    %d\n", noSpectrumAtAll);
+  std::printf("  SF branch, no yields staged:  %zu\n", sfWithoutYields.size());
   std::printf("nuclides with atomic weights:   %d\n", withWeights);
 
   if (noSpectrumAtAll > 0) {
@@ -616,6 +623,24 @@ int runDataInfo(const std::string& storePath, const char* argv0) {
         "encapsulation absorbs before they reach air.\n",
         clampedLines, withClampedLines, exposure::kMinTabulatedEv / 1.0e3,
         exposure::kMaxTabulatedEv / 1.0e6);
+  }
+  if (!sfWithoutYields.empty()) {
+    std::printf(
+        "\n%zu nuclides have a spontaneous-fission branch but no fission-yield set of any\n"
+        "energy. The branch removes atoms from the parent and produces nothing in their\n"
+        "place, so a chain passing through one of them does not conserve atoms. Negligible\n"
+        "for a fission-product source; worth knowing for an actinide inventory. Staging the\n"
+        "SFY sublibrary (--sfy-dir) closes the gap. Affected:\n   ",
+        sfWithoutYields.size());
+    constexpr std::size_t kMaxNamed = 8;
+    const std::size_t named = std::min(sfWithoutYields.size(), kMaxNamed);
+    for (std::size_t k = 0; k < named; ++k) {
+      std::printf("%s%s", k == 0 ? " " : ", ", formatNuclideName(sfWithoutYields[k]).c_str());
+    }
+    if (sfWithoutYields.size() > named) {
+      std::printf(", and %zu more", sfWithoutYields.size() - named);
+    }
+    std::printf("\n");
   }
   if (!data.hasPhotonLines()) {
     std::printf(

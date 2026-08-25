@@ -10,6 +10,7 @@ does not, or a number quietly transposed on the way across.
 from __future__ import annotations
 
 import math
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -281,6 +282,93 @@ def test_per_line_columns_carry_their_energy(data, result):
         assert "keV" in contributor.label
 
 
+# --- intervals ----------------------------------------------------------------
+
+
+@needs_store
+def test_a_window_from_zero_is_the_cumulative_row(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1e20)
+    thirty_years = nusift.parse_duration("30y")
+    window = nusift.integrate(data, inv, 0.0, "30y")
+    cumulative = nusift.decay(data, inv, [thirty_years])
+
+    assert window.t1 == 0.0
+    assert window.t2 == thirty_years
+    assert list(window.nuclides) == list(cumulative.nuclides)
+    # From zero the window IS the cumulative integral, from the same solve: identical bits,
+    # not merely close -- and a view, like every other array the binding hands out.
+    np.testing.assert_array_equal(
+        np.asarray(window.integrated_atoms), np.asarray(cumulative.integrated_atoms)[0]
+    )
+    assert window.integrated_atoms.base is not None
+
+
+@needs_store
+def test_integrate_reaches_the_guarded_path_for_a_narrow_late_window(data):
+    # One second at thirty years. Differencing the two cumulative rows loses about ten of the
+    # sixteen digits to cancellation, which is the reason the binding exists; it has to reach
+    # intervalIntegral()'s re-solve rather than reproduce that subtraction.
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1e20)
+    t1 = nusift.parse_duration("30y")
+    window = nusift.integrate(data, inv, t1, t1 + 1.0)
+    i = list(window.nuclides).index("Cs-137")
+
+    lam = math.log(2.0) / data.half_life("Cs-137")
+    expected = 1e20 / lam * math.exp(-lam * t1) * -math.expm1(-lam * 1.0)
+    got = float(np.asarray(window.integrated_atoms)[i])
+    assert got == pytest.approx(expected, rel=1e-9)
+
+    rows = np.asarray(nusift.decay(data, inv, [t1, t1 + 1.0]).integrated_atoms)
+    naive = float(rows[1, i] - rows[0, i])
+    assert abs(got - expected) < abs(naive - expected)
+
+
+@needs_store
+def test_an_interval_response_is_in_the_interval_domain(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1e20)
+    window = nusift.integrate(data, inv, "1d", "30d")
+    table = nusift.response(data, window, metric="activity")
+
+    assert table.domain == "interval"
+    assert table.unit == "decays"
+    assert np.asarray(table.times)[0] == pytest.approx(nusift.parse_duration("1d"))
+    assert np.asarray(table.time_ends)[0] == pytest.approx(nusift.parse_duration("30d"))
+    # Ba-137m in equilibrium decays very nearly once per Cs-137 decay, so both lead.
+    leaders = {c.label for c in table.rank(top=2).contributors}
+    assert leaders == {"Cs-137", "Ba-137m"}
+
+    with pytest.raises(nusift.InputError):
+        # A rate cannot express a total; refused here as the CLI refuses it on `integrate`.
+        nusift.response(data, window, metric="activity", units="Bq")
+
+
+# --- the air path -------------------------------------------------------------
+
+
+@needs_store
+def test_exposure_tables_carry_their_air_path(data, result):
+    _, res = result
+    far = nusift.response(
+        data, res, metric="exposure", units="R/h", geometry=nusift.PointSource(distance_m=100.0)
+    )
+    depth = np.asarray(far.mean_optical_depth)
+    assert depth.shape == (len(far.times),)
+    # A hundred metres of air is most of a mean free path at fission-product energies.
+    assert (depth > 0.1).all()
+    assert far.rank(at="1h", top=1).mean_optical_depth == pytest.approx(depth[0])
+
+    vacuum = nusift.response(
+        data, res, metric="exposure", units="R/h",
+        geometry=nusift.PointSource(distance_m=100.0, air_attenuation=False),
+    )
+    assert not np.asarray(vacuum.mean_optical_depth).any()
+    # Activity has no air path, and the table does not carry one that reads as a measurement.
+    assert len(nusift.response(data, res, metric="activity").mean_optical_depth) == 0
+
+
 # --- errors -------------------------------------------------------------------
 
 
@@ -332,6 +420,26 @@ def test_packaged_store_is_contributed_to_the_search(monkeypatch, tmp_path):
 
     assert str(STORE) in nusift._data.store_search_paths()
     assert nusift.NuclearData.open().size > 0
+
+
+@needs_store
+def test_a_directory_holding_several_stores_is_warned_about(monkeypatch, tmp_path):
+    """The first store by name is opened, and the ones passed over are named.
+
+    Through the warnings module rather than the process's stderr, because a notebook never
+    shows the latter -- and a store silently picked out of several is exactly what a user of
+    one needs to hear about.
+    """
+    monkeypatch.delenv("NUSIFT_DATA_STORE", raising=False)
+    monkeypatch.setattr(nusift._data, "default_store_path", lambda: None)
+    (tmp_path / "data").mkdir()
+    shutil.copy(STORE, tmp_path / "data" / "a_fixture.h5")
+    shutil.copy(STORE, tmp_path / "data" / "b_evaluation.h5")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.warns(UserWarning, match="2 stores") as record:
+        assert nusift.NuclearData.open().size > 0
+    assert "b_evaluation.h5" in str(record[0].message)
 
 
 def test_search_paths_are_the_ones_the_search_actually_uses(monkeypatch, tmp_path):

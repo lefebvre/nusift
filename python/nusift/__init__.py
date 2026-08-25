@@ -16,6 +16,11 @@ and rank what contributes, by nuclide, mass chain, element, or individual photon
     for w in tab.dominance_windows():
         print(w.label, "leads", w.start_s, "to", w.end_s)
 
+    # Totals over a window come from the same engine, solved in closed form:
+    window = nusift.integrate(nd, inv, "1d", "30d")
+    for c in nusift.response(nd, window, metric="activity").rank(top=5).contributors:
+        print(c.label, c.value, "decays")
+
 The large arrays -- ``DecayResult.atoms``, ``ResponseTable.values`` -- are zero-copy NumPy
 views over the C++ storage rather than copies, so they are cheap to take and must not
 outlive the object they came from. NumPy's own base-object tracking enforces that.
@@ -26,6 +31,7 @@ from ._core import (  # noqa: F401
     DecayResult,
     DominanceWindow,
     InputError,
+    IntervalResult,
     Inventory,
     NuclearData,
     NusiftError,
@@ -36,6 +42,7 @@ from ._core import (  # noqa: F401
     decay,
     fissions_from_kt,
     format_duration,
+    integrate,
     linspace,
     logspace,
     parse_duration,
@@ -51,6 +58,7 @@ __all__ = [
     "DecayResult",
     "DominanceWindow",
     "InputError",
+    "IntervalResult",
     "Inventory",
     "NuclearData",
     "NusiftError",
@@ -62,6 +70,7 @@ __all__ = [
     "default_store_path",
     "fissions_from_kt",
     "format_duration",
+    "integrate",
     "linspace",
     "logspace",
     "parse_duration",

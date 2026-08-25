@@ -33,6 +33,7 @@ struct Census {
   int withClampedLines = 0;
   int clampedLines = 0;
   int noSpectrumAtAll = 0;
+  int sfWithoutYields = 0;
   int withWeights = 0;
 };
 
@@ -68,6 +69,7 @@ Census censusOf(const NuclearData& data) {
       ++c.withWeights;
     }
   }
+  c.sfWithoutYields = static_cast<int>(data.spontaneousFissionWithoutYields().size());
   return c;
 }
 
@@ -95,16 +97,27 @@ TEST(StoreCensus, CoverageCountsAreUnchanged) {
   EXPECT_EQ(c.withWeights, 3576);
 }
 
-// The three coverage GAPS, pinned separately because they are three different problems and
+// The four coverage GAPS, pinned separately because they are four different problems and
 // lumping them hid the first behind the second. A nuclide with no evaluated spectrum
 // contributes exactly zero to an exposure ranking while genuinely emitting photons; one with a
 // continuum tail is present but low; a clamped line is ranked but evaluated with an
-// end-of-table coefficient. All three are reported to users, so all three are gated.
+// end-of-table coefficient; and a spontaneous-fission branch with no yield set is the one gap
+// that costs atoms rather than photons. All four are reported to users, so all four are gated.
 TEST(StoreCensus, TheKnownCoverageGapsAreUnchanged) {
   const Census c = censusOf(committedStore());
   EXPECT_EQ(c.noSpectrumAtAll, 1546) << "unstable nuclides emitting photons with no spectrum";
   EXPECT_EQ(c.withClampedLines, 1471) << "nuclides carrying at least one clamped line";
   EXPECT_EQ(c.clampedLines, 5705) << "lines outside the tabulated air-coefficient range";
+  EXPECT_EQ(c.sfWithoutYields, 103) << "spontaneous-fission branches with no yield set";
+}
+
+// Every one of those is a heavy nuclide, and decay only ever lowers A, so nothing a
+// fission-product source produces can reach one. That is the fact behind `data info`
+// calling the gap negligible for such a source, and it is checked rather than assumed.
+TEST(StoreCensus, TheSpontaneousFissionGapLiesAboveTheFissionProductRange) {
+  for (const Zai& zai : committedStore().spontaneousFissionWithoutYields()) {
+    EXPECT_GE(zai.a, 180) << formatNuclideName(zai) << " is within reach of a fission product";
+  }
 }
 
 // Seeding from fission is a headline capability, and it is only available for parents the

@@ -46,6 +46,14 @@ statement about this problem at this time, not a general guarantee: the whole re
 order parameter is that the approximation degrades outside the region the poles were fitted for.
 Order 48 is the default because it is cheap insurance, not because 16 is visibly wrong here.
 
+**The accuracy is absolute, not per nuclide.** The incomplete-partial-fraction form evaluates
+the whole vector at once, and its round-off is set by the largest components: a nuclide holding
+1e-14 of the inventory's largest count carries no significant digits of its own, and can come
+out slightly negative. Nothing clamps that — a ranking stops at the first value that is not
+positive, and the fractions such rows would print are noise either way — but it is worth
+knowing when `--pin` or `--min-fraction` reaches that far down a table. The cross-code
+comparison in [validation.md](validation.md) floors at 1e-6 of the total for the same reason.
+
 **One factorization per time, applied once.** Nothing is shared between times.
 
 ## 3. Pruning: exact, and the largest single lever

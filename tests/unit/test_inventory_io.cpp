@@ -214,6 +214,30 @@ TEST(InventoryIo, JsonRoundTrips) {
   EXPECT_NEAR(back.atomsOf(kStable), original.atomsOf(kStable), 1e10);
 }
 
+// An inventory written here is the seed of a later run. Ten significant digits looked like
+// plenty and cost 1e-10 of every count on the way out, so a solve re-run from its own written
+// inventory started from a different one; every digit the value has must survive the trip.
+TEST(InventoryIo, WrittenQuantitiesReadBackExactly) {
+  const NuclearData data = chain();
+  Inventory original;
+  original.add(kUnstable, 1.2345678901234567e20);
+  original.add(kStable, 6.02214076e23 / 7.0);
+
+  std::ostringstream csv;
+  writeInventoryCsv(csv, original, data, Quantity::Atoms);
+  std::istringstream rereadCsv(csv.str());
+  const Inventory fromCsv = readInventoryCsv(rereadCsv, data, "roundtrip.csv");
+  EXPECT_EQ(fromCsv.atomsOf(kUnstable), original.atomsOf(kUnstable)) << csv.str();
+  EXPECT_EQ(fromCsv.atomsOf(kStable), original.atomsOf(kStable)) << csv.str();
+
+  std::ostringstream json;
+  writeInventoryJson(json, original, data, Quantity::Atoms);
+  std::istringstream rereadJson(json.str());
+  const Inventory fromJson = readInventoryJson(rereadJson, data, "roundtrip.json");
+  EXPECT_EQ(fromJson.atomsOf(kUnstable), original.atomsOf(kUnstable)) << json.str();
+  EXPECT_EQ(fromJson.atomsOf(kStable), original.atomsOf(kStable)) << json.str();
+}
+
 TEST(InventoryIo, JsonAcceptsAQuotedOrBareQuantity) {
   const NuclearData data = chain();
   std::istringstream in(

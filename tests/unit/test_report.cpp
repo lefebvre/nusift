@@ -167,7 +167,17 @@ TEST(Report, RankingsStaySeparatedWhenTheFooterEndsOnTheEnergyFraction) {
   writeRankings(out, {ranking, ranking}, ReportContext{}, ReportFormat::Text);
 
   const std::string text = out.str();
-  EXPECT_NE(text.find("that much\n\nNuSIFT"), std::string::npos) << text;
+  EXPECT_NE(text.find("usually is\n\nNuSIFT"), std::string::npos) << text;
+}
+
+// The fraction is one of emitted energy, and exposure per unit energy climbs steeply below
+// 100 keV, so a soft continuum costs more exposure than its share of the energy. The footer
+// has to say "of that order" and which way the error leans, not claim an equality it cannot.
+TEST(Report, TextFooterStatesTheEnergyFractionAsAnOrderNotAnEquality) {
+  const std::string text = asText(exposureWithATraceUnmodelled(), ReportContext{});
+  EXPECT_NE(text.find("of that order"), std::string::npos) << text;
+  EXPECT_NE(text.find("softer than the lines"), std::string::npos) << text;
+  EXPECT_EQ(text.find("by roughly that much"), std::string::npos) << text;
 }
 
 // Nothing missing means no paragraph at all, rather than one reporting zero.
@@ -195,6 +205,62 @@ TEST(Report, EachRankingCarriesItsOwnContext) {
   ASSERT_NE(second, std::string::npos) << text;
   EXPECT_LT(first, second) << text;
   EXPECT_EQ(text.find("Y-90", first + 1), std::string::npos) << text;
+}
+
+// --- the buildup caveat --------------------------------------------------------
+
+Ranking exposureThroughAir(double opticalDepth, double buildup) {
+  Ranking ranking = oneRow("Cs-137");
+  ranking.metric = Metric::Exposure;
+  ranking.unit = Unit::RoentgenPerHour;
+  ranking.meanOpticalDepth = opticalDepth;
+  ranking.buildup = buildup;
+  return ranking;
+}
+
+// Past half a mean free path the scattered photons an uncollided calculation leaves out are the
+// largest thing the number is missing, and a reader who never set --buildup has to be told so
+// beside the number rather than in a document they did not open.
+TEST(Report, TextFootnotesAThickAirPathLeftUncorrected) {
+  const std::string text = asText(exposureThroughAir(1.9, 1.0), ReportContext{});
+  EXPECT_NE(text.find("1.9 mean free paths"), std::string::npos) << text;
+  EXPECT_NE(text.find("--buildup"), std::string::npos) << text;
+  EXPECT_EQ(text.back(), '\n') << text;
+}
+
+// A metre of air is a few hundredths of a mean free path. A paragraph about scatter there would
+// be noise beside a percent-level effect, and would teach readers to skip the paragraph.
+TEST(Report, TextSaysNothingAboutScatterOverAThinPath) {
+  const std::string text = asText(exposureThroughAir(0.02, 1.0), ReportContext{});
+  EXPECT_EQ(text.find("mean free path"), std::string::npos) << text;
+}
+
+// A caller who set a buildup factor has made their own assumption about scatter, and telling
+// them they left it out would be false.
+TEST(Report, TextTrustsAnExplicitBuildupFactor) {
+  const std::string text = asText(exposureThroughAir(1.9, 2.5), ReportContext{});
+  EXPECT_EQ(text.find("mean free path"), std::string::npos) << text;
+}
+
+// Activity has no air path. The fields exist on every ranking, so the writer has to go by the
+// metric rather than by whether the numbers happen to be zero.
+TEST(Report, TextSaysNothingAboutAirForAnActivityRanking) {
+  Ranking ranking = oneRow("Cs-137");
+  ranking.meanOpticalDepth = 3.0;
+  const std::string text = asText(ranking, ReportContext{});
+  EXPECT_EQ(text.find("mean free path"), std::string::npos) << text;
+}
+
+// The same caveats, as numbers a script can act on -- and absent from an activity ranking,
+// where a zero would read as a measurement of a path that does not exist.
+TEST(Report, JsonCarriesTheExposureCaveatsAsNumbers) {
+  const std::string exposure = asJson(exposureThroughAir(1.9, 1.0), ReportContext{});
+  EXPECT_EQ(jsonNumberValue(exposure, "mean_optical_depth"), 1.9) << exposure;
+  EXPECT_EQ(jsonNumberValue(exposure, "buildup"), 1.0) << exposure;
+  EXPECT_NE(exposure.find("\"unmodeled_energy_fraction\""), std::string::npos) << exposure;
+
+  const std::string activity = asJson(oneRow("Cs-137"), ReportContext{});
+  EXPECT_EQ(activity.find("mean_optical_depth"), std::string::npos) << activity;
 }
 
 // --- pinned rows ---------------------------------------------------------------

@@ -152,9 +152,25 @@ struct ResponseTable {
   // It is an ENERGY fraction, not an exposure fraction, and deliberately so. Bounding the
   // missing exposure would require assuming an energy for photons whose energies are precisely
   // what is unknown. Emitted energy is exactly computable from what the evaluation does give,
-  // and exposure tracks it closely enough over the range that matters to make it the right
-  // indicator: a 10% energy shortfall means the exposure is understated by roughly that much.
+  // and it is the right indicator of the order of the shortfall -- but only the order. Exposure
+  // per unit energy follows mu_en/rho, which climbs steeply below 100 keV, so a continuum softer
+  // than the lines (bremsstrahlung usually is) understates the exposure by MORE than its share
+  // of the energy. The report words it that way rather than as an equality.
   std::vector<double> unmodeledEnergyFraction;
+
+  // Exposure only, empty otherwise: the optical depth of the air path in mean free paths at
+  // each time, weighted by the exposure each line delivers -- exposure::meanOpticalDepth()
+  // averaged over the contributors by their share. [nT]
+  //
+  // Buildup is a function of exactly this number, so it is what says whether leaving the
+  // factor at 1.0 is a small omission or a large one, and the report footnotes a ranking whose
+  // path is thick. Zero with attenuation off, where there is no path to be thick.
+  std::vector<double> meanOpticalDepth;
+
+  // The geometry the exposure was evaluated in. Part of what the numbers mean rather than an
+  // input that can be forgotten once the table exists: a report has to state the distance, and
+  // whether scattered photons were counted, or the values are not interpretable.
+  exposure::PointSourceGeometry geometry;
 
   int timeCount() const { return static_cast<int>(times.size()); }
   int contributorCount() const { return static_cast<int>(contributors.size()); }

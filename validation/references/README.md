@@ -51,7 +51,9 @@ shielding values for over 1,100 radionuclides.* Health Physics 102(3), 271–291
 
 The second gamma-constant table, in R·cm²/(h·mCi), based on ICRP-107 decay data, with a stated
 **15 keV** cutoff — different from Ninković's 20 keV, which is why the cutoff is carried per row
-rather than set once. It supplies the nuclides Ninković does not cover.
+rather than set once. It supplies the nuclides Ninković does not cover. The RADAR web copy of
+this table is no longer served (HTTP 404, behind a mismatched certificate); the values here are
+read from the article's own Table 1, not from a secondary quotation of it.
 
 Two traps in its Table 1, both verified by eye rather than from a text layer, whose exponents
 are corrupted by line-wrapping: Rb-86m is printed *above* Rb-86 and the two are easily
@@ -118,8 +120,14 @@ it is a procedure, not a published number.
 Once the same 20 keV cutoff is applied, most rows land inside 2%. The band is wider than that
 because of where the remaining spread comes from: the air table is at its sparsest and most
 curved around the Compton minimum near 100 keV, and log-log interpolation of a function that is
-turning over there is the least accurate thing the exposure model does. Co-57, whose constant is
-carried entirely by 122 and 136 keV photons, is the clearest case at −5.4%.
+turning over there is the least accurate thing the exposure model does — but its sign is known.
+Through the 100–150 keV interval the tabulated μ_en/ρ is convex in log-log, so the chord lies
+above the curve and the interpolation can only bias a 122 or 136 keV value *high*, by order a
+percent at most. Co-57, carried entirely by those two lines, sits −5.4% against Ninković, and
+Tc-99m's 141 keV line lands on the other side of the same source; neither is the interpolation,
+and the pair says the tables disagree here more than either disagrees with the model. Converted,
+NuSIFT's Co-57 is 0.56 R·cm²/(h·mCi); a Smith & Stabin row for Co-57, read from the article as
+the others were, is what would settle which table is off.
 
 A row is **not gated** when more than 30% of its above-20-keV constant comes from photons below
 100 keV. That criterion is a property of the spectrum, decided before the residual is consulted,
@@ -132,6 +140,12 @@ The staged values clear this by two to three orders of magnitude; ENDF/B-VIII.1 
 evaluations, so near-exact agreement is expected rather than impressive. The band is set by the
 spread *between* compilations, not by the staging error being looked for. What it actually
 catches is a unit slip, a misread tape, or a value attached to the wrong isomer.
+
+**Atomic weights — ±0.01%.**
+By far the tightest band here, and still cleared by three orders of magnitude, because ENDF's
+atomic weight ratio and AME2020 are evaluations of the same measurements. It is worth having
+anyway: everything expressed per gram passes through this number, and nothing else in the suite
+touches it.
 
 **Chain yields — ±4%.**
 NuSIFT's number is the sum of independent yields over a mass chain at t = 0, which equals the
@@ -177,16 +191,6 @@ extraction, rendering 511.0 as "SILO" and destroying exponents. Its quantity is 
 dose-equivalent rate constant rather than air kerma, and its decay data is 1982-vintage. It is
 still cited in [exposure.md §5](../../docs/exposure.md) for its argument about folded-in Cs-137
 constants, which does not depend on any number being read off the page.
-
-**Smith, D. S., & Stabin, M. G. (2012).** *Exposure rate constants and lead shielding values for
-over 1,100 radionuclides.* Health Physics 102(3), 271–291 — the RADAR copy is gone (HTTP 404)
-and the host serves a mismatched certificate. Not used rather than cited from memory.
-
-**Atomic weights — ±0.01%.**
-By far the tightest band here, and still cleared by three orders of magnitude, because ENDF's
-atomic weight ratio and AME2020 are evaluations of the same measurements. It is worth having
-anyway: everything expressed per gram passes through this number, and nothing else in the suite
-touches it.
 
 ## There is no specific-activity table
 

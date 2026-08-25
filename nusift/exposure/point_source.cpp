@@ -17,7 +17,7 @@ constexpr const char* kModule = "exposure";
 // distance terms.
 double kermaToExposurePerDecayEnergy(double energyEv) {
   return energyEv * units::kEvToJ * airMassEnergyAbsorption(energyEv) * units::kSecondsPerHour /
-         kGrayPerRoentgen;
+         units::kGyPerR;
 }
 
 void requireUsableGeometry(const PointSourceGeometry& geometry) {
@@ -78,6 +78,29 @@ double exposureRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& g
 
 double exposureRate(LineSpectrum lines, double activityBq, const PointSourceGeometry& geometry) {
   return activityBq * exposureRatePerBecquerel(lines, geometry);
+}
+
+double meanOpticalDepth(LineSpectrum lines, const PointSourceGeometry& geometry) {
+  requireUsableGeometry(geometry);
+  if (!geometry.airAttenuation) {
+    return 0.0;
+  }
+  // Weighted by what arrives rather than by what is emitted: a soft line that the path has
+  // already absorbed should not pull the average toward its own thickness, because it is not
+  // carrying the exposure the buildup question is about.
+  double weighted = 0.0;
+  double total = 0.0;
+  for (const GammaLine& line : lines) {
+    const double share = line.intensity * pointExposureCoeff(line.energyEv, geometry);
+    if (share <= 0.0) {
+      continue;
+    }
+    const double depth =
+        airMassAttenuation(line.energyEv) * geometry.airDensityKgM3 * geometry.distanceM;
+    weighted += share * depth;
+    total += share;
+  }
+  return total > 0.0 ? weighted / total : 0.0;
 }
 
 }  // namespace nusift::exposure

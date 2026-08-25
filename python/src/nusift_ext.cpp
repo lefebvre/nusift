@@ -20,6 +20,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -117,6 +118,35 @@ std::vector<std::string> nuclideNames(const std::vector<std::int64_t>& keys) {
   return names;
 }
 
+// Open the store the search resolves to, and hand anything the search had to say about the
+// choice to Python's warnings module -- a notebook does not see the process's stderr, and a
+// store silently picked out of several is exactly the thing a user of one needs to know.
+NuclearData openLocated(StoreSearch search) {
+  std::ostringstream passedOver;
+  search.warnings = &passedOver;
+  const std::string path = locateStore(search);
+  NuclearData data = NuclearData::open(path);
+  if (!passedOver.str().empty()) {
+    nb::module_::import_("warnings").attr("warn")(passedOver.str());
+  }
+  return data;
+}
+
+// The interval counterpart of DecayResult: one row of atom-seconds over [t1, t2], in the
+// pruned index space intervalIntegral() solved over. Defined here rather than in the library
+// because the CLI consumes the integral and its keys directly; Python needs one object to
+// hand back, so that the array can be a view with an owner to keep it alive.
+struct IntervalResult {
+  double t1 = 0.0;
+  double t2 = 0.0;
+  std::vector<std::int64_t> nuclideKeys;
+  std::vector<double> integratedAtoms;  // [nNuc], atom-seconds over the window
+};
+
+const char* domainName(Domain domain) {
+  return domain == Domain::Interval ? "interval" : "instant";
+}
+
 }  // namespace
 
 NB_MODULE(_core, m) {
@@ -188,7 +218,7 @@ NB_MODULE(_core, m) {
               // resolving the packaged store would be work whose result is discarded.
               search.extraPaths = packagedStorePaths();
             }
-            return NuclearData::open(locateStore(search));
+            return openLocated(std::move(search));
           },
           "path"_a = nb::none(),
           "Open a store. With no path, searches $NUSIFT_DATA_STORE, the store packaged with "
@@ -358,6 +388,9 @@ NB_MODULE(_core, m) {
                std::to_string(r.nuclideCount()) + " nuclides>";
       });
 
+  // The GIL is released for the solve. Nothing below touches a Python object once the
+  // arguments have been converted, and an eighty-point forecast is a second of factorization
+  // that other Python threads have no reason to wait behind.
   m.def(
       "decay",
       [](const NuclearData& data, const Inventory& inventory, const std::vector<double>& times,
@@ -369,7 +402,54 @@ NB_MODULE(_core, m) {
         return decay(data, inventory, times, options);
       },
       "data"_a, "inventory"_a, "times"_a, "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
+      nb::call_guard<nb::gil_scoped_release>(),
       "Decay an inventory to a set of times, in seconds.");
+
+  // --- intervals -------------------------------------------------------------
+  nb::class_<IntervalResult>(m, "IntervalResult",
+                             "Atom-seconds over one window, per nuclide, solved in closed form.")
+      .def_ro("t1", &IntervalResult::t1, "Start of the window, in seconds.")
+      .def_ro("t2", &IntervalResult::t2, "End of the window, in seconds.")
+      .def_prop_ro("nuclides", [](const IntervalResult& r) { return nuclideNames(r.nuclideKeys); })
+      .def_prop_ro(
+          "integrated_atoms",
+          [](nb::handle self) {
+            const IntervalResult& r = nb::cast<const IntervalResult&>(self);
+            return view1d(r.integratedAtoms.data(), r.integratedAtoms.size(), self);
+          },
+          "Per-nuclide atom-seconds over [t1, t2]. A zero-copy view, not a copy.")
+      .def("__repr__", [](const IntervalResult& r) {
+        return "<IntervalResult " + formatDuration(r.t1) + " to " + formatDuration(r.t2) + ", " +
+               std::to_string(r.integratedAtoms.size()) + " nuclides>";
+      });
+
+  // The guarded path. Differencing two rows of DecayResult.integrated_atoms is correct in
+  // exact arithmetic and loses its digits to cancellation for a narrow window late in the
+  // decay, which is exactly the window a user asking for one is looking at carefully. This is
+  // the route that re-solves the window directly when that would happen; see
+  // docs/interval-integration.md.
+  m.def(
+      "integrate",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& t1,
+         const nb::object& t2, int threads, bool prune, int cram_order) {
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        IntervalResult result;
+        result.t1 = timeFrom(t1);
+        result.t2 = timeFrom(t2);
+        // Released only once the Python arguments have been read; the solve itself needs
+        // nothing from the interpreter.
+        const nb::gil_scoped_release release;
+        result.integratedAtoms =
+            intervalIntegral(data, inventory, result.t1, result.t2, &result.nuclideKeys, options);
+        return result;
+      },
+      "data"_a, "inventory"_a, "t1"_a, "t2"_a, "threads"_a = 0, "prune"_a = true,
+      "cram_order"_a = 48,
+      "The exact per-nuclide time integral over [t1, t2], in atom-seconds. Times are seconds "
+      "or the strings the CLI takes ('1h', '30d').");
 
   // --- response and ranking --------------------------------------------------
   nb::class_<Contributor>(m, "Contributor")
@@ -395,6 +475,11 @@ NB_MODULE(_core, m) {
       .def_ro("omitted_count", &Ranking::omittedCount)
       .def_ro("time", &Ranking::time)
       .def_ro("unmodeled_energy_fraction", &Ranking::unmodeledEnergyFraction)
+      .def_ro("mean_optical_depth", &Ranking::meanOpticalDepth,
+              "Exposure only: the air path in mean free paths at the energies carrying this "
+              "exposure. Past about 0.5 with buildup 1.0, scattered photons are a large "
+              "omission.")
+      .def_ro("buildup", &Ranking::buildup)
       .def_prop_ro("labels",
                    [](const Ranking& r) {
                      std::vector<std::string> names;
@@ -426,11 +511,28 @@ NB_MODULE(_core, m) {
                      const ResponseTable& t = nb::cast<const ResponseTable&>(self);
                      return view1d(t.times.data(), t.times.size(), self);
                    })
+      .def_prop_ro(
+          "time_ends",
+          [](nb::handle self) {
+            const ResponseTable& t = nb::cast<const ResponseTable&>(self);
+            return view1d(t.timeEnds.data(), t.timeEnds.size(), self);
+          },
+          "Window ends for an interval table; empty for an instant one.")
+      .def_prop_ro("domain",
+                   [](const ResponseTable& t) { return std::string(domainName(t.domain)); })
       .def_prop_ro("totals",
                    [](nb::handle self) {
                      const ResponseTable& t = nb::cast<const ResponseTable&>(self);
                      return view1d(t.totals.data(), t.totals.size(), self);
                    })
+      .def_prop_ro(
+          "mean_optical_depth",
+          [](nb::handle self) {
+            const ResponseTable& t = nb::cast<const ResponseTable&>(self);
+            return view1d(t.meanOpticalDepth.data(), t.meanOpticalDepth.size(), self);
+          },
+          "Exposure only, per time: the air path in mean free paths at the energies carrying "
+          "the exposure. Empty for activity.")
       .def_prop_ro(
           "values",
           [](nb::handle self) {
@@ -509,4 +611,24 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{},
       "Turn a decay result into a table of per-contributor values.");
+
+  // The same call over an interval result gives the interval domain: one row of totals --
+  // decays, or roentgen accrued -- with the units gated accordingly, so `units="Bq"` is
+  // refused here for the same reason the CLI refuses it on `integrate`.
+  m.def(
+      "response",
+      [](const NuclearData& data, const IntervalResult& result, const std::string& metric,
+         const std::string& by, const std::string& units,
+         const exposure::PointSourceGeometry& geometry) {
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        spec.aggregate = aggregateFrom(by);
+        spec.unit = requireUnit(units, spec.metric, Domain::Interval);
+        spec.geometry = geometry;
+        return buildIntervalResponse(data, result.nuclideKeys, result.integratedAtoms, result.t1,
+                                     result.t2, spec);
+      },
+      "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
+      "geometry"_a = exposure::PointSourceGeometry{},
+      "Turn an interval result into a one-row table of per-contributor totals over the window.");
 }

@@ -104,6 +104,7 @@ if(NUSIFT_INSTALL)
 
   install(FILES
     io/inventory_io.hpp
+    io/number_format.hpp
     io/report.hpp
     io/time_spec.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/io)
