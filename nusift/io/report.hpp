@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "nusift/triage/attribution.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/ranking.hpp"
 
@@ -49,6 +50,12 @@ struct ReportContext {
 // Render one ranking.
 void writeRanking(std::ostream& out, const Ranking& ranking, const ReportContext& context,
                   ReportFormat format);
+
+// Render a seed attribution: which seeded nuclides the response is riding on. The importance
+// column is what distinguishes it from an ordinary ranking -- a large share can come from a
+// large seed or from a potent one, and only the two columns together say which.
+void writeAttribution(std::ostream& out, const SeedAttribution& attribution,
+                      const ReportContext& context, ReportFormat format);
 
 // Render a dominance forecast: who leads over which windows, and the contributors that reach
 // the top at any point. `tracks` may be empty, in which case only the windows are shown.

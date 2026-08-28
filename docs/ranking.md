@@ -4,7 +4,7 @@ Turning two matrices of atom counts into an answer: the weights that define each
 aggregations, the rules a ranking follows, and how a forecast decides who leads and when that
 changes.
 
-← [Exposure](exposure.md) · [Methodology index](README.md)
+← [Exposure](exposure.md) · [Methodology index](README.md) · [Seed attribution](attribution.md) →
 
 ---
 

@@ -223,6 +223,62 @@ void writeTextRows(std::ostream& out, const Ranking& ranking) {
   }
 }
 
+// The photon-coverage caveat: how much of the emitted photon energy sits outside the model, and
+// which emitters carry it. Shared by the ranking footer and the attribution footer, because the
+// two report the SAME exposure and understate it by the same amount -- worded differently they
+// would read as two separate reservations about one number.
+void writeUnmodeledEnergyNote(std::ostream& out, double unmodeledEnergyFraction,
+                              const std::vector<std::string>& named) {
+  // The magnitude first, because it is what decides whether the count matters at all. A
+  // hundred flagged nuclides contributing 0.01% of the photon output is a footnote; three
+  // contributing 30% is a reason not to trust the number above.
+  //
+  // Stated as the order of the understatement rather than as its size. The fraction is one of
+  // emitted ENERGY, and exposure per unit energy follows mu_en/rho, which climbs steeply below
+  // 100 keV -- so a continuum softer than the lines, as bremsstrahlung usually is, costs more
+  // exposure than its share of the energy says.
+  if (unmodeledEnergyFraction > 0.0) {
+    out << "  ! " << percent(unmodeledEnergyFraction)
+        << " of the emitted photon energy is in spectra NuSIFT does not model. The exposure\n"
+        << "    understatement is of that order, and larger where the missing spectrum is\n"
+        << "    softer than the lines, as bremsstrahlung usually is";
+    // Terminated here unless the named list below continues the sentence. Left open, the line
+    // runs into whatever is written next -- and with several --at times that is the blank line
+    // writeRankings lays between rankings, which then disappears.
+    if (named.empty()) {
+      out << '\n';
+    }
+  }
+
+  if (!named.empty()) {
+    const std::size_t total = named.size();
+    const bool one = total == 1;
+    // Indented under the magnitude line when there is one, since it is the detail behind it.
+    if (unmodeledEnergyFraction > 0.0) {
+      out << " (" << total << " nuclide" << (one ? "" : "s") << ")";
+    } else {
+      out << "  ! " << total << " contributor" << (one ? "" : "s") << (one ? " carries" : " carry")
+          << " photon energy NuSIFT does not model, so " << (one ? "its" : "their")
+          << (one ? " exposure is" : " exposures are") << " understated";
+    }
+
+    // Naming every one of them is what a real evaluation turns this into: a full store flags
+    // several hundred, overwhelmingly short-lived species that contribute nothing, and an
+    // unbounded list buries the answer it was meant to annotate. The count is the signal; a
+    // handful of names makes it concrete.
+    constexpr std::size_t kMaxNamed = 8;
+    const std::size_t show = std::min(total, kMaxNamed);
+    out << ":\n    ";
+    for (std::size_t i = 0; i < show; ++i) {
+      out << (i == 0 ? "" : ", ") << named[i];
+    }
+    if (total > show) {
+      out << ", and " << (total - show) << " more";
+    }
+    out << "\n    (see `nusift data info` for the store's photon coverage)\n";
+  }
+}
+
 void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportContext& context) {
   // The honesty line. Without it a top-10 worth 40% and one worth 99% look identical.
   if (ranking.omittedCount > 0) {
@@ -250,54 +306,7 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
         << " at this time\n";
   }
 
-  // The magnitude first, because it is what decides whether the count matters at all. A
-  // hundred flagged nuclides contributing 0.01% of the photon output is a footnote; three
-  // contributing 30% is a reason not to trust the number above.
-  //
-  // Stated as the order of the understatement rather than as its size. The fraction is one of
-  // emitted ENERGY, and exposure per unit energy follows mu_en/rho, which climbs steeply below
-  // 100 keV -- so a continuum softer than the lines, as bremsstrahlung usually is, costs more
-  // exposure than its share of the energy says.
-  if (ranking.unmodeledEnergyFraction > 0.0) {
-    out << "  ! " << percent(ranking.unmodeledEnergyFraction)
-        << " of the emitted photon energy is in spectra NuSIFT does not model. The exposure\n"
-        << "    understatement is of that order, and larger where the missing spectrum is\n"
-        << "    softer than the lines, as bremsstrahlung usually is";
-    // Terminated here unless the named list below continues the sentence. Left open, the line
-    // runs into whatever is written next -- and with several --at times that is the blank line
-    // writeRankings lays between rankings, which then disappears.
-    if (context.unmodeledContinuum.empty()) {
-      out << '\n';
-    }
-  }
-
-  if (!context.unmodeledContinuum.empty()) {
-    const std::size_t total = context.unmodeledContinuum.size();
-    const bool one = total == 1;
-    // Indented under the magnitude line when there is one, since it is the detail behind it.
-    if (ranking.unmodeledEnergyFraction > 0.0) {
-      out << " (" << total << " nuclide" << (one ? "" : "s") << ")";
-    } else {
-      out << "  ! " << total << " contributor" << (one ? "" : "s") << (one ? " carries" : " carry")
-          << " photon energy NuSIFT does not model, so " << (one ? "its" : "their")
-          << (one ? " exposure is" : " exposures are") << " understated";
-    }
-
-    // Naming every one of them is what a real evaluation turns this into: a full store flags
-    // several hundred, overwhelmingly short-lived species that contribute nothing, and an
-    // unbounded list buries the answer it was meant to annotate. The count is the signal; a
-    // handful of names makes it concrete.
-    constexpr std::size_t kMaxNamed = 8;
-    const std::size_t named = std::min(total, kMaxNamed);
-    out << ":\n    ";
-    for (std::size_t i = 0; i < named; ++i) {
-      out << (i == 0 ? "" : ", ") << context.unmodeledContinuum[i];
-    }
-    if (total > named) {
-      out << ", and " << (total - named) << " more";
-    }
-    out << "\n    (see `nusift data info` for the store's photon coverage)\n";
-  }
+  writeUnmodeledEnergyNote(out, ranking.unmodeledEnergyFraction, context.unmodeledContinuum);
 
   writeThickAirPathNote(out, ranking.metric, ranking.meanOpticalDepth, ranking.buildup);
 }
@@ -549,6 +558,142 @@ void writeForecast(std::ostream& out, const std::vector<DominanceWindow>& window
       writeForecastJson(out, windows, tracks, table);
       break;
   }
+}
+
+void writeAttribution(std::ostream& out, const SeedAttribution& a, const ReportContext& context,
+                      ReportFormat format) {
+  if (format == ReportFormat::Csv) {
+    // shortestRoundTrip, not sci(): this table exists to be loaded again, and %.4e is a
+    // terminal's five digits. Xe-140 and Cs-140 importances differ in the eleventh, so at
+    // four they serialize identically -- and `value` no longer equals seed_atoms x importance
+    // in the reloaded frame. See the note on sci() at the top of this file.
+    //
+    // The time and the unit ride on every row, as they do in writeCsvRows: a share is a
+    // number of becquerel or of R/h at one instant, and a table stating neither cannot be
+    // interpreted at all once it has left the terminal it was printed in.
+    out << "time_s,rank,seed,key,seed_atoms,importance,value,unit,fraction,cumulative,pinned\n";
+    for (const SeedShare& s : a.shares) {
+      out << shortestRoundTrip(a.time) << ',' << s.rank << ',' << csvField(s.label) << ',' << s.key
+          << ',' << shortestRoundTrip(s.seedAtoms) << ',' << shortestRoundTrip(s.importance) << ','
+          << shortestRoundTrip(s.value) << ',' << unitName(a.unit) << ','
+          << shortestRoundTrip(s.fraction) << ',' << shortestRoundTrip(s.cumulativeFraction) << ','
+          << (s.pinned ? 1 : 0) << '\n';
+    }
+    return;
+  }
+  if (format == ReportFormat::Json) {
+    out << "{\"metric\":\"" << metricName(a.metric) << "\",\"attribution\":\"seed\"";
+    out << ",\"unit\":\"" << unitName(a.unit) << "\"";
+    out << ",\"time_s\":" << jsonNumber(a.time);
+    out << ",\"total\":" << jsonNumber(a.total);
+    out << ",\"covered_fraction\":" << jsonNumber(a.coveredFraction);
+    out << ",\"omitted\":" << a.omittedCount;
+    // The same keys writeJsonRanking emits, spelled the same way. A consumer reading an
+    // exposure out of one document and out of the other should not have to know which command
+    // produced it to find out how far the model was stretched to get it.
+    if (a.metric == Metric::Exposure) {
+      out << ",\"unmodeled_energy_fraction\":" << jsonNumber(a.unmodeledEnergyFraction);
+      out << ",\"mean_optical_depth\":" << jsonNumber(a.meanOpticalDepth);
+      out << ",\"buildup\":" << jsonNumber(a.buildup);
+    }
+    if (!context.seedProvenance.empty()) {
+      out << ",\"seed_provenance\":\"" << escapeJson(context.seedProvenance) << "\"";
+    }
+    if (!context.storeLibrary.empty()) {
+      out << ",\"library\":\"" << escapeJson(context.storeLibrary) << "\"";
+    }
+    if (!context.geometry.empty()) {
+      out << ",\"model\":\"" << escapeJson(context.geometry) << "\"";
+    }
+    out << ",\"shares\":[";
+    for (std::size_t i = 0; i < a.shares.size(); ++i) {
+      const SeedShare& s = a.shares[i];
+      if (i > 0) {
+        out << ',';
+      }
+      out << "{\"rank\":" << s.rank << ",\"seed\":\"" << escapeJson(s.label) << "\""
+          << ",\"key\":" << s.key << ",\"seed_atoms\":" << jsonNumber(s.seedAtoms)
+          << ",\"importance\":" << jsonNumber(s.importance) << ",\"value\":" << jsonNumber(s.value)
+          << ",\"fraction\":" << jsonNumber(s.fraction)
+          << ",\"cumulative_fraction\":" << jsonNumber(s.cumulativeFraction)
+          << ",\"pinned\":" << (s.pinned ? "true" : "false") << '}';
+    }
+    out << "]}\n";
+    return;
+  }
+
+  out << "NuSIFT " << metricName(a.metric) << " attributed to the seed\n";
+  out << "  t = " << formatDuration(a.time) << "    total = " << sci(a.total) << ' '
+      << unitName(a.unit) << '\n';
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << '\n';
+
+  if (a.shares.empty()) {
+    out << "  (nothing was seeded that contributes)\n";
+    return;
+  }
+
+  static constexpr std::string_view kHeading = "seed";
+  std::size_t labelWidth = kHeading.size();
+  int rankWidth = 4;
+  for (const SeedShare& s : a.shares) {
+    labelWidth = std::max(labelWidth, s.label.size());
+    rankWidth = std::max(rankWidth, static_cast<int>(std::to_string(s.rank).size()));
+  }
+
+  out << std::right << std::setw(rankWidth) << "#" << "  " << std::left
+      << std::setw(static_cast<int>(labelWidth)) << kHeading << std::right << std::setw(13)
+      << "seed atoms" << std::setw(13) << unitName(a.unit) << std::setw(9) << "frac" << std::setw(9)
+      << "cum" << '\n';
+
+  bool separated = false;
+  for (const SeedShare& s : a.shares) {
+    if (s.pinned && !separated) {
+      out << "  pinned:\n";
+      separated = true;
+    }
+    if (s.rank > 0) {
+      out << std::right << std::setw(rankWidth) << s.rank;
+    } else {
+      out << std::right << std::setw(rankWidth) << "-";
+    }
+    out << "  " << std::left << std::setw(static_cast<int>(labelWidth)) << s.label << std::right
+        << std::setw(13) << sci(s.seedAtoms) << std::setw(13) << sci(s.value) << std::setw(9)
+        << percent(s.fraction) << std::setw(9)
+        << (s.rank > 0 ? percent(s.cumulativeFraction) : std::string("-")) << '\n';
+  }
+
+  if (a.omittedCount > 0) {
+    std::string covered = percent(a.coveredFraction);
+    if (covered == "100.0%") {
+      covered = ">99.9%";
+    }
+    out << "\n  shown rows cover " << covered << " of the total; " << a.omittedCount
+        << " further seed" << (a.omittedCount == 1 ? "" : "s") << " omitted\n";
+  } else if (!a.shares.empty()) {
+    out << "\n  shown rows cover the entire total\n";
+  }
+
+  // Only an inert pinned row is rankless here, and a dash in a column of numbers earns one
+  // line of explanation. It is also a real answer: a stable seed pinned into an attribution is
+  // not missing from the table, it contributes nothing to this metric.
+  const bool anyRankless =
+      std::any_of(a.shares.begin(), a.shares.end(), [](const SeedShare& s) { return s.rank == 0; });
+  if (anyRankless) {
+    out << "  a pinned seed with no rank contributes nothing to this " << metricName(a.metric)
+        << " at this time\n";
+  }
+
+  // The caveats the FORWARD ranking of this same number prints. An exposure does not become
+  // better characterised by being decomposed, and a reader who ran `attribute` instead of
+  // `rank` has asked a different question about an identically uncertain figure.
+  writeUnmodeledEnergyNote(out, a.unmodeledEnergyFraction, a.unmodeledContinuum);
+  writeThickAirPathNote(out, a.metric, a.meanOpticalDepth, a.buildup);
 }
 
 void writeRanking(std::ostream& out, const Ranking& ranking, const ReportContext& context,

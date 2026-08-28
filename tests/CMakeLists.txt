@@ -34,6 +34,7 @@ add_executable(nusift_make_test_store tools/make_test_store.cpp)
 target_link_libraries(nusift_make_test_store PRIVATE nusift::nusift nusift_warnings)
 
 add_executable(nusift_unit_tests
+  unit/test_attribution.cpp
   unit/test_data_store.cpp
   unit/test_decay_engine.cpp
   unit/test_forecast.cpp
@@ -105,6 +106,31 @@ gtest_discover_tests(nusift_validation_tests
   TEST_PREFIX nusift.validation.
   PROPERTIES LABELS validation
   DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# Measurement spikes
+#
+# Not tests and not registered with CTest: they answer "how expensive is this, and does it
+# converge on OUR problems" for a capability that has not been committed to yet, and the
+# answer is a number a person reads rather than a pass or a fail. Gated off by default
+# because they are the only thing in the tree that includes cram's adjoint headers -- which
+# is also why NUSIFT_CRAM_MIN_VERSION does not have to move for them.
+#
+# sensitivity_spike includes nuclear_data_internal.hpp, making it the third translation unit
+# to do so. That header asks for the growth to be a decision rather than a drift: the reason
+# here is that a sensitivity calculation genuinely assembles and solves a matrix, which is
+# the criterion the header states.
+# ---------------------------------------------------------------------------
+if(NUSIFT_BUILD_SPIKES)
+  add_executable(nusift_sensitivity_spike spike/sensitivity_spike.cpp)
+  target_compile_definitions(nusift_sensitivity_spike
+    PRIVATE NUSIFT_COMMITTED_STORE="${CMAKE_SOURCE_DIR}/data/nusift_b8.1.h5")
+  # cram::cram carries Eigen on its interface, fetched or found; naming Eigen3::Eigen here
+  # would break exactly the fetched-cram build this spike is normally run in.
+  target_link_libraries(nusift_sensitivity_spike
+    PRIVATE nusift::nusift cram::cram nusift_warnings)
+  target_include_directories(nusift_sensitivity_spike PRIVATE ${CMAKE_SOURCE_DIR})
+endif()
 
 # ---------------------------------------------------------------------------
 # Packaging smoke test

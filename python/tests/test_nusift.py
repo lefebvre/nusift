@@ -453,3 +453,179 @@ def test_search_paths_are_the_ones_the_search_actually_uses(monkeypatch, tmp_pat
 def test_input_error_is_a_nusift_error():
     assert issubclass(nusift.InputError, nusift.NusiftError)
     assert issubclass(nusift.NusiftError, Exception)
+
+
+# --- seed attribution ------------------------------------------------------
+#
+# The binding, not the physics: that the shares cross intact, that the pin path resolves
+# against the SEED rather than a response table, and that the total is the same number `rank`
+# reports rather than a second calculation of it.
+
+
+@needs_store
+def test_attribute_shares_partition_the_total(data):
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+
+    full = nusift.attribute(data, inv, at=at, top=0)
+    assert full.omitted_count == 0
+    assert math.isclose(sum(s.value for s in full.shares), full.total, rel_tol=1e-10)
+    assert math.isclose(full.covered_fraction, 1.0, rel_tol=1e-10)
+
+
+@needs_store
+def test_attribute_total_matches_the_forward_ranking(data):
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+
+    attributed = nusift.attribute(data, inv, at=at, top=5)
+    forward = nusift.response(data, nusift.decay(data, inv, [at])).rank(at=at, top=5)
+
+    assert math.isclose(attributed.total, forward.total, rel_tol=1e-9)
+    # Same number, different partition -- the two lists need not agree at all.
+    assert attributed.labels != forward.labels
+
+
+@needs_store
+def test_attribute_truncation_reports_what_it_omitted(data):
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+
+    top5 = nusift.attribute(data, inv, at=at, top=5)
+    assert len(top5) == 5
+    assert top5.omitted_count > 0
+    assert 0.0 < top5.covered_fraction < 1.0
+
+
+@needs_store
+def test_attribute_pins_reach_past_the_cut(data):
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+
+    pinned = nusift.attribute(data, inv, at=at, top=3, pin=["Cs-137"])
+    assert len(pinned) == 4
+    assert pinned.shares[-1].label == "Cs-137"
+    assert pinned.shares[-1].pinned
+    assert pinned.shares[-1].rank > 3
+
+
+@needs_store
+def test_attribute_refuses_a_pin_that_was_never_seeded(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+    with pytest.raises(nusift.InputError):
+        nusift.attribute(data, inv, at=0.0, pin=["Co-60"])
+
+
+@needs_store
+def test_attribute_importance_is_shared_within_a_decay_chain(data):
+    """Xe-140 (13.6 s) decays into Cs-140 (63.7 s) long before 30 days, so at that time an atom
+    seeded as either is worth very nearly the same. Not exactly: Xe-140 has a small
+    delayed-neutron branch that leaves the A=140 chain, and the ~1e-5 gap is that branch rather
+    than solver noise -- which is why the tolerance is loose enough to admit it and tight enough
+    that a genuinely transposed importance would still fail."""
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+
+    shares = {s.label: s.importance for s in nusift.attribute(data, inv, at=at, top=0).shares}
+    assert math.isclose(shares["Xe-140"], shares["Cs-140"], rel_tol=1e-3)
+
+
+# The input forms the other time and pin APIs already take. `attribute` took a bare float and a
+# list of strings, so `at="30d"` and `pin="Cs-137"` -- both of which work everywhere else --
+# raised TypeError instead of answering.
+
+
+@needs_store
+def test_attribute_takes_a_duration_string_for_at(data):
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+
+    by_string = nusift.attribute(data, inv, at="30d", top=5)
+    by_seconds = nusift.attribute(data, inv, at=nusift.parse_duration("30d"), top=5)
+
+    assert by_string.time == by_seconds.time
+    assert by_string.labels == by_seconds.labels
+
+
+@needs_store
+def test_attribute_takes_a_bare_string_as_one_pin(data):
+    """Not as an iterable of one-character pins. "Cs-137" is a perfectly good sequence of six
+    spellings that name nothing, which is why this has to be handled rather than iterated."""
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+
+    one = nusift.attribute(data, inv, at=at, top=3, pin="Cs-137")
+    listed = nusift.attribute(data, inv, at=at, top=3, pin=["Cs-137"])
+
+    assert one.labels == listed.labels
+    assert one.shares[-1].label == "Cs-137"
+    assert one.shares[-1].pinned
+
+
+@needs_store
+def test_attribute_refuses_an_aggregate_it_cannot_answer(data):
+    """An inventory row names a nuclide, so that is what a share can name. Answering `by=
+    "element"` with a nuclide attribution would return a different table than the one asked
+    for, silently."""
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    for by in ("element", "mass-chain", "line"):
+        with pytest.raises(nusift.InputError):
+            nusift.attribute(data, inv, at="30d", by=by)
+
+
+@needs_store
+def test_attribute_exposure_carries_the_same_caveats_the_ranking_does(data):
+    """The same figure reached two ways cannot be better characterised one way than the other.
+    `attribute` used to print the exposure `rank` warns about, with no warning."""
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    at = nusift.parse_duration("30d")
+    geometry = nusift.PointSource(distance_m=100.0)
+
+    attributed = nusift.attribute(
+        data, inv, at=at, metric="exposure", units="R/h", geometry=geometry, top=5
+    )
+    forward = nusift.response(
+        data, nusift.decay(data, inv, [at]), metric="exposure", units="R/h", geometry=geometry
+    ).rank(at=at, top=5)
+
+    assert math.isclose(attributed.total, forward.total, rel_tol=1e-9)
+    assert math.isclose(
+        attributed.unmodeled_energy_fraction, forward.unmodeled_energy_fraction, rel_tol=1e-12
+    )
+    assert math.isclose(attributed.mean_optical_depth, forward.mean_optical_depth, rel_tol=1e-12)
+    assert attributed.buildup == forward.buildup
+    # A caveat of zero would satisfy the equalities above and prove nothing.
+    assert attributed.mean_optical_depth > 0.0
+    assert attributed.unmodeled_continuum
+
+
+@needs_store
+def test_attribute_activity_carries_no_exposure_caveats(data):
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", yield_kt=20)
+    a = nusift.attribute(data, inv, at="30d", top=5)
+    assert a.unmodeled_energy_fraction == 0.0
+    assert a.mean_optical_depth == 0.0
+    assert a.unmodeled_continuum == []
+
+
+@needs_store
+def test_attribute_does_not_count_an_inert_seed_as_omitted(data):
+    """A stable seed places real atoms worth zero becquerel forever. Ranked, it spends a `top`
+    slot; counted as omitted, it reports a gap that showing it would not close."""
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+    inv.add("Cs-133", 5.0e18)  # stable
+
+    a = nusift.attribute(data, inv, at="30d", top=1)
+    assert a.labels == ["Cs-137"]
+    assert a.omitted_count == 0
+    assert math.isclose(a.covered_fraction, 1.0, rel_tol=1e-10)
+
+    # Asked about directly, it answers -- rankless, which is what "contributes nothing here"
+    # looks like in a table of ranks.
+    pinned = nusift.attribute(data, inv, at="30d", top=1, pin="Cs-133")
+    assert pinned.labels == ["Cs-137", "Cs-133"]
+    assert pinned.shares[-1].rank == 0
+    assert pinned.shares[-1].value == 0.0
+    assert pinned.shares[-1].seed_atoms > 0.0
+    assert pinned.omitted_count == 0

@@ -16,7 +16,14 @@
 //         adding activation later forces neither a schema bump nor a restage.
 //
 // A reader accepts any version <= kStoreVersion and leaves fields it does not know empty; a
-// newer store is rejected outright rather than read partially. The root attribute is named
+// newer store is rejected outright rather than read partially.
+//
+// That tolerance is what lets a RESERVED block -- one written empty by every version of the
+// staging tool that has ever existed -- be renamed or re-encoded without a version bump: no
+// store in the wild carries a value under the old spelling, so nothing can be misread. It
+// stops applying the moment such a block is first POPULATED. From then on its column names
+// and its integer encodings are wire format, and changing either needs kStoreVersion
+// incremented and a reader that understands both. The root attribute is named
 // nusift_store_version specifically so that a store from another tool cannot be misread as
 // a NuSIFT one, and vice versa.
 //

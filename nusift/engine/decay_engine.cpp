@@ -1,5 +1,7 @@
 #include "nusift/engine/decay_engine.hpp"
 
+#include "nusift/engine/decay_engine_internal.hpp"
+
 #include <Eigen/SparseCore>
 #include <algorithm>
 #include <cmath>
@@ -114,8 +116,10 @@ Eigen::SparseMatrix<double> restrict(const Eigen::SparseMatrix<double>& a,
   return reduced;
 }
 
-// [[A, 0], [I, 0]] -- the augmented generator whose exponential carries the inventory in its
-// top block and the exact cumulative integral in its bottom.
+}  // namespace
+
+namespace engine_internal {
+
 Eigen::SparseMatrix<double> augment(const Eigen::SparseMatrix<double>& a) {
   const int n = static_cast<int>(a.rows());
   std::vector<Eigen::Triplet<double>> triplets;
@@ -132,6 +136,10 @@ Eigen::SparseMatrix<double> augment(const Eigen::SparseMatrix<double>& a) {
   m.setFromTriplets(triplets.begin(), triplets.end());
   return m;
 }
+
+}  // namespace engine_internal
+
+namespace {
 
 // How many workers to actually run. Never more than there are times to solve, and never more
 // than one when there is a single time -- spawning a thread to do one solve costs more than it
@@ -164,13 +172,9 @@ void requireValidTimes(std::span<const double> times) {
   }
 }
 
-// Shared setup: seed, prune, and build the augmented matrix over the kept index space.
-struct Prepared {
-  std::vector<int> keep;           // chain indices retained, ascending
-  std::vector<std::int64_t> keys;  // their ZAI keys, same order
-  Eigen::SparseMatrix<double> augmented;
-  Eigen::VectorXd seed;  // length keep.size()
-};
+}  // namespace
+
+namespace engine_internal {
 
 Prepared prepare(const NuclearData& data, const Inventory& inventory, const DecayOptions& options) {
   const cram::DepletionChain& chain = chainOf(data);
@@ -207,11 +211,16 @@ Prepared prepare(const NuclearData& data, const Inventory& inventory, const Deca
     out.seed(k) = seedFull[static_cast<std::size_t>(global)];
   }
 
-  const Eigen::SparseMatrix<double> reduced = options.prune ? restrict(full, out.keep, n) : full;
-  out.augmented = augment(reduced);
+  out.reduced = options.prune ? restrict(full, out.keep, n) : full;
   return out;
 }
 
+}  // namespace engine_internal
+
+namespace {
+using engine_internal::augment;
+using engine_internal::prepare;
+using engine_internal::Prepared;
 }  // namespace
 
 DecayResult decay(const NuclearData& data, const Inventory& inventory,
@@ -219,6 +228,7 @@ DecayResult decay(const NuclearData& data, const Inventory& inventory,
   requireValidTimes(times);
 
   const Prepared prepared = prepare(data, inventory, options);
+  const Eigen::SparseMatrix<double> augmented = augment(prepared.reduced);
   const int m = static_cast<int>(prepared.keys.size());
   const int nT = static_cast<int>(times.size());
 
@@ -246,7 +256,7 @@ DecayResult decay(const NuclearData& data, const Inventory& inventory,
       }
       return;
     }
-    solver.prepare(prepared.augmented, t);
+    solver.prepare(augmented, t);
     const Eigen::VectorXd z = solver.apply(z0);
     for (int i = 0; i < m; ++i) {
       result.atoms[base + static_cast<std::size_t>(i)] = z(i);
@@ -309,6 +319,7 @@ std::vector<double> intervalIntegral(const NuclearData& data, const Inventory& i
   }
 
   const Prepared prepared = prepare(data, inventory, options);
+  const Eigen::SparseMatrix<double> augmented = augment(prepared.reduced);
   const int m = static_cast<int>(prepared.keys.size());
   if (keysOut != nullptr) {
     *keysOut = prepared.keys;
@@ -321,13 +332,13 @@ std::vector<double> intervalIntegral(const NuclearData& data, const Inventory& i
 
   Eigen::VectorXd lower = Eigen::VectorXd::Zero(2 * m);
   if (t1 > 0.0) {
-    solver.prepare(prepared.augmented, t1);
+    solver.prepare(augmented, t1);
     lower = solver.apply(z0);
   } else {
     lower.head(m) = prepared.seed;
   }
 
-  solver.prepare(prepared.augmented, t2);
+  solver.prepare(augmented, t2);
   const Eigen::VectorXd upper = solver.apply(z0);
 
   // How much of G(t2) survives the subtraction, over the WORST nuclide. When the interval is
@@ -364,7 +375,7 @@ std::vector<double> intervalIntegral(const NuclearData& data, const Inventory& i
   // costs one additional factorization in the only regime where it is needed.
   Eigen::VectorXd restart = Eigen::VectorXd::Zero(2 * m);
   restart.head(m) = lower.head(m);
-  solver.prepare(prepared.augmented, t2 - t1);
+  solver.prepare(augmented, t2 - t1);
   const Eigen::VectorXd direct = solver.apply(restart);
   for (int i = 0; i < m; ++i) {
     integral[static_cast<std::size_t>(i)] = direct(m + i);

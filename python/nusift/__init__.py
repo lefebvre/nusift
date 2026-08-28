@@ -28,6 +28,8 @@ outlive the object they came from. NumPy's own base-object tracking enforces tha
 
 from ._core import (  # noqa: F401
     Contributor,
+    SeedAttribution,
+    SeedShare,
     DecayResult,
     DominanceWindow,
     InputError,
@@ -39,6 +41,7 @@ from ._core import (  # noqa: F401
     Ranking,
     ResponseTable,
     __version__,
+    attribute,
     decay,
     fissions_from_kt,
     format_duration,
@@ -55,6 +58,8 @@ from ._data import default_store_path  # noqa: F401
 
 __all__ = [
     "Contributor",
+    "SeedAttribution",
+    "SeedShare",
     "DecayResult",
     "DominanceWindow",
     "InputError",
@@ -66,6 +71,7 @@ __all__ = [
     "Ranking",
     "ResponseTable",
     "__version__",
+    "attribute",
     "decay",
     "default_store_path",
     "fissions_from_kt",

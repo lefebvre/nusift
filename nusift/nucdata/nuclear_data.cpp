@@ -96,8 +96,15 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
                           .decayConstant = units::decayConstant(a.halfLife[i]),
                           .gammaEnergyPerDecay = a.emEnergyEv.empty() ? 0.0 : a.emEnergyEv[i]};
     for (int m = a.modeOffset[i]; m < a.modeOffset[i + 1]; ++m) {
-      decay.modes.push_back(cram::DecayMode{a.modeRtyp[m], a.modeBranching[m], a.modeFinalState[m],
-                                            a.modeIsFission[m] != 0});
+      // Designated, and stopping short of cram's trailing `daughter`: the store carries no
+      // explicit product, so leaving it unset is what tells cram to derive the daughter from
+      // RTYP and the final state -- which is exactly what ENDF decay data implies. Positional
+      // initialization would express the same thing today and silently absorb whatever member
+      // cram appends next.
+      decay.modes.push_back(cram::DecayMode{.rtyp = a.modeRtyp[m],
+                                            .branching = a.modeBranching[m],
+                                            .finalState = a.modeFinalState[m],
+                                            .isFission = a.modeIsFission[m] != 0});
     }
     impl.chain.setDecay(toCram(Zai::fromKey(a.nuclideKey[i])), std::move(decay));
   }

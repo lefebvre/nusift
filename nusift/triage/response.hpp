@@ -211,6 +211,43 @@ struct ResponseSpec {
   exposure::PointSourceGeometry geometry;
 };
 
+// The per-nuclide response weight w_i for `spec`, over the data store's WHOLE index space
+// (length data.size()), ALREADY SCALED into spec.unit. This is the vector every metric is a
+// dot product with -- activity takes w = lambda, exposure takes lambda times a photon sum --
+// and exposing it by name is what lets the adjoint engine take the same metric definition the
+// forward path uses, rather than a second copy of it that could drift.
+//
+// The aggregate is ignored: buckets are formed after weighting, and a gamma-line table applies
+// its own per-line weights on top of the atoms. What comes back is always per nuclide.
+//
+// Throws InputError for a spec the store cannot answer, on the same terms buildResponse does.
+std::vector<double> responseWeights(const NuclearData& data, const ResponseSpec& spec);
+
+// The caveats an exposure figure carries at ONE instant: how much of the emitted photon energy
+// sits in spectra NuSIFT does not model, how thick the air path was left uncorrected, and which
+// emitters carry the unmodelled continuum.
+//
+// Broken out of buildResponse because a path that reaches the same response a different way --
+// the adjoint attribution, which never assembles a table -- has to report the same caveats. An
+// exposure whose warnings depend on which solver produced it is worse than one carrying no
+// warnings at all: the two disagree about the same number and neither says so.
+//
+// `atoms` is per nuclide in the index space of `keys`, as a DecayResult holds them. Everything
+// is zero and empty for Metric::Activity, which carries none of these caveats: an incomplete
+// photon spectrum understates an exposure and says nothing whatever about a count of decays.
+struct ExposureCaveats {
+  double unmodeledEnergyFraction = 0.0;
+  double meanOpticalDepth = 0.0;
+  // Emitter names, sorted, for the nuclides flagged kFlagUnmodeledContinuum. Scanned over the
+  // whole index space rather than over ranked rows, for the reason the CLI's contextFor()
+  // gives: a nuclide whose photon output is ENTIRELY continuum has no modelled exposure, so it
+  // never places in a ranking and would carry its warning off the page with it.
+  std::vector<std::string> unmodeledContinuum;
+};
+
+ExposureCaveats exposureCaveats(const NuclearData& data, std::span<const std::int64_t> keys,
+                                std::span<const double> atoms, const ResponseSpec& spec);
+
 // Build a table of instantaneous responses at each time in `result`.
 ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,
                             const ResponseSpec& spec);
