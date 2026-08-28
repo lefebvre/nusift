@@ -55,6 +55,28 @@ void requireCsr(const std::vector<int>& offset, int n, std::size_t valueCount, c
 
 }  // namespace
 
+const char* reactionChannelName(ReactionChannel channel) {
+  switch (channel) {
+    case ReactionChannel::Fission:
+      return "fission";
+    case ReactionChannel::NGamma:
+      return "(n,gamma)";
+    case ReactionChannel::N2n:
+      return "(n,2n)";
+    case ReactionChannel::N3n:
+      return "(n,3n)";
+    case ReactionChannel::N4n:
+      return "(n,4n)";
+    case ReactionChannel::NAlpha:
+      return "(n,a)";
+    case ReactionChannel::NProton:
+      return "(n,p)";
+    case ReactionChannel::Unknown:
+      break;
+  }
+  return "unknown";
+}
+
 const char* dataSourceName(DataSource source) {
   switch (source) {
     case DataSource::Endf:
@@ -73,6 +95,8 @@ void validateStoreArrays(const StoreArrays& a) {
   // Half-life is the one genuinely mandatory per-nuclide field: without it a nuclide has no
   // decay constant and cannot participate in the matrix at all.
   requireNuclideArray(a.halfLife, n, "nuclide_half_life", /*optional=*/false);
+  requireNuclideArray(a.halfLifeUncertainty, n, "nuclide_half_life_uncertainty",
+                      /*optional=*/true);
   requireNuclideArray(a.awr, n, "nuclide_awr", /*optional=*/true);
   requireNuclideArray(a.emEnergyEv, n, "nuclide_em_energy_ev", /*optional=*/true);
   requireNuclideArray(a.lpEnergyEv, n, "nuclide_lp_energy_ev", /*optional=*/true);
@@ -96,6 +120,13 @@ void validateStoreArrays(const StoreArrays& a) {
       a.modeIsFission.size() != a.modeRtyp.size()) {
     fail("mode_* arrays disagree in length");
   }
+  // Optional wholesale, like the per-nuclide uncertainty: a store staged before uncertainties
+  // were carried has none, and that is a legitimate state rather than a malformed file.
+  if (!a.modeBranchingUncertainty.empty() &&
+      a.modeBranchingUncertainty.size() != a.modeRtyp.size()) {
+    fail("mode_branching_uncertainty has " + std::to_string(a.modeBranchingUncertainty.size()) +
+         " entries, expected " + std::to_string(a.modeRtyp.size()) + " or none");
+  }
 
   // Lines are optional wholesale -- a chain-XML store has none -- but if the offsets are
   // present they must be consistent.
@@ -117,11 +148,19 @@ void validateStoreArrays(const StoreArrays& a) {
     if (a.nfyProductYield.size() != a.nfyProductKey.size()) {
       fail("nfy_product_* arrays disagree in length");
     }
+    // Optional wholesale, like the half-life and branching uncertainties: a store staged
+    // before uncertainties were carried has none, and that is a legitimate state.
+    if (!a.nfyProductYieldUncertainty.empty() &&
+        a.nfyProductYieldUncertainty.size() != a.nfyProductKey.size()) {
+      fail("nfy_product_yield_uncertainty has " +
+           std::to_string(a.nfyProductYieldUncertainty.size()) + " entries, expected " +
+           std::to_string(a.nfyProductKey.size()) + " or none");
+    }
   }
 
-  const int targets = static_cast<int>(a.xsTargetKey.size());
-  if (targets > 0 || !a.xsOffset.empty()) {
-    requireCsr(a.xsOffset, targets, a.xsReactionType.size(), "xs_offset");
+  const int parents = static_cast<int>(a.xsParentKey.size());
+  if (parents > 0 || !a.xsOffset.empty()) {
+    requireCsr(a.xsOffset, parents, a.xsReactionType.size(), "xs_offset");
     if (a.xsProductKey.size() != a.xsReactionType.size() ||
         a.xsSigmaBarn.size() != a.xsReactionType.size()) {
       fail("xs_* arrays disagree in length");

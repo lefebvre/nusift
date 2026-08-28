@@ -4,6 +4,7 @@
 #include <cctype>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -20,6 +21,12 @@ namespace {
 constexpr const char* kModule = "response";
 constexpr const char* kUnitsModule = "units";
 constexpr const char* kPinModule = "pin";
+
+// Above this fraction of a nuclide's photon energy sitting in an unmodelled continuum, the
+// emitter is flagged. Named once because three places test it -- the two table assemblers and
+// the caveats the adjoint path reports -- and a threshold that drifted between them would flag
+// an emitter in one report and not in another for the same store.
+constexpr double kUnmodeledContinuumFlag = 0.05;
 
 // Every unit, in the order the help text lists them. The one place the set is enumerated, so
 // parseUnit and the error message it raises cannot come to disagree about what exists.
@@ -233,7 +240,7 @@ ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> ke
     // about a count of decays, so an activity report carrying it would end with a paragraph
     // about a metric it never computed.
     if (spec.metric == Metric::Exposure && dataIndex >= 0 &&
-        data.unmodeledPhotonFraction(dataIndex) > 0.05) {
+        data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag) {
       it->second.flags |= kFlagUnmodeledContinuum;
     }
   }
@@ -329,8 +336,9 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
 
     const double emitterTotal = exposure::exposureRatePerBecquerel(lines, spec.geometry);
     const double floor = emitterTotal * kLineFloor;
-    const int flags =
-        data.unmodeledPhotonFraction(dataIndex) > 0.05 ? kFlagUnmodeledContinuum : kFlagNone;
+    const int flags = data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag
+                          ? kFlagUnmodeledContinuum
+                          : kFlagNone;
 
     for (const GammaLine& line : lines) {
       const double perBecquerel =
@@ -727,6 +735,58 @@ std::int64_t requirePin(const ResponseTable& table, std::string_view text) {
                                           ", which this table does not carry -- it is ranked by " +
                                           aggregateName(table.aggregate) +
                                           " and nothing in the inventory's chain reaches it"));
+}
+
+std::vector<double> responseWeights(const NuclearData& data, const ResponseSpec& spec) {
+  // Instant rather than the caller's domain: unitScale and domainScale are applied by the
+  // table builders, and a weight is the same per-atom quantity either way. What this checks is
+  // the part that does not depend on domain -- a store with no photon lines cannot answer an
+  // exposure question however it is asked.
+  requireUsableSpec(data, spec, Domain::Instant);
+  // Scaled into spec.unit here, not left in the base unit, so a caller that dots this against
+  // an inventory gets the number the report would print. The alternative -- returning becquerel
+  // per atom and making every caller remember the conversion -- is the creep this file's
+  // unitScale() comment exists to prevent.
+  const double scale = unitScale(spec.unit) * domainScale(spec.metric, Domain::Instant);
+  const int n = data.size();
+  std::vector<double> weight(static_cast<std::size_t>(n), 0.0);
+  for (int i = 0; i < n; ++i) {
+    weight[static_cast<std::size_t>(i)] = weightFor(spec, data, i) * scale;
+  }
+  return weight;
+}
+
+ExposureCaveats exposureCaveats(const NuclearData& data, std::span<const std::int64_t> keys,
+                                std::span<const double> atoms, const ResponseSpec& spec) {
+  ExposureCaveats out;
+  if (spec.metric != Metric::Exposure) {
+    return out;
+  }
+  if (keys.size() != atoms.size()) {
+    throw NusiftError(tagged(kModule, "exposure caveats: atoms do not match their index space"));
+  }
+  // Wrapped in a one-row outer vector because the two helpers below are written for a whole
+  // time grid, and the alternative -- a second single-time copy of each -- is exactly the
+  // duplication this function exists to remove.
+  std::vector<std::vector<double>> raw{std::vector<double>(atoms.begin(), atoms.end())};
+  std::vector<std::vector<double>> weighted{std::vector<double>(atoms.size(), 0.0)};
+
+  std::set<std::string> emitters;
+  for (std::size_t i = 0; i < keys.size(); ++i) {
+    const int index = data.indexOfKey(keys[i]);
+    if (index < 0) {
+      continue;
+    }
+    weighted.front()[i] = weightFor(spec, data, index) * atoms[i];
+    if (data.unmodeledPhotonFraction(index) > kUnmodeledContinuumFlag) {
+      emitters.insert(formatNuclideName(Zai::fromKey(keys[i])));
+    }
+  }
+
+  out.unmodeledEnergyFraction = unmodeledEnergyFractions(data, keys, raw).front();
+  out.meanOpticalDepth = meanOpticalDepths(data, keys, weighted, spec.geometry).front();
+  out.unmodeledContinuum.assign(emitters.begin(), emitters.end());
+  return out;
 }
 
 ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,

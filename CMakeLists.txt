@@ -42,6 +42,7 @@ option(NUSIFT_ENABLE_COVERAGE   "Instrument for code coverage (gcov/gcovr)"     
 option(NUSIFT_ENABLE_SANITIZERS "Build with Address + UB sanitizers"               OFF)
 option(NUSIFT_CLANG_TIDY        "Run clang-tidy during the build"                  OFF)
 option(NUSIFT_BUILD_DOCS        "Generate the Doxygen API reference"               OFF)
+option(NUSIFT_BUILD_SPIKES      "Build the measurement spikes (not tests)"         OFF)
 # NUSIFT_INSTALL is declared further down: its default depends on whether cram and Eigen end
 # up found or fetched, which is not known until after the dependency block below.
 
@@ -330,6 +331,7 @@ endif()
 message(STATUS "  configuration : ${CMAKE_BUILD_TYPE}")
 message(STATUS "  tests         : ${NUSIFT_ENABLE_TESTS}")
 message(STATUS "  cli           : ${NUSIFT_BUILD_CLI}")
+message(STATUS "  spikes        : ${NUSIFT_BUILD_SPIKES}")
 message(STATUS "  staging       : ${NUSIFT_WITH_STAGING}")
 message(STATUS "  python        : ${NUSIFT_BUILD_PYTHON}")
 message(STATUS "  install/export: ${NUSIFT_INSTALL}")

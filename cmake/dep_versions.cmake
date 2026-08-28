@@ -29,14 +29,27 @@
 # nuclide. NuSIFT supplies all of them (see nusift/nucdata/nuclear_data.cpp); the
 # solver results are unchanged.
 #
-# cram's burnup API (DepletionSystem, Integrator, loadDepletionChainXml) is still not
-# tagged and nothing here depends on it yet. If activation work begins while that is
-# still untagged, pin an immutable commit SHA here -- never a branch name -- and set
-# GIT_SHALLOW FALSE, which a bare SHA requires.
+# 2.1.0 is additive over 2.0: it tags the burnup API (DepletionSystem, Integrator,
+# loadDepletionChainXml) and the adjoint/sensitivity API, and adds a trailing `daughter`
+# member to DecayMode. NuSIFT compiles unchanged against it -- see nuclear_data.cpp, whose
+# DecayMode initializations are designated so that member is omitted deliberately rather
+# than by position.
+#
+# The floor moved to 2.1 when engine/adjoint_engine.cpp began including cram/adjoint.hpp,
+# which is the trigger the previous note named: SameMajorVersion means find_package(cram 2.0)
+# accepts an installed 2.0.0, which would then fail to COMPILE against that include. The
+# failure would land only on the find_package path, so a fetch-path developer could never
+# reproduce it locally -- which is exactly why the floor has to state the requirement rather
+# than leave it to be discovered downstream.
+#
+# adjoint.hpp is included by that ONE translation unit and no other. It transitively carries
+# cram's burnup API (deplete.hpp, integrator.hpp, reaction.hpp), and the decay engine has no
+# business depending on a depletion system it never builds -- so decay_engine.cpp keeps its own
+# augmented generator rather than borrowing cram::augmentedGenerator() to save fifteen lines.
 set(NUSIFT_CRAM_REPO        "https://github.com/lefebvre/cram-depletion.git")
-set(NUSIFT_CRAM_VERSION     "v2.0.0" CACHE STRING
+set(NUSIFT_CRAM_VERSION     "v2.1.0" CACHE STRING
     "cram-depletion release tag to fetch when no installed cram is found")
-set(NUSIFT_CRAM_MIN_VERSION "2.0" CACHE STRING
+set(NUSIFT_CRAM_MIN_VERSION "2.1" CACHE STRING
     "Minimum acceptable version of an installed cram-depletion package")
 
 # --- CLI11: command-line parsing for the nusift driver ----------------------

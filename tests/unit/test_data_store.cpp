@@ -74,6 +74,21 @@ StoreArrays sampleStore() {
   a.emEnergyEv = {6.6e5, 1.2e6, 0.0};
   a.continuumPhotonEv = {0.0, 3.0e5, 0.0};
 
+  // The uncertainty columns are reserved and normally empty; populated here so the round-trip
+  // test covers them as data rather than only as absence. The zero on the stable terminator is
+  // the "no uncertainty stated" value, and has to survive as zero rather than as absent.
+  a.halfLifeUncertainty = {1.5e-6, 2.0e-7, 0.0};
+  a.modeBranchingUncertainty = {0.004, 0.0};  // one per mode; the terminator has none
+
+  // One yield set, so the third uncertainty column has something to be indexed against. A seed
+  // is fissions x Y, so sigma_Y sits beside sigma_lambda in any error budget over this store.
+  a.nfyParentKey = {Zai{92, 235, 0}.key()};
+  a.nfyEnergyEv = {0.0253};
+  a.nfySetOffset = {0, 2};
+  a.nfyProductKey = {a.nuclideKey[0], a.nuclideKey[1]};
+  a.nfyProductYield = {0.0621, 0.0034};
+  a.nfyProductYieldUncertainty = {0.0009, 0.0};
+
   // Two lines on the first nuclide, one on the second, none on the stable terminator --
   // enough for the CSR offsets to be wrong in a detectable way if they are wrong at all.
   a.lineOffset = {0, 2, 3, 3};
@@ -108,6 +123,73 @@ TEST(DataStore, RoundTripsEveryField) {
   EXPECT_EQ(read.modeOffset, original.modeOffset);
   EXPECT_EQ(read.modeRtyp, original.modeRtyp);
   EXPECT_EQ(read.modeBranching, original.modeBranching);
+  EXPECT_EQ(read.halfLifeUncertainty, original.halfLifeUncertainty);
+  EXPECT_EQ(read.modeBranchingUncertainty, original.modeBranchingUncertainty);
+  EXPECT_EQ(read.nfyProductKey, original.nfyProductKey);
+  EXPECT_EQ(read.nfyProductYield, original.nfyProductYield);
+  EXPECT_EQ(read.nfyProductYieldUncertainty, original.nfyProductYieldUncertainty);
+}
+
+// Every store staged so far predates the uncertainty columns, so the reader has to treat a
+// file that lacks them as valid-and-unstaged rather than malformed. Deleting the datasets from
+// a freshly written store is the only way to produce that file here, since writeStore always
+// emits them -- the same reason stampVersionAttribute() forges a version by hand.
+TEST(DataStore, LoadsAStoreStagedBeforeTheUncertaintyColumnsExisted) {
+  const TempStore path("no_uncertainty");
+  writeStore(path.str(), sampleStore());
+
+  const hid_t file = H5Fopen(path.str().c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+  ASSERT_GE(file, 0);
+  EXPECT_GE(H5Ldelete(file, "nuclide_half_life_uncertainty", H5P_DEFAULT), 0);
+  EXPECT_GE(H5Ldelete(file, "mode_branching_uncertainty", H5P_DEFAULT), 0);
+  EXPECT_GE(H5Ldelete(file, "nfy_product_yield_uncertainty", H5P_DEFAULT), 0);
+  H5Fclose(file);
+
+  const StoreArrays read = readStore(path.str());
+  EXPECT_TRUE(read.halfLifeUncertainty.empty());
+  EXPECT_TRUE(read.modeBranchingUncertainty.empty());
+  EXPECT_TRUE(read.nfyProductYieldUncertainty.empty());
+  // Absent uncertainties must not cost the store the fields it does carry.
+  EXPECT_EQ(read.halfLife, sampleStore().halfLife);
+  EXPECT_EQ(read.modeBranching, sampleStore().modeBranching);
+  EXPECT_EQ(read.nfyProductYield, sampleStore().nfyProductYield);
+}
+
+// A per-nuclide column that is present but the wrong length is a staging bug, not an absent
+// field, and has to be rejected rather than silently indexed past.
+TEST(DataStore, RejectsAnUncertaintyColumnOfTheWrongLength) {
+  StoreArrays a = sampleStore();
+  a.halfLifeUncertainty = {1.0e-6};  // one entry for three nuclides
+  EXPECT_THROW(validateStoreArrays(a), NusiftError);
+
+  StoreArrays b = sampleStore();
+  b.modeBranchingUncertainty = {0.1, 0.2, 0.3, 0.4, 0.5};
+  EXPECT_THROW(validateStoreArrays(b), NusiftError);
+
+  StoreArrays c = sampleStore();
+  c.nfyProductYieldUncertainty = {0.001};  // one entry for two products
+  EXPECT_THROW(validateStoreArrays(c), NusiftError);
+}
+
+// These integers are written into every store, so renumbering one silently reinterprets the
+// cross sections of every file staged before the change. Pinning them here makes that a test
+// failure instead of a wrong answer with no diagnostic.
+TEST(DataStore, TheReactionChannelEncodingIsFixed) {
+  EXPECT_EQ(static_cast<int>(ReactionChannel::Unknown), 0);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::Fission), 1);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::NGamma), 2);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::N2n), 3);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::N3n), 4);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::N4n), 5);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::NAlpha), 6);
+  EXPECT_EQ(static_cast<int>(ReactionChannel::NProton), 7);
+
+  // The spellings are OpenMC's, which is what a chain read through cram will be matched
+  // against; "unknown" rather than a crash for a code no version of this enum defines.
+  EXPECT_STREQ(reactionChannelName(ReactionChannel::Fission), "fission");
+  EXPECT_STREQ(reactionChannelName(ReactionChannel::NGamma), "(n,gamma)");
+  EXPECT_STREQ(reactionChannelName(ReactionChannel::NAlpha), "(n,a)");
+  EXPECT_STREQ(reactionChannelName(static_cast<ReactionChannel>(99)), "unknown");
 }
 
 // The line CSR is the schema's headline addition, and an off-by-one in the offsets would

@@ -11,9 +11,9 @@ metric is a linear functional of those with a fixed per-nuclide or per-line weig
 nuclide, mass chain, element, or individual gamma line — instantaneously or integrated, in Bq
 or R/h or Sv/h — is therefore a post-multiply, not a separate code path.
 
-**Status: early.** Ranking and forecasting work end to end, for activity and exposure, from an
-inventory file or from fission, from the CLI or from Python. Activation seeding is still to
-come.
+**Status: early.** Ranking, forecasting, and seed attribution work end to end, for activity and
+exposure, from an inventory file or from fission, from the CLI or from Python. Activation seeding
+is still to come.
 
 ## Using it
 
@@ -35,6 +35,9 @@ nusift rank -i inventory.csv --at 30d --metric exposure --distance 2 --units Sv/
 
 # Build the inventory from fission instead of reading one
 nusift rank --seed-fission U-235 --energy thermal --yield-kt 20 --at 1h --metric exposure
+
+# Which of the nuclides I seeded is the answer riding on?
+nusift attribute --seed-fission U-235 --yield-kt 20 --at 30d --top 8
 
 # Who dominates, and when does it change?
 nusift forecast -i inventory.csv --times 1d:300y:log:70 --metric exposure
@@ -62,6 +65,14 @@ Co-60,   0.8,      Ci
 
 Every report states the total over *all* contributors and the fraction the shown rows cover,
 so a top-10 worth 40% and one worth 99% can never look alike.
+
+A ranking says what is producing the response *now*, which is why a Cs-137 source's exposure
+lands on its Ba-137m daughter.  answers the complementary question — which of
+the nuclides you *seeded* the answer is riding on — by running the same weights backwards through
+one adjoint solve. For a fission seed the two lists barely overlap: at 30 days the emitters are
+La-140 and Pr-143, while the seeds carrying them are Xe-140 and Sr-95, both long gone. Because
+decay is linear the shares are an exact partition of the same total, not an estimate, so the
+attribution carries a coverage figure like any other ranking.
 
 Every other way of shortening a ranking truncates it; `--pin` is the one that reaches past the
 cut. A pinned nuclide, mass chain, or element appears below the ranking whatever it ranks,
@@ -108,6 +119,11 @@ for w in tab.dominance_windows():
     print(f"{w.label} leads {nusift.format_duration(w.start_s)} "
           f"to {nusift.format_duration(w.end_s)}")
 
+# Which seeded nuclide is the 30-day answer riding on? (an exact partition, not an estimate)
+att = nusift.attribute(nd, inv, at=nusift.parse_duration("30d"), top=5)
+for s in att.shares:
+    print(f"{s.label:8s} {s.fraction:6.1%}  one more atom is worth {s.importance:.3e} Bq")
+
 # Totals over a window -- decays, or roentgen accrued -- in closed form, guard included
 window = nusift.integrate(nd, inv, "1d", "30d")
 for c in nusift.response(nd, window, metric="activity").rank(top=5).contributors:
@@ -139,6 +155,7 @@ exactly, what is approximated and by how much, and what is not modelled at all.
 | [Interval integration](docs/interval-integration.md) | Time-integrated answers in closed form, and the cancellation guard |
 | [Exposure](docs/exposure.md) | The point-source photon model, and what it excludes |
 | [Ranking and forecasting](docs/ranking.md) | Weights, aggregation, coverage, and dominance windows |
+| [Seed attribution](docs/attribution.md) | The other attribution of the same number, from one adjoint solve |
 | [**Validation**](docs/validation.md) | Computed against published constants, evaluated data, an empirical law, and an independent code — regenerated and diff-checked in CI |
 
 ## Building
@@ -220,6 +237,7 @@ Implemented:
 - Staging a data store from ENDF decay and fission-yield tapes
 - Seeding an inventory from fission, by fission count, kilotons, or joules
 - Dominance forecasting: who leads, and when that changes
+- Seed attribution: which seeded nuclide a response is riding on, as an exact partition
 - Python bindings, with zero-copy NumPy views
 
 Planned:

@@ -30,6 +30,7 @@
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
 #include "nusift/seed/seed_fission.hpp"
+#include "nusift/triage/attribution.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
@@ -379,6 +380,55 @@ Inventory loadInventory(const CommonOptions& options, const NuclearData& data) {
   readOptions.ignoreUnknown = options.ignoreUnknown;
   readOptions.warnings = &std::cerr;
   return readInventory(options.inventoryPath, data, readOptions);
+}
+
+int runAttribute(const CommonOptions& options, const char* argv0) {
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() != 1) {
+    throw InputError(
+        "time: attribute reports one time; pass a single --at (the shares partition the "
+        "response at that instant, and a grid would be a different table per point)");
+  }
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options.metric);
+  // Passed through rather than forced to Nuclide. attributeToSeed() refuses every other
+  // aggregate with a message saying why -- an inventory row names a nuclide, so that is what a
+  // share can name -- and pinning it here instead answered `--by element` with a nuclide
+  // attribution, which is a different table than the one that was asked for.
+  spec.aggregate = aggregateFrom(options.aggregate);
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.geometry = geometryFrom(options);
+
+  RankRequest request;
+  request.topN = options.topN;
+  request.coverage = options.coverage;
+  request.minFraction = options.minFraction;
+  // Pins resolve against the SEED rather than against a response table: what can be followed
+  // here is a nuclide that was seeded, which is a different set from what a ranking carries.
+  for (const std::string& pin : options.pins) {
+    request.pinned.push_back(requireSeedPin(data, inventory, pin));
+  }
+
+  const SeedAttribution attribution =
+      attributeToSeed(data, inventory, times.front(), spec, request, decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  OutputStream out(options.output);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.size();
+  context.seedProvenance = attribution.seedProvenance;
+  context.geometry = describeGeometry(options, spec.metric);
+  writeAttribution(out.get(), attribution, context, format);
+  return 0;
 }
 
 int runRank(const CommonOptions& options, const char* argv0) {
@@ -795,6 +845,11 @@ int main(int argc, char** argv) {
       app.add_subcommand("spectrum", "Top contributing photon lines (exposure, by line)");
   addCommonOptions(spectrumCmd, spectrumOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
 
+  CommonOptions attributeOptions;
+  CLI::App* attributeCmd =
+      app.add_subcommand("attribute", "Which SEEDED nuclides a response is riding on, at one time");
+  addCommonOptions(attributeCmd, attributeOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+
   CommonOptions forecastOptions;
   CLI::App* forecastCmd =
       app.add_subcommand("forecast", "Who dominates, and over which time windows");
@@ -856,6 +911,9 @@ int main(int argc, char** argv) {
       // A thin front on `rank --metric exposure --by line`: same code path, defaults set to
       // what someone asking about a spectrum means.
       return runRank(spectrumOptions, argv0);
+    }
+    if (attributeCmd->parsed()) {
+      return runAttribute(attributeOptions, argv0);
     }
     if (forecastCmd->parsed()) {
       return runForecast(forecastOptions, argv0);

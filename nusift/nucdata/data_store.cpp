@@ -182,6 +182,7 @@ void writeStore(const std::string& path, const StoreArrays& a) {
 
   writeArray(file.get(), "nuclide_key", a.nuclideKey);
   writeArray(file.get(), "nuclide_half_life", a.halfLife);
+  writeArray(file.get(), "nuclide_half_life_uncertainty", a.halfLifeUncertainty);
   writeArray(file.get(), "nuclide_awr", a.awr);
   writeArray(file.get(), "nuclide_em_energy_ev", a.emEnergyEv);
   writeArray(file.get(), "nuclide_lp_energy_ev", a.lpEnergyEv);
@@ -191,6 +192,7 @@ void writeStore(const std::string& path, const StoreArrays& a) {
   writeArray(file.get(), "mode_offset", a.modeOffset);
   writeArray(file.get(), "mode_rtyp", a.modeRtyp);
   writeArray(file.get(), "mode_branching", a.modeBranching);
+  writeArray(file.get(), "mode_branching_uncertainty", a.modeBranchingUncertainty);
   writeArray(file.get(), "mode_final_state", a.modeFinalState);
   writeArray(file.get(), "mode_is_fission", a.modeIsFission);
 
@@ -204,8 +206,9 @@ void writeStore(const std::string& path, const StoreArrays& a) {
   writeArray(file.get(), "nfy_set_offset", a.nfySetOffset);
   writeArray(file.get(), "nfy_product_key", a.nfyProductKey);
   writeArray(file.get(), "nfy_product_yield", a.nfyProductYield);
+  writeArray(file.get(), "nfy_product_yield_uncertainty", a.nfyProductYieldUncertainty);
 
-  writeArray(file.get(), "xs_target_key", a.xsTargetKey);
+  writeArray(file.get(), "xs_parent_key", a.xsParentKey);
   writeArray(file.get(), "xs_offset", a.xsOffset);
   writeArray(file.get(), "xs_reaction_type", a.xsReactionType);
   writeArray(file.get(), "xs_product_key", a.xsProductKey);
@@ -262,6 +265,7 @@ StoreArrays readStore(const std::string& path) {
 
   readArray(file.get(), "nuclide_key", a.nuclideKey);
   readArray(file.get(), "nuclide_half_life", a.halfLife);
+  readArray(file.get(), "nuclide_half_life_uncertainty", a.halfLifeUncertainty);
   readArray(file.get(), "nuclide_awr", a.awr);
   readArray(file.get(), "nuclide_em_energy_ev", a.emEnergyEv);
   readArray(file.get(), "nuclide_lp_energy_ev", a.lpEnergyEv);
@@ -271,6 +275,7 @@ StoreArrays readStore(const std::string& path) {
   readArray(file.get(), "mode_offset", a.modeOffset);
   readArray(file.get(), "mode_rtyp", a.modeRtyp);
   readArray(file.get(), "mode_branching", a.modeBranching);
+  readArray(file.get(), "mode_branching_uncertainty", a.modeBranchingUncertainty);
   readArray(file.get(), "mode_final_state", a.modeFinalState);
   readArray(file.get(), "mode_is_fission", a.modeIsFission);
 
@@ -284,8 +289,9 @@ StoreArrays readStore(const std::string& path) {
   readArray(file.get(), "nfy_set_offset", a.nfySetOffset);
   readArray(file.get(), "nfy_product_key", a.nfyProductKey);
   readArray(file.get(), "nfy_product_yield", a.nfyProductYield);
+  readArray(file.get(), "nfy_product_yield_uncertainty", a.nfyProductYieldUncertainty);
 
-  readArray(file.get(), "xs_target_key", a.xsTargetKey);
+  readArray(file.get(), "xs_parent_key", a.xsParentKey);
   readArray(file.get(), "xs_offset", a.xsOffset);
   readArray(file.get(), "xs_reaction_type", a.xsReactionType);
   readArray(file.get(), "xs_product_key", a.xsProductKey);

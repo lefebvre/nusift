@@ -11,6 +11,7 @@ add_library(nusift
   nucdata/nuclear_data.cpp
   engine/inventory.cpp
   engine/decay_engine.cpp
+  engine/adjoint_engine.cpp
   nucdata/store_locator.cpp
   nucdata/fission_yield.cpp
   seed/seed_fission.cpp
@@ -18,6 +19,7 @@ add_library(nusift
   exposure/point_source.cpp
   triage/response.cpp
   triage/ranking.cpp
+  triage/attribution.cpp
   triage/forecast.cpp
   io/time_spec.cpp
   io/inventory_io.cpp
@@ -68,9 +70,10 @@ if(NUSIFT_INSTALL)
     core/nuclide_name.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/core)
 
-  # nuclear_data_internal.hpp is deliberately absent: it exposes cram and Eigen types across
-  # the PIMPL seam and is included only by the two translation units that assemble or solve a
-  # matrix. Installing it would put Eigen back on every consumer's include path.
+  # nuclear_data_internal.hpp and decay_engine_internal.hpp are deliberately absent: they
+  # expose cram and Eigen types across the PIMPL seam and are included only by the three
+  # translation units that assemble or solve a matrix. Installing either would put Eigen back
+  # on every consumer's include path.
   install(FILES
     nucdata/data_store.hpp
     nucdata/nuclear_data.hpp
@@ -81,6 +84,7 @@ if(NUSIFT_INSTALL)
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/nucdata)
 
   install(FILES
+    engine/adjoint_engine.hpp
     engine/decay_engine.hpp
     engine/decay_result.hpp
     engine/inventory.hpp
@@ -92,6 +96,7 @@ if(NUSIFT_INSTALL)
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/exposure)
 
   install(FILES
+    triage/attribution.hpp
     triage/forecast.hpp
     triage/ranking.hpp
     triage/response.hpp

@@ -58,6 +58,43 @@ std::string asCsv(const Ranking& ranking) {
   return out.str();
 }
 
+// Two seed shares whose importances differ far below what %.4e can hold -- the Xe-140/Cs-140
+// case from a real fission seed, where the two serialize identically at five digits.
+SeedAttribution twoNearlyIdenticalShares() {
+  SeedAttribution a;
+  a.time = 2592000.0;
+  a.unit = Unit::Becquerel;
+  a.total = 4.0;
+  a.coveredFraction = 1.0;
+
+  SeedShare first;
+  first.key = Zai{54, 140, 0}.key();
+  first.label = "Xe-140";
+  first.seedAtoms = 1.2345678901234567e+22;
+  first.importance = 2.6505432109876543e-07;
+  first.value = first.seedAtoms * first.importance;
+  first.fraction = 0.5;
+  first.cumulativeFraction = 0.5;
+  first.rank = 1;
+
+  SeedShare second = first;
+  second.key = Zai{55, 140, 0}.key();
+  second.label = "Cs-140";
+  second.importance = 2.6505105987654321e-07;  // differs from the first at the seventh digit
+  second.value = second.seedAtoms * second.importance;
+  second.cumulativeFraction = 1.0;
+  second.rank = 2;
+
+  a.shares = {first, second};
+  return a;
+}
+
+std::string attributionAsCsv(const SeedAttribution& a) {
+  std::ostringstream out;
+  writeAttribution(out, a, ReportContext{}, ReportFormat::Csv);
+  return out.str();
+}
+
 // The text of one JSON value, found by its key. Just enough of a parser to test a writer
 // with -- the point is to read the digits back, not to validate the document.
 std::string jsonValue(const std::string& text, const std::string& key) {
@@ -422,6 +459,111 @@ TEST(Report, CsvDoublesAQuoteInsideALabel) {
 TEST(Report, CsvLeavesAnOrdinaryLabelUnquoted) {
   const std::string text = asCsv(oneRow("Cs-137"));
   EXPECT_NE(text.find(",Cs-137,"), std::string::npos) << text;
+}
+
+// --- attribution CSV -----------------------------------------------------------
+
+// The attribution table is written to be loaded again, so it is held to the same standard the
+// ranking CSV is: every number reads back as the double it came from. Written with %.4e, the
+// two importances below serialize to the same five digits, and `value` stops equalling
+// seed_atoms x importance in the reloaded frame.
+TEST(Report, AttributionCsvNumbersReadBackAsTheValuesTheyCameFrom) {
+  const SeedAttribution a = twoNearlyIdenticalShares();
+  const std::string text = attributionAsCsv(a);
+
+  // Columns: time_s, rank, seed, key, seed_atoms, importance, value, unit, fraction,
+  // cumulative, pinned.
+  const std::vector<std::string> first = csvFields(text, 1);
+  const std::vector<std::string> second = csvFields(text, 2);
+  ASSERT_EQ(first.size(), 11u);
+  ASSERT_EQ(second.size(), 11u);
+
+  EXPECT_EQ(std::strtod(first[0].c_str(), nullptr), a.time);
+  EXPECT_EQ(std::strtod(first[4].c_str(), nullptr), a.shares[0].seedAtoms);
+  EXPECT_EQ(std::strtod(first[5].c_str(), nullptr), a.shares[0].importance);
+  EXPECT_EQ(std::strtod(first[6].c_str(), nullptr), a.shares[0].value);
+  EXPECT_EQ(std::strtod(second[5].c_str(), nullptr), a.shares[1].importance);
+
+  // The distinction survives the round trip, which is the whole point: two seeds a fraction of
+  // a percent apart must not reload as the same number.
+  EXPECT_NE(first[5], second[5]) << text;
+
+  // And the identity a consumer will recompute still holds.
+  const double atoms = std::strtod(first[4].c_str(), nullptr);
+  const double importance = std::strtod(first[5].c_str(), nullptr);
+  EXPECT_EQ(atoms * importance, a.shares[0].value);
+}
+
+// A share is a number of becquerel or of R/h at one instant. A table stating neither is
+// uninterpretable once it leaves the terminal, however exactly its digits round-trip.
+TEST(Report, AttributionCsvCarriesItsTimeAndUnit) {
+  SeedAttribution a = twoNearlyIdenticalShares();
+  a.metric = Metric::Exposure;
+  a.unit = Unit::RoentgenPerHour;
+
+  const std::string text = attributionAsCsv(a);
+  const std::vector<std::string> header = csvFields(text, 0);
+  ASSERT_FALSE(header.empty());
+  EXPECT_EQ(header[0], "time_s");
+  EXPECT_EQ(header[7], "unit");
+
+  const std::vector<std::string> row = csvFields(text, 1);
+  ASSERT_EQ(row.size(), 11u);
+  EXPECT_EQ(std::strtod(row[0].c_str(), nullptr), a.time);
+  EXPECT_EQ(row[7], unitName(Unit::RoentgenPerHour));
+}
+
+// An attributed exposure is the ranking's number seen from the other side, so the JSON says
+// how far the model was stretched to get it in the same words and under the same keys.
+TEST(Report, AttributionJsonCarriesTheExposureCaveats) {
+  SeedAttribution a = twoNearlyIdenticalShares();
+  a.metric = Metric::Exposure;
+  a.unit = Unit::RoentgenPerHour;
+  a.unmodeledEnergyFraction = 0.031;
+  a.meanOpticalDepth = 0.78;
+  a.buildup = 1.0;
+
+  std::ostringstream out;
+  ReportContext context;
+  context.storeLibrary = "ENDF/B-VIII.1";
+  context.geometry = "point source at 100 m";
+  writeAttribution(out, a, context, ReportFormat::Json);
+  const std::string text = out.str();
+
+  EXPECT_NE(text.find("\"unmodeled_energy_fraction\":0.031"), std::string::npos) << text;
+  EXPECT_NE(text.find("\"mean_optical_depth\":0.78"), std::string::npos) << text;
+  EXPECT_NE(text.find("\"buildup\":1"), std::string::npos) << text;
+  EXPECT_NE(text.find("\"library\":\"ENDF/B-VIII.1\""), std::string::npos) << text;
+  EXPECT_NE(text.find("\"model\":\"point source at 100 m\""), std::string::npos) << text;
+}
+
+// An activity attribution never computed an exposure, so it carries no reservation about one.
+TEST(Report, AttributionJsonOmitsExposureCaveatsForActivity) {
+  std::ostringstream out;
+  writeAttribution(out, twoNearlyIdenticalShares(), ReportContext{}, ReportFormat::Json);
+  const std::string text = out.str();
+  EXPECT_EQ(text.find("unmodeled_energy_fraction"), std::string::npos) << text;
+  EXPECT_EQ(text.find("mean_optical_depth"), std::string::npos) << text;
+}
+
+// The warnings the forward ranking prints, printed here too. Reported without them, the same
+// exposure looked better characterised for having been decomposed.
+TEST(Report, AttributionTextFootnotesTheSameCaveatsTheRankingDoes) {
+  SeedAttribution a = twoNearlyIdenticalShares();
+  a.metric = Metric::Exposure;
+  a.unit = Unit::RoentgenPerHour;
+  a.unmodeledEnergyFraction = 0.031;
+  a.meanOpticalDepth = 0.78;
+  a.buildup = 1.0;
+  a.unmodeledContinuum = {"Y-90"};
+
+  std::ostringstream out;
+  writeAttribution(out, a, ReportContext{}, ReportFormat::Text);
+  const std::string text = out.str();
+
+  EXPECT_NE(text.find("NuSIFT does not model"), std::string::npos) << text;
+  EXPECT_NE(text.find("Y-90"), std::string::npos) << text;
+  EXPECT_NE(text.find("mean free paths"), std::string::npos) << text;
 }
 
 }  // namespace

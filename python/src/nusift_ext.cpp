@@ -33,6 +33,7 @@
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
 #include "nusift/seed/seed_fission.hpp"
+#include "nusift/triage/attribution.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
@@ -494,6 +495,59 @@ NB_MODULE(_core, m) {
                std::to_string(r.contributors.size() + r.omittedCount) + " contributors>";
       });
 
+  nb::class_<SeedShare>(m, "SeedShare")
+      .def_ro("label", &SeedShare::label)
+      .def_ro("key", &SeedShare::key)
+      .def_ro("seed_atoms", &SeedShare::seedAtoms)
+      .def_ro("importance", &SeedShare::importance,
+              "dR/dn0: what one more atom of this nuclide IN THE SEED would be worth, in the "
+              "ranking's unit. A potent seed and a large one are different things, and only "
+              "this column separates them.")
+      .def_ro("value", &SeedShare::value)
+      .def_ro("fraction", &SeedShare::fraction)
+      .def_ro("cumulative_fraction", &SeedShare::cumulativeFraction)
+      .def_ro("rank", &SeedShare::rank)
+      .def_ro("pinned", &SeedShare::pinned)
+      .def("__repr__", [](const SeedShare& s) {
+        char buffer[128];
+        std::snprintf(buffer, sizeof(buffer), "<SeedShare %s %.4g (%.1f%%)>", s.label.c_str(),
+                      s.value, s.fraction * 100.0);
+        return std::string(buffer);
+      });
+
+  nb::class_<SeedAttribution>(m, "SeedAttribution",
+                              "A response decomposed over the nuclides that were seeded.")
+      .def_ro("shares", &SeedAttribution::shares)
+      .def_ro("total", &SeedAttribution::total)
+      .def_ro("covered_fraction", &SeedAttribution::coveredFraction)
+      .def_ro("omitted_count", &SeedAttribution::omittedCount)
+      .def_ro("time", &SeedAttribution::time)
+      .def_ro("seed_provenance", &SeedAttribution::seedProvenance)
+      // The same three a Ranking carries, under the same names: an attributed exposure is the
+      // ranking's number seen from the other side, so it is understated by the same amount.
+      .def_ro("unmodeled_energy_fraction", &SeedAttribution::unmodeledEnergyFraction)
+      .def_ro("mean_optical_depth", &SeedAttribution::meanOpticalDepth,
+              "Exposure only: the air path in mean free paths at the energies carrying this "
+              "exposure. Past about 0.5 with buildup 1.0, scattered photons are a large "
+              "omission.")
+      .def_ro("buildup", &SeedAttribution::buildup)
+      .def_ro("unmodeled_continuum", &SeedAttribution::unmodeledContinuum,
+              "Exposure only: emitters carrying photon energy NuSIFT does not model, so their "
+              "contribution to this exposure is understated.")
+      .def_prop_ro("labels",
+                   [](const SeedAttribution& a) {
+                     std::vector<std::string> names;
+                     for (const SeedShare& s : a.shares) {
+                       names.push_back(s.label);
+                     }
+                     return names;
+                   })
+      .def("__len__", [](const SeedAttribution& a) { return a.shares.size(); })
+      .def("__repr__", [](const SeedAttribution& a) {
+        return "<SeedAttribution " + std::to_string(a.shares.size()) + " of " +
+               std::to_string(a.shares.size() + a.omittedCount) + " seeds>";
+      });
+
   nb::class_<DominanceWindow>(m, "DominanceWindow")
       .def_ro("label", &DominanceWindow::label)
       .def_ro("start_s", &DominanceWindow::startSeconds)
@@ -631,4 +685,56 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{},
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
+
+  // The other attribution of the same number. `rank` says what is producing the response now;
+  // this says which seeded nuclide it came from, and the two totals agree because they are
+  // partitions of one quantity rather than two calculations of it.
+  m.def(
+      "attribute",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& at,
+         const std::string& metric, const std::string& by, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, int top, double coverage,
+         double min_fraction, const nb::object& pin, bool prune, int cram_order) {
+        DecayOptions options;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        // Passed through, not pinned to Nuclide: attributeToSeed refuses the others with a
+        // message saying why, which is a better answer than silently attributing by nuclide
+        // to someone who asked for elements.
+        spec.aggregate = aggregateFrom(by);
+        spec.unit = requireUnit(units, spec.metric, Domain::Instant);
+        spec.geometry = geometry;
+
+        RankRequest request;
+        request.topN = top;
+        request.coverage = coverage;
+        request.minFraction = min_fraction;
+        // A bare string is one pin, not an iterable of one-character ones -- the same trap
+        // ResponseTable.rank guards, and for the same reason: "Cs-137" is a perfectly good
+        // sequence of six spellings that name nothing.
+        if (!pin.is_none()) {
+          if (nb::isinstance<nb::str>(pin)) {
+            request.pinned.push_back(requireSeedPin(data, inventory, nb::cast<std::string>(pin)));
+          } else {
+            for (const nb::handle item : pin) {
+              request.pinned.push_back(
+                  requireSeedPin(data, inventory, nb::cast<std::string>(item)));
+            }
+          }
+        }
+
+        // Released only once every Python argument has been read, as `integrate` does. The
+        // adjoint solve -- and, for exposure, the forward one beside it -- needs nothing from
+        // the interpreter, and holding the GIL across it blocks every other thread.
+        const double time = timeFrom(at);
+        const nb::gil_scoped_release release;
+        return attributeToSeed(data, inventory, time, spec, request, options);
+      },
+      "data"_a, "inventory"_a, "at"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
+      "geometry"_a = exposure::PointSourceGeometry{}, "top"_a = 10, "coverage"_a = 0.0,
+      "min_fraction"_a = 0.0, "pin"_a = nb::none(), "prune"_a = true, "cram_order"_a = 48,
+      "Attribute the response at `at` to the nuclides in `inventory`. `at` is seconds or a "
+      "duration string; `pin` is a seed name, or several.");
 }
