@@ -67,12 +67,12 @@ Every report states the total over *all* contributors and the fraction the shown
 so a top-10 worth 40% and one worth 99% can never look alike.
 
 A ranking says what is producing the response *now*, which is why a Cs-137 source's exposure
-lands on its Ba-137m daughter.  answers the complementary question — which of
-the nuclides you *seeded* the answer is riding on — by running the same weights backwards through
-one adjoint solve. For a fission seed the two lists barely overlap: at 30 days the emitters are
-La-140 and Pr-143, while the seeds carrying them are Xe-140 and Sr-95, both long gone. Because
-decay is linear the shares are an exact partition of the same total, not an estimate, so the
-attribution carries a coverage figure like any other ranking.
+lands on its Ba-137m daughter. `nusift attribute` answers the complementary question — which of
+the nuclides you *seeded* the answer is riding on — by running the same weights backwards
+through one adjoint solve. For a fission seed the two lists barely overlap: at 30 days the
+emitters are La-140 and Pr-143, while the seeds carrying them are Xe-140 and Sr-95, both long
+gone. Because decay is linear the shares are an exact partition of the same total, not an
+estimate, so the attribution carries a coverage figure like any other ranking.
 
 Every other way of shortening a ranking truncates it; `--pin` is the one that reaches past the
 cut. A pinned nuclide, mass chain, or element appears below the ranking whatever it ranks,
