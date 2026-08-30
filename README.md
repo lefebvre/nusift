@@ -70,7 +70,7 @@ A ranking says what is producing the response *now*, which is why a Cs-137 sourc
 lands on its Ba-137m daughter. `nusift attribute` answers the complementary question — which of
 the nuclides you *seeded* the answer is riding on — by running the same weights backwards
 through one adjoint solve. For a fission seed the two lists barely overlap: at 30 days the
-emitters are La-140 and Pr-143, while the seeds carrying them are Xe-140 and Sr-95, both long
+emitters are La-140 and Pr-143, while the seeds carrying them are Xe-140 and Ba-143, both long
 gone. Because decay is linear the shares are an exact partition of the same total, not an
 estimate, so the attribution carries a coverage figure like any other ranking.
 
