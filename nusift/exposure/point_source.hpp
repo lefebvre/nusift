@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file
- * @brief Photon exposure from an unshielded point source at a distance.
+ * @brief Photon exposure and fluence from an unshielded point source at a distance.
  * @ingroup exposure
  */
 //
@@ -64,6 +64,17 @@ struct PointSourceGeometry {
 // Exposure-rate coefficient for a single photon energy, in R/h per photon/s emitted.
 double pointExposureCoeff(double energyEv, const PointSourceGeometry& geometry);
 
+// Fluence-rate coefficient for a single photon energy: photons arriving at the point, per
+// (m^2 * s), per photon/s emitted at that energy. This is pointExposureCoeff with the energy
+// deposition factor removed -- inverse-square spreading and path attenuation only, no kerma
+// factor -- which makes it the native quantity for a detector or a transport-code source term:
+// it says how many photons get there, and leaves what they do once they arrive to the consumer.
+//
+// Like the exposure coefficient it carries the uncollided assumption: scattered photons are
+// counted only through the explicit buildup factor, which is why the same geometry (and the
+// same honest report of it) rides along.
+double pointFluenceCoeff(double energyEv, const PointSourceGeometry& geometry);
+
 // The specific gamma-ray constant: exposure rate per unit activity at unit distance, in
 // vacuum, [R*m^2/(h*Bq)]. Distance-independent by construction, since with no attenuation the
 // only distance dependence is the 1/d^2 that has been divided out.
@@ -80,6 +91,10 @@ double exposureRate(LineSpectrum lines, double activityBq, const PointSourceGeom
 // multiplies activity by; separated out because it depends only on the spectrum and the
 // geometry, so it is computed once per nuclide rather than once per nuclide per time.
 double exposureRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& geometry);
+
+// Fluence rate at the point per becquerel, in photons/(m^2 * s * Bq). The photon-metric
+// counterpart of the above, for the units that carry a point geometry.
+double fluenceRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& geometry);
 
 // The optical depth of the air path in mean free paths, mu_air(E) * d, averaged over the lines
 // with each weighted by the exposure it actually delivers at the point of interest.

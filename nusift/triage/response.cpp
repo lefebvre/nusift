@@ -31,8 +31,10 @@ constexpr double kUnmodeledContinuumFlag = 0.05;
 // Every unit, in the order the help text lists them. The one place the set is enumerated, so
 // parseUnit and the error message it raises cannot come to disagree about what exists.
 constexpr Unit kAllUnits[] = {
-    Unit::Becquerel,      Unit::Curie,    Unit::Decays, Unit::RoentgenPerHour, Unit::GrayPerHour,
-    Unit::SievertPerHour, Unit::Roentgen, Unit::Gray,   Unit::Sievert,
+    Unit::Becquerel,                  Unit::Curie,     Unit::Decays, Unit::RoentgenPerHour,
+    Unit::GrayPerHour,                Unit::SievertPerHour, Unit::Roentgen, Unit::Gray,
+    Unit::Sievert,                    Unit::PhotonsPerSecond, Unit::Photons,
+    Unit::PhotonsPerSquareMeterPerSecond, Unit::PhotonsPerSquareMeter,
 };
 
 // Case-insensitive ASCII equality. Unit spellings are ASCII by construction -- they come from
@@ -83,6 +85,12 @@ double unitScale(Unit unit) {
     case Unit::Decays:
     case Unit::RoentgenPerHour:
     case Unit::Roentgen:
+    // Photon units are the metric's natural units: a weight in photons per decay times atoms
+    // (or atom-seconds) is already the number printed. No conversion creeps in.
+    case Unit::PhotonsPerSecond:
+    case Unit::Photons:
+    case Unit::PhotonsPerSquareMeterPerSecond:
+    case Unit::PhotonsPerSquareMeter:
       return 1.0;
   }
   return 1.0;
@@ -105,10 +113,11 @@ double domainScale(Metric metric, Domain domain) {
 // The per-nuclide weight. This function IS the metric definition -- everything else in this
 // file is bookkeeping over index spaces.
 //
-// Both metrics are lambda times something: activity stops there, exposure carries on into the
-// photon spectrum. That shared factor is not a coincidence -- every metric NuSIFT reports is
-// per-decay, so it is proportional to the decay rate, and the metric is what each decay is
-// worth.
+// Every metric is lambda times something: activity stops there, exposure carries on into the
+// photon spectrum with its energy deposition factor, and photon stops at the photons
+// themselves -- the same spectrum, with or without the geometry that says where they get to.
+// The shared factor is not a coincidence: every metric NuSIFT reports is per-decay, so it is
+// proportional to the decay rate, and the metric is what each decay is worth.
 double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
   const double lambda = data.decayConstant(index);
   switch (spec.metric) {
@@ -124,6 +133,18 @@ double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
       // which is why it depends on the geometry and why no single per-nuclide constant could
       // stand in for it.
       return lambda * exposure::exposureRatePerBecquerel(data.lines(index), spec.geometry);
+    case Metric::Photon:
+      // lambda * (photons per decay): the source strength, in photons/s per atom, independent
+      // of any geometry -- a property of the inventory alone. Against atom-seconds the same
+      // weight is the photons emitted over the window, and there is no hour to take back out,
+      // because the weight was never quoted per hour.
+      if (isFluenceUnit(spec.unit)) {
+        // The fluence rate at the point, in photons/(m^2*s) per atom. As for exposure the
+        // attenuation sits inside the sum over lines, so the geometry is part of the weight
+        // and part of what the answer means.
+        return lambda * exposure::fluenceRatePerBecquerel(data.lines(index), spec.geometry);
+      }
+      return lambda * totalPhotonYield(data.lines(index));
   }
   return 0.0;
 }
@@ -235,11 +256,11 @@ ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> ke
       it->second.dominantHalfLife = halfLife;
     }
 
-    // Exposure only, matching what unmodeledEnergyFraction below is gated on. The flag says a
-    // photon spectrum is incomplete: that understates an exposure and says nothing whatever
-    // about a count of decays, so an activity report carrying it would end with a paragraph
-    // about a metric it never computed.
-    if (spec.metric == Metric::Exposure && dataIndex >= 0 &&
+    // Photon metrics only, matching what unmodeledEnergyFraction below is gated on. The flag
+    // says a photon spectrum is incomplete: that understates an exposure and a photon count
+    // alike, and says nothing whatever about a count of decays, so an activity report carrying
+    // it would end with a paragraph about a metric it never computed.
+    if ((spec.metric == Metric::Exposure || spec.metric == Metric::Photon) && dataIndex >= 0 &&
         data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag) {
       it->second.flags |= kFlagUnmodeledContinuum;
     }
@@ -283,10 +304,10 @@ ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> ke
 
 // One column per discrete photon line, rather than per nuclide.
 //
-// A line's weight is lambda_i * y_ij * k(E_j): the emitter's decay rate, the photons per decay
-// at that energy, and the geometry coefficient for that energy. Multiplying by the emitter's
-// atom count gives the exposure that one line contributes -- so the table is built from the
-// same atoms as every other aggregate, only weighted more finely.
+// A line's weight is lambda_i * y_ij times the metric's kernel for that energy: k(E_j) for
+// exposure, the fluence coefficient for a photon fluence unit, and one for photon strength.
+// Multiplying by the emitter's atom count gives the response that one line contributes -- so
+// the table is built from the same atoms as every other aggregate, only weighted more finely.
 //
 // A full evaluation carries 86000 lines, and a fission seed reaches thousands of emitters, so
 // the columns are thresholded: a line contributing less than kLineFloor of its own emitter's
@@ -310,7 +331,7 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
   struct Column {
     std::int64_t emitterKey = 0;
     double energyEv = 0.0;
-    double weight = 0.0;  // lambda * intensity * k(E)
+    double weight = 0.0;  // lambda * intensity * the metric's kernel for the energy
     int nuclide = 0;      // index into the result's space
     int flags = kFlagNone;
   };
@@ -334,7 +355,14 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
       continue;
     }
 
-    const double emitterTotal = exposure::exposureRatePerBecquerel(lines, spec.geometry);
+    // The emitter's total and the per-line coefficient in the SAME weight, so the relative
+    // floor below drops a line by its share of its emitter whatever the metric.
+    const bool fluence = isFluenceUnit(spec.unit);
+    const double emitterTotal =
+        spec.metric == Metric::Exposure
+            ? exposure::exposureRatePerBecquerel(lines, spec.geometry)
+            : fluence ? exposure::fluenceRatePerBecquerel(lines, spec.geometry)
+                      : totalPhotonYield(lines);
     const double floor = emitterTotal * kLineFloor;
     const int flags = data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag
                           ? kFlagUnmodeledContinuum
@@ -342,7 +370,11 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
 
     for (const GammaLine& line : lines) {
       const double perBecquerel =
-          line.intensity * exposure::pointExposureCoeff(line.energyEv, spec.geometry);
+          spec.metric == Metric::Exposure
+              ? line.intensity * exposure::pointExposureCoeff(line.energyEv, spec.geometry)
+              : fluence
+                ? line.intensity * exposure::pointFluenceCoeff(line.energyEv, spec.geometry)
+                : line.intensity;
       if (perBecquerel <= 0.0) {
         continue;
       }
@@ -470,6 +502,25 @@ std::vector<double> meanOpticalDepths(const NuclearData& data, std::span<const s
   return means;
 }
 
+// The caveats a table carries depend on which part of the photon model it actually used. The
+// unmodelled continuum understates every photon metric -- an exposure and a photon count
+// alike -- so both carry the energy fraction. The air-path depth is a property only of an
+// answer that USED the geometry: a photon-strength number at no distance has no path to be
+// thick, and footnoting one with a depth computed from a geometry it never used would report
+// a limit of a model it did not run.
+void fillPhotonCaveats(ResponseTable& table, const NuclearData& data,
+                       std::span<const std::int64_t> keys,
+                       const std::vector<std::vector<double>>& rawAtoms,
+                       const std::vector<std::vector<double>>& weighted, const ResponseSpec& spec) {
+  if (spec.metric != Metric::Exposure && spec.metric != Metric::Photon) {
+    return;
+  }
+  table.unmodeledEnergyFraction = unmodeledEnergyFractions(data, keys, rawAtoms);
+  if (spec.metric == Metric::Exposure || isFluenceUnit(spec.unit)) {
+    table.meanOpticalDepth = meanOpticalDepths(data, keys, weighted, spec.geometry);
+  }
+}
+
 // --- naming a contributor to pin ---------------------------------------------
 
 std::string_view trimmed(std::string_view text) {
@@ -584,24 +635,31 @@ void requireUsableSpec(const NuclearData& data, const ResponseSpec& spec, Domain
                                  ? " is a rate and cannot express a time-integrated total"
                                  : " is a total and cannot express an instantaneous value")));
   }
-  // A store with no photon lines cannot answer an exposure question at all. Returning zeros
+  // A store with no photon lines cannot answer a photon question at all. Returning zeros
   // would be indistinguishable from "nothing here emits photons", which is a different and
   // much more alarming statement.
-  if (spec.aggregate == Aggregate::GammaLine && spec.metric != Metric::Exposure) {
+  const bool isPhotonMetric =
+      spec.metric == Metric::Exposure || spec.metric == Metric::Photon;
+  if (spec.aggregate == Aggregate::GammaLine && !isPhotonMetric) {
     throw InputError(tagged(kModule,
-                            "ranking by gamma line only makes sense for exposure -- a photon "
-                            "line has no activity of its own, it is a way its emitter's decays "
-                            "get out"));
+                            "ranking by gamma line only makes sense for exposure or photon "
+                            "output -- a photon line has no activity of its own, it is a way "
+                            "its emitter's decays get out"));
   }
-  if (spec.metric == Metric::Exposure && !data.hasPhotonLines()) {
-    throw InputError(tagged(kModule,
-                            "this data store carries no photon lines, so exposure cannot be "
-                            "computed. Stage from ENDF decay tapes, which carry the discrete "
-                            "spectra, or rank by activity instead"));
+  if (isPhotonMetric && !data.hasPhotonLines()) {
+    throw InputError(tagged(kModule, "this data store carries no photon lines, so " +
+                                         std::string(metricName(spec.metric)) +
+                                         " cannot be computed. Stage from ENDF decay tapes, "
+                                         "which carry the discrete spectra, or rank by "
+                                         "activity instead"));
   }
 }
 
 }  // namespace
+
+bool isFluenceUnit(Unit unit) {
+  return unit == Unit::PhotonsPerSquareMeterPerSecond || unit == Unit::PhotonsPerSquareMeter;
+}
 
 bool unitSuitsDomain(Unit unit, Domain domain) {
   switch (unit) {
@@ -610,11 +668,15 @@ bool unitSuitsDomain(Unit unit, Domain domain) {
     case Unit::RoentgenPerHour:
     case Unit::GrayPerHour:
     case Unit::SievertPerHour:
+    case Unit::PhotonsPerSecond:
+    case Unit::PhotonsPerSquareMeterPerSecond:
       return domain == Domain::Instant;
     case Unit::Decays:
     case Unit::Roentgen:
     case Unit::Gray:
     case Unit::Sievert:
+    case Unit::Photons:
+    case Unit::PhotonsPerSquareMeter:
       return domain == Domain::Interval;
   }
   return false;
@@ -633,6 +695,11 @@ bool unitSuitsMetric(Unit unit, Metric metric) {
     case Unit::Gray:
     case Unit::Sievert:
       return metric == Metric::Exposure;
+    case Unit::PhotonsPerSecond:
+    case Unit::Photons:
+    case Unit::PhotonsPerSquareMeterPerSecond:
+    case Unit::PhotonsPerSquareMeter:
+      return metric == Metric::Photon;
   }
   return false;
 }
@@ -657,6 +724,14 @@ const char* unitName(Unit unit) {
       return "Gy";
     case Unit::Sievert:
       return "Sv";
+    case Unit::PhotonsPerSecond:
+      return "photons/s";
+    case Unit::Photons:
+      return "photons";
+    case Unit::PhotonsPerSquareMeterPerSecond:
+      return "photons/m2/s";
+    case Unit::PhotonsPerSquareMeter:
+      return "photons/m2";
   }
   return "?";
 }
@@ -677,6 +752,11 @@ Unit defaultUnit(Metric metric, Domain domain) {
   if (metric == Metric::Exposure) {
     return domain == Domain::Interval ? Unit::Roentgen : Unit::RoentgenPerHour;
   }
+  if (metric == Metric::Photon) {
+    // The source strength, not the fluence: the default is the geometry-free number, so a
+    // photon answer that does not name a distance is not silently one at some distance.
+    return domain == Domain::Interval ? Unit::Photons : Unit::PhotonsPerSecond;
+  }
   return domain == Domain::Interval ? Unit::Decays : Unit::Becquerel;
 }
 
@@ -690,7 +770,8 @@ Unit requireUnit(std::string_view text, Metric metric, Domain domain) {
   }
   throw InputError(tagged(kUnitsModule, "\"" + std::string(text) + "\" is not a unit (activity: " +
                                             spellingsFor(Metric::Activity) +
-                                            "; exposure: " + spellingsFor(Metric::Exposure) + ")"));
+                                            "; exposure: " + spellingsFor(Metric::Exposure) +
+                                            "; photon: " + spellingsFor(Metric::Photon) + ")"));
 }
 
 const char* metricName(Metric metric) {
@@ -699,6 +780,8 @@ const char* metricName(Metric metric) {
       return "activity";
     case Metric::Exposure:
       return "exposure";
+    case Metric::Photon:
+      return "photon";
   }
   return "?";
 }
@@ -759,11 +842,11 @@ std::vector<double> responseWeights(const NuclearData& data, const ResponseSpec&
 ExposureCaveats exposureCaveats(const NuclearData& data, std::span<const std::int64_t> keys,
                                 std::span<const double> atoms, const ResponseSpec& spec) {
   ExposureCaveats out;
-  if (spec.metric != Metric::Exposure) {
+  if (spec.metric != Metric::Exposure && spec.metric != Metric::Photon) {
     return out;
   }
   if (keys.size() != atoms.size()) {
-    throw NusiftError(tagged(kModule, "exposure caveats: atoms do not match their index space"));
+    throw NusiftError(tagged(kModule, "caveats: atoms do not match their index space"));
   }
   // Wrapped in a one-row outer vector because the two helpers below are written for a whole
   // time grid, and the alternative -- a second single-time copy of each -- is exactly the
@@ -784,7 +867,10 @@ ExposureCaveats exposureCaveats(const NuclearData& data, std::span<const std::in
   }
 
   out.unmodeledEnergyFraction = unmodeledEnergyFractions(data, keys, raw).front();
-  out.meanOpticalDepth = meanOpticalDepths(data, keys, weighted, spec.geometry).front();
+  // Same rule as fillPhotonCaveats(): the depth only describes an answer that used the path.
+  if (spec.metric == Metric::Exposure || isFluenceUnit(spec.unit)) {
+    out.meanOpticalDepth = meanOpticalDepths(data, keys, weighted, spec.geometry).front();
+  }
   out.unmodeledContinuum.assign(emitters.begin(), emitters.end());
   return out;
 }
@@ -824,10 +910,7 @@ ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,
           : assemble(data, result.nuclideKeys, weighted, spec, Domain::Instant);
   table.times = result.times;
   table.geometry = spec.geometry;
-  if (spec.metric == Metric::Exposure) {
-    table.unmodeledEnergyFraction = unmodeledEnergyFractions(data, result.nuclideKeys, rawAtoms);
-    table.meanOpticalDepth = meanOpticalDepths(data, result.nuclideKeys, weighted, spec.geometry);
-  }
+  fillPhotonCaveats(table, data, result.nuclideKeys, rawAtoms, weighted, spec);
   return table;
 }
 
@@ -864,11 +947,8 @@ ResponseTable buildIntervalResponse(const NuclearData& data, std::span<const std
   table.times = {t1};
   table.timeEnds = {t2};
   table.geometry = spec.geometry;
-  if (spec.metric == Metric::Exposure) {
-    table.unmodeledEnergyFraction =
-        unmodeledEnergyFractions(data, keys, std::vector<std::vector<double>>{integratedAtoms});
-    table.meanOpticalDepth = meanOpticalDepths(data, keys, weighted, spec.geometry);
-  }
+  fillPhotonCaveats(table, data, keys, std::vector<std::vector<double>>{integratedAtoms}, weighted,
+                    spec);
   return table;
 }
 

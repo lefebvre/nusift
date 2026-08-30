@@ -39,18 +39,22 @@ std::string jsonNumber(double value) {
 // and does not earn a paragraph.
 constexpr double kThickAirPathMfp = 0.5;
 
-// The buildup caveat, for an exposure whose air path is thick and whose buildup was left at
-// 1.0. A caller who set a factor has made their own assumption about scatter and is not told
-// again; a caller who set none has, by default, left the scattered photons out, and past this
-// optical depth that is the largest thing the number is missing.
+// The buildup caveat, for an exposure -- or a photon fluence -- whose air path is thick and
+// whose buildup was left at 1.0. A caller who set a factor has made their own assumption about
+// scatter and is not told again; a caller who set none has, by default, left the scattered
+// photons out, and past this optical depth that is the largest thing the number is missing.
+// Both metrics share the note because they share the uncollided assumption: it says nothing
+// about what the photons DO at the point, only how many the model counted on the way. (The
+// photon-strength metric never reaches the depth check: its tables carry no optical depth.)
 void writeThickAirPathNote(std::ostream& out, Metric metric, double opticalDepth, double buildup) {
-  if (metric != Metric::Exposure || buildup != 1.0 || !(opticalDepth > kThickAirPathMfp)) {
+  if ((metric != Metric::Exposure && metric != Metric::Photon) || buildup != 1.0 ||
+      !(opticalDepth > kThickAirPathMfp)) {
     return;
   }
   char depth[32];
   std::snprintf(depth, sizeof(depth), "%.2g", opticalDepth);
   out << "  ! the air path is " << depth
-      << " mean free paths at the energies carrying this exposure, and buildup\n"
+      << " mean free paths thick at the energies carrying this answer, and buildup\n"
       << "    is 1.0, so scattered photons are left out. Past about half a mean free path they\n"
       << "    add tens of percent to the uncollided value, and beyond one they exceed it. Set\n"
       << "    --buildup to include them.\n";
@@ -225,21 +229,29 @@ void writeTextRows(std::ostream& out, const Ranking& ranking) {
 
 // The photon-coverage caveat: how much of the emitted photon energy sits outside the model, and
 // which emitters carry it. Shared by the ranking footer and the attribution footer, because the
-// two report the SAME exposure and understate it by the same amount -- worded differently they
+// two report the SAME figure and understate it by the same amount -- worded differently they
 // would read as two separate reservations about one number.
-void writeUnmodeledEnergyNote(std::ostream& out, double unmodeledEnergyFraction,
+void writeUnmodeledEnergyNote(std::ostream& out, Metric metric, double unmodeledEnergyFraction,
                               const std::vector<std::string>& named) {
+  // The quantity the note understates, named the way the table above names it. The exposure
+  // understatement follows mu_en/rho per missing energy; the photon-COUNT understatement
+  // follows the photon number per missing energy. Both climb where the missing spectrum is
+  // soft, so the "of that order, and larger when softer" statement holds for both.
+  const char* singular = metric == Metric::Photon ? "photon count" : "exposure";
+  const char* plural = metric == Metric::Photon ? "photon counts" : "exposures";
+
   // The magnitude first, because it is what decides whether the count matters at all. A
   // hundred flagged nuclides contributing 0.01% of the photon output is a footnote; three
   // contributing 30% is a reason not to trust the number above.
   //
   // Stated as the order of the understatement rather than as its size. The fraction is one of
-  // emitted ENERGY, and exposure per unit energy follows mu_en/rho, which climbs steeply below
-  // 100 keV -- so a continuum softer than the lines, as bremsstrahlung usually is, costs more
-  // exposure than its share of the energy says.
+  // emitted ENERGY, and the metric per unit of missing energy climbs steeply for soft spectra
+  // -- mu_en/rho for exposure, photon number for a count -- so a continuum softer than the
+  // lines, as bremsstrahlung usually is, understates more than its share of the energy says.
   if (unmodeledEnergyFraction > 0.0) {
     out << "  ! " << percent(unmodeledEnergyFraction)
-        << " of the emitted photon energy is in spectra NuSIFT does not model. The exposure\n"
+        << " of the emitted photon energy is in spectra NuSIFT does not model. The " << singular
+        << "\n"
         << "    understatement is of that order, and larger where the missing spectrum is\n"
         << "    softer than the lines, as bremsstrahlung usually is";
     // Terminated here unless the named list below continues the sentence. Left open, the line
@@ -258,8 +270,8 @@ void writeUnmodeledEnergyNote(std::ostream& out, double unmodeledEnergyFraction,
       out << " (" << total << " nuclide" << (one ? "" : "s") << ")";
     } else {
       out << "  ! " << total << " contributor" << (one ? "" : "s") << (one ? " carries" : " carry")
-          << " photon energy NuSIFT does not model, so " << (one ? "its" : "their")
-          << (one ? " exposure is" : " exposures are") << " understated";
+          << " photon energy NuSIFT does not model, so " << (one ? "its " : "their ")
+          << (one ? singular : plural) << (one ? " is" : " are") << " understated";
     }
 
     // Naming every one of them is what a real evaluation turns this into: a full store flags
@@ -306,7 +318,8 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
         << " at this time\n";
   }
 
-  writeUnmodeledEnergyNote(out, ranking.unmodeledEnergyFraction, context.unmodeledContinuum);
+  writeUnmodeledEnergyNote(out, ranking.metric, ranking.unmodeledEnergyFraction,
+                           context.unmodeledContinuum);
 
   writeThickAirPathNote(out, ranking.metric, ranking.meanOpticalDepth, ranking.buildup);
 }
@@ -488,7 +501,9 @@ void writeJsonRanking(std::ostream& out, const Ranking& ranking, const ReportCon
   out << pad << "  \"omitted_count\": " << ranking.omittedCount << ",\n";
   // The two caveats the text footer states, as numbers a script can act on: how much of the
   // photon energy the model does not carry, and how thick the air path was left uncorrected.
-  if (ranking.metric == Metric::Exposure) {
+  // Mean optical depth reads as zero for a photon-strength answer, which is the truth of it:
+  // that number used no path at all.
+  if (ranking.metric == Metric::Exposure || ranking.metric == Metric::Photon) {
     out << pad << "  \"unmodeled_energy_fraction\": " << jsonNumber(ranking.unmodeledEnergyFraction)
         << ",\n";
     out << pad << "  \"mean_optical_depth\": " << jsonNumber(ranking.meanOpticalDepth) << ",\n";
@@ -589,9 +604,10 @@ void writeAttribution(std::ostream& out, const SeedAttribution& a, const ReportC
     out << ",\"covered_fraction\":" << jsonNumber(a.coveredFraction);
     out << ",\"omitted\":" << a.omittedCount;
     // The same keys writeJsonRanking emits, spelled the same way. A consumer reading an
-    // exposure out of one document and out of the other should not have to know which command
-    // produced it to find out how far the model was stretched to get it.
-    if (a.metric == Metric::Exposure) {
+    // exposure -- or a photon figure -- out of one document and out of the other should not
+    // have to know which command produced it to find out how far the model was stretched to
+    // get it.
+    if (a.metric == Metric::Exposure || a.metric == Metric::Photon) {
       out << ",\"unmodeled_energy_fraction\":" << jsonNumber(a.unmodeledEnergyFraction);
       out << ",\"mean_optical_depth\":" << jsonNumber(a.meanOpticalDepth);
       out << ",\"buildup\":" << jsonNumber(a.buildup);
@@ -689,10 +705,11 @@ void writeAttribution(std::ostream& out, const SeedAttribution& a, const ReportC
         << " at this time\n";
   }
 
-  // The caveats the FORWARD ranking of this same number prints. An exposure does not become
-  // better characterised by being decomposed, and a reader who ran `attribute` instead of
-  // `rank` has asked a different question about an identically uncertain figure.
-  writeUnmodeledEnergyNote(out, a.unmodeledEnergyFraction, a.unmodeledContinuum);
+  // The caveats the FORWARD ranking of this same number prints. An exposure -- or a photon
+  // answer -- does not become better characterised by being decomposed, and a reader who ran
+  // `attribute` instead of `rank` has asked a different question about an identically
+  // uncertain figure.
+  writeUnmodeledEnergyNote(out, a.metric, a.unmodeledEnergyFraction, a.unmodeledContinuum);
   writeThickAirPathNote(out, a.metric, a.meanOpticalDepth, a.buildup);
 }
 

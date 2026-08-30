@@ -39,6 +39,19 @@ Everything downstream is this coefficient times a per-nuclide activity, so expos
 functional of the same atom counts every other metric uses — see
 [the index](README.md#the-one-design-decision-everything-follows-from).
 
+The photon metric rides on the same kernel. Dropping the three energy-deposition terms — the eV→J
+conversion, the mass energy-absorption coefficient, and the kerma-to-roentgen scale — leaves
+
+$$
+f(E) \;=\; \frac{e^{-\mu_{\text{air}}(E)\,d}}{4\pi d^{2}} \cdot B \qquad [\text{photons}/(\text{m}^2\,\text{s}\,\text{Bq}) \text{ per photon/s emitted}]
+$$
+
+the fluence rate at the point per becquerel. `pointFluenceCoeff` and `pointExposureCoeff` share
+the spreading-and-attenuation factor rather than computing two, so the two metrics cannot
+disagree about what the air path does to a photon; the unit test suite pins the ratio at exactly
+the kerma conversion. The photon-metric weights that use these coefficients are
+[Ranking §2](ranking.md#2-weights-are-the-metric-definition).
+
 ## 2. Why the sum cannot be collapsed
 
 `μ_air` is energy-dependent, so `exp(−μ_air(E)·d)` sits **inside** the sum over lines and cannot
@@ -272,7 +285,7 @@ because the geometry is a plain value type a caller can assemble however it like
 | File | Role |
 | --- | --- |
 | [`nusift/exposure/point_source.hpp`](../nusift/exposure/point_source.hpp) | The model, the geometry parameters, and the exclusions — stated in the header |
-| [`nusift/exposure/point_source.cpp`](../nusift/exposure/point_source.cpp) | `pointExposureCoeff`, `gammaConstant`, `exposureRatePerBecquerel` |
+| [`nusift/exposure/point_source.cpp`](../nusift/exposure/point_source.cpp) | `pointExposureCoeff`, `pointFluenceCoeff`, `gammaConstant`, `exposureRatePerBecquerel`, `fluenceRatePerBecquerel` |
 | [`nusift/exposure/air_coefficients.cpp`](../nusift/exposure/air_coefficients.cpp) | The NIST table and the clamped log-log interpolation |
 | [`nusift/units.hpp`](../nusift/units.hpp) | The roentgen definition and the radiation weighting factor |
-| [`nusift/nucdata/photon_lines.hpp`](../nusift/nucdata/photon_lines.hpp) | `GammaLine`, absolute intensities, and the discrete-energy sum |
+| [`nusift/nucdata/photon_lines.hpp`](../nusift/nucdata/photon_lines.hpp) | `GammaLine`, absolute intensities, the discrete-energy sum, and the photon yield |

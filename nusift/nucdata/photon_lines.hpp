@@ -59,4 +59,17 @@ inline double discretePhotonEnergyEv(LineSpectrum lines) {
   return total;
 }
 
+// Total number of photons carried by the discrete lines, in photons per decay. The weight of
+// the photon-strength metric, which asks how many photons a decay emits and says nothing about
+// their energy. Like the energy sum it covers the DISCRETE lines only: photons in a
+// continuum NuSIFT does not model are not counted, which is exactly the understatement the
+// unmodelled-continuum flag exists to report.
+inline double totalPhotonYield(LineSpectrum lines) {
+  double total = 0.0;
+  for (const GammaLine& line : lines) {
+    total += line.intensity;
+  }
+  return total;
+}
+
 }  // namespace nusift

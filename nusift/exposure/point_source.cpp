@@ -34,14 +34,10 @@ void requireUsableGeometry(const PointSourceGeometry& geometry) {
   }
 }
 
-}  // namespace
-
-double pointExposureCoeff(double energyEv, const PointSourceGeometry& geometry) {
-  requireUsableGeometry(geometry);
-  if (!(energyEv > 0.0)) {
-    return 0.0;
-  }
-
+// The part of the point kernel that is geometry and path only: spreading over 4*pi*d^2,
+// attenuation along the path, and the explicit buildup factor. Shared by the exposure and the
+// fluence coefficients so the two can never disagree about where a photon gets to.
+double spreadingAndAttenuation(double energyEv, const PointSourceGeometry& geometry) {
   const double d = geometry.distanceM;
   const double geometric = 1.0 / (4.0 * std::numbers::pi * d * d);
 
@@ -51,7 +47,25 @@ double pointExposureCoeff(double energyEv, const PointSourceGeometry& geometry) 
     attenuation = std::exp(-linear * d);
   }
 
-  return geometric * attenuation * kermaToExposurePerDecayEnergy(energyEv) * geometry.buildup;
+  return geometric * attenuation * geometry.buildup;
+}
+
+}  // namespace
+
+double pointExposureCoeff(double energyEv, const PointSourceGeometry& geometry) {
+  requireUsableGeometry(geometry);
+  if (!(energyEv > 0.0)) {
+    return 0.0;
+  }
+  return spreadingAndAttenuation(energyEv, geometry) * kermaToExposurePerDecayEnergy(energyEv);
+}
+
+double pointFluenceCoeff(double energyEv, const PointSourceGeometry& geometry) {
+  requireUsableGeometry(geometry);
+  if (!(energyEv > 0.0)) {
+    return 0.0;
+  }
+  return spreadingAndAttenuation(energyEv, geometry);
 }
 
 double gammaConstant(LineSpectrum lines) {
@@ -72,6 +86,15 @@ double exposureRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& g
   double total = 0.0;
   for (const GammaLine& line : lines) {
     total += line.intensity * pointExposureCoeff(line.energyEv, geometry);
+  }
+  return total;
+}
+
+double fluenceRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& geometry) {
+  requireUsableGeometry(geometry);
+  double total = 0.0;
+  for (const GammaLine& line : lines) {
+    total += line.intensity * pointFluenceCoeff(line.energyEv, geometry);
   }
   return total;
 }

@@ -37,9 +37,10 @@ struct ReportContext {
   std::string storeCreatedUtc;
   int storeNuclideCount = 0;
   std::string seedProvenance;  // where the inventory came from
-  // How the exposure was computed, when the metric is exposure. An exposure figure with no
-  // stated distance is not interpretable, so this rides in the header rather than being left
-  // to the reader to remember from the command line.
+  // How the exposure -- or a photon fluence -- was computed, when the metric uses the point
+  // geometry. A figure with no stated distance is not interpretable, so this rides in the
+  // header rather than being left to the reader to remember from the command line. Empty for
+  // activity and for photon strength, which uses no geometry at all.
   std::string geometry;
   // Contributors whose photon output is partly in a continuum NuSIFT does not model. Named
   // in a footnote so an understated row is visible rather than merely flagged in a column
