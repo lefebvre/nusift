@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -931,6 +933,316 @@ TEST(ResponseExposure, ActivityCarriesNoUnmodelledFlagEither) {
   }
 }
 
+// --- photon metric -----------------------------------------------------------
+//
+// The third metric exists because activity answers "how many decays" and exposure answers
+// "how much dose", and neither says how many photons actually leave the source. Strength is
+// the only geometry-free metric, which is what makes it the one to compare inventories with
+// before a site has even been chosen; fluence is the same transport quoted at a point.
+
+// Strength is activity weighted by the photons each decay emits. Checked against the
+// Bateman solution at three times, including t = 0 where the daughter has not grown in:
+// a photon table that is nonzero there has an initialisation bug that later times hide.
+TEST(ResponsePhoton, StrengthEqualsActivityTimesTheDiscreteYield) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  const double lambda0 = 1.0e-3;
+  const double lambda1 = 5.0e-4;
+  const double n0 = 1.0e20;
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, n0);
+
+  ResponseSpec spec;
+  spec.metric = Metric::Photon;
+  spec.unit = Unit::PhotonsPerSecond;
+
+  for (const double t : {0.0, 100.0, 2000.0}) {
+    // The daughter is the sole emitter and its only line carries 0.9 photons per decay, so
+    // the whole table is lambda * yield * N1, no geometry anywhere in the expression.
+    const double expected = lambda1 * 0.9 * synth::batemanN1(n0, lambda0, lambda1, t);
+    const double total =
+        buildResponse(data, decay(data, inv, std::vector<double>{t}), spec).totals[0];
+    EXPECT_NEAR(total, expected, std::max(1.0, expected) * 1e-12) << "at t = " << t;
+  }
+}
+
+// Nothing in the spec touches the distance, the buildup, or the air density, and the answer
+// must not move: strength is a property of the inventory alone. The geometry record still
+// has to be usable -- the refusal is about the geometry being nonsensical, not about it
+// being used.
+TEST(ResponsePhoton, StrengthDoesNotDependOnTheGeometry) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec near;
+  near.metric = Metric::Photon;
+  near.unit = Unit::PhotonsPerSecond;
+  near.geometry.distanceM = 1.0;
+
+  ResponseSpec far = near;
+  far.geometry.distanceM = 100.0;
+  far.geometry.buildup = 3.0;
+  far.geometry.airDensityKgM3 = 0.5;
+  far.geometry.airAttenuation = false;
+
+  EXPECT_DOUBLE_EQ(buildResponse(data, result, near).totals[0],
+                   buildResponse(data, result, far).totals[0]);
+}
+
+// Fluence is where the geometry is part of the answer. At one distance it must equal the
+// hand calculation: yield-weighted activity over 4 pi r^2, times the exponential
+// attenuation, times the buildup. The vacuum variant pins the geometric term separately, so
+// a bug in the transport factor cannot hide behind it.
+TEST(ResponsePhoton, FluenceMatchesSpreadingAttenuationAndBuildup) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  const double lambda0 = 1.0e-3;
+  const double lambda1 = 5.0e-4;
+  const double n0 = 1.0e20;
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, n0);
+  const double t = 2000.0;
+  const DecayResult result = decay(data, inv, std::vector<double>{t});
+
+  const double d = 3.0;
+  const double buildup = 2.5;
+
+  ResponseSpec spec;
+  spec.metric = Metric::Photon;
+  spec.unit = Unit::PhotonsPerSquareMeterPerSecond;
+  spec.geometry.distanceM = d;
+  spec.geometry.buildup = buildup;
+
+  const double activity = lambda1 * synth::batemanN1(n0, lambda0, lambda1, t);
+  const double withAir =
+      activity * 0.9 / (4.0 * M_PI * d * d) *
+      std::exp(-exposure::airMassAttenuation(661657.0) * spec.geometry.airDensityKgM3 * d) *
+      buildup;
+  EXPECT_NEAR(buildResponse(data, result, spec).totals[0], withAir, withAir * 1e-12);
+
+  spec.geometry.airAttenuation = false;
+  const double inVacuum = activity * 0.9 / (4.0 * M_PI * d * d) * buildup;
+  EXPECT_NEAR(buildResponse(data, result, spec).totals[0], inVacuum, inVacuum * 1e-12);
+}
+
+// Over a window, photons are counts: every atom that decayed emitted its yield, and the
+// window is in seconds. Dividing by an hour (or failing to) moves the total by 3600 --
+// invisible in a table of bare figures, and visible only if the units are read.
+TEST(ResponsePhoton, IntervalAccruesPhotonsPerDecayNotPerHour) {
+  const double lambda = 1.0e-9;  // ~5000 y, so almost nothing decays over the hour
+  const double n0 = 1.0e20;
+  StoreArrays arrays = synth::linearChain({lambda});
+  synth::addLines(arrays, 0, {661657.0}, {0.9});  // the seeded nuclide is the emitter
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, n0);
+  const double window = units::kSecondsPerHour;
+
+  ResponseSpec rateSpec;
+  rateSpec.metric = Metric::Photon;
+  rateSpec.unit = Unit::PhotonsPerSecond;
+  const double rate =
+      buildResponse(data, decay(data, inv, std::vector<double>{0.0}), rateSpec).totals[0];
+
+  std::vector<std::int64_t> keys;
+  const std::vector<double> integral = intervalIntegral(data, inv, 0.0, window, &keys);
+  ResponseSpec countSpec = rateSpec;
+  countSpec.unit = Unit::Photons;
+  const double count =
+      buildIntervalResponse(data, keys, integral, 0.0, window, countSpec).totals[0];
+
+  // The exact integral: lambda * yield * (atom-seconds over the window).
+  const double expected = lambda * 0.9 * synth::batemanIntegralN0(n0, lambda, window);
+  EXPECT_NEAR(count, expected, expected * 1e-9);
+  EXPECT_LT(count, rate * window)
+      << "an hour of decay emits slightly fewer photons than the initial rate";
+}
+
+// Splitting a nuclide's photons across its lines must not change the total, for the strength
+// unit and the fluence unit alike -- the same invariant the per-nuclide exposure test pins,
+// in the other two unit families, dropped columns included.
+TEST(ResponsePhotonLines, LineTotalMatchesTheNuclideTotal) {
+  const NuclearData data = chainWithStrongAndTraceLines();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  for (const Unit unit : {Unit::PhotonsPerSecond, Unit::PhotonsPerSquareMeterPerSecond}) {
+    ResponseSpec byNuclide;
+    byNuclide.metric = Metric::Photon;
+    byNuclide.unit = unit;
+    ResponseSpec byLine = byNuclide;
+    byLine.aggregate = Aggregate::GammaLine;
+
+    const double nuclideTotal = buildResponse(data, result, byNuclide).totals[0];
+    const double lineTotal = buildResponse(data, result, byLine).totals[0];
+    EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12) << unitName(unit);
+  }
+}
+
+// Strength ranks lines by intensity alone, so the 662 keV line at 0.9 leads and the 1332 keV
+// line at 0.5 follows -- the reverse of exposure's order, where the energy-weighted line
+// leads. Same data, different question; a test that only checked the total would pass even
+// if the lines were ranked by the wrong weight.
+TEST(ResponsePhotonLines, RanksByIntensityNotEnergyWeightedIntensity) {
+  const NuclearData data = chainWithStrongAndTraceLines();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec spec;
+  spec.metric = Metric::Photon;
+  spec.unit = Unit::PhotonsPerSecond;
+  spec.aggregate = Aggregate::GammaLine;
+  const Ranking ranking = rank(buildResponse(data, result, spec), 0, RankRequest{});
+
+  ASSERT_GE(ranking.contributors.size(), 2u);
+  EXPECT_NE(ranking.contributors[0].label.find("661.7 keV"), std::string::npos)
+      << ranking.contributors[0].label;
+  EXPECT_NE(ranking.contributors[1].label.find("1332.5 keV"), std::string::npos)
+      << ranking.contributors[1].label;
+  // Same emitter, same time: the values differ by the intensities alone.
+  EXPECT_NEAR(ranking.contributors[0].value / ranking.contributors[1].value, 0.9 / 0.5, 1e-12);
+}
+
+// Fluence is the unit that carries the geometry, so an unusable geometry must fail here.
+// Strength never touches the geometry, so the same spec with a strength unit still works:
+// the refusal attaches to the fluence quantity, not to the geometry record.
+TEST(ResponsePhoton, FluenceRefusesAnImpossibleGeometryButStrengthDoesNot) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{100.0});
+
+  ResponseSpec fluence;
+  fluence.metric = Metric::Photon;
+  fluence.unit = Unit::PhotonsPerSquareMeterPerSecond;
+  fluence.geometry.distanceM = 0.0;
+  EXPECT_THROW(buildResponse(data, result, fluence), InputError);
+
+  ResponseSpec strength = fluence;
+  strength.unit = Unit::PhotonsPerSecond;
+  const ResponseTable table = buildResponse(data, result, strength);
+  EXPECT_GT(table.totals[0], 0.0);
+}
+
+// A store with no photon lines cannot answer a photon question any more than an exposure
+// one: zeros would be indistinguishable from "nothing here emits photons".
+TEST(ResponsePhoton, RefusesAStoreWithNoPhotonLines) {
+  const NuclearData data = NuclearData::fromArrays(synth::linearChain({1.0e-3}));
+  ASSERT_FALSE(data.hasPhotonLines());
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{100.0});
+
+  for (const Unit unit : {Unit::PhotonsPerSecond, Unit::PhotonsPerSquareMeterPerSecond}) {
+    ResponseSpec spec;
+    spec.metric = Metric::Photon;
+    spec.unit = unit;
+    try {
+      buildResponse(data, result, spec);
+      FAIL() << "expected InputError for " << unitName(unit);
+    } catch (const InputError& e) {
+      EXPECT_NE(std::string(e.what()).find("no photon lines"), std::string::npos) << e.what();
+    }
+  }
+}
+
+// Photons do not measure exposure and roentgen does not measure photons: category errors,
+// refused at the boundary. The rate-versus-count line the other unit families get applies
+// to the photon units the same way.
+TEST(ResponsePhoton, RefusesAUnitThatDoesNotMeasureTheMetric) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{100.0});
+
+  ResponseSpec photonsInRoentgen;
+  photonsInRoentgen.metric = Metric::Photon;
+  photonsInRoentgen.unit = Unit::RoentgenPerHour;
+  EXPECT_THROW(buildResponse(data, result, photonsInRoentgen), InputError);
+
+  ResponseSpec exposureInPhotons;
+  exposureInPhotons.metric = Metric::Exposure;
+  exposureInPhotons.unit = Unit::PhotonsPerSecond;
+  EXPECT_THROW(buildResponse(data, result, exposureInPhotons), InputError);
+
+  ResponseSpec activityInPhotons;
+  activityInPhotons.metric = Metric::Activity;
+  activityInPhotons.unit = Unit::Photons;
+  EXPECT_THROW(buildResponse(data, result, activityInPhotons), InputError);
+
+  std::vector<std::int64_t> keys;
+  const std::vector<double> integral = intervalIntegral(data, inv, 0.0, 100.0, &keys);
+  // The counts are interval-only and the rates instant-only, as for every other family.
+  for (const Unit intervalOnly : {Unit::Photons, Unit::PhotonsPerSquareMeter}) {
+    ResponseSpec countAtAnInstant;
+    countAtAnInstant.metric = Metric::Photon;
+    countAtAnInstant.unit = intervalOnly;
+    EXPECT_THROW(buildResponse(data, result, countAtAnInstant), InputError);
+  }
+  for (const Unit instantOnly : {Unit::PhotonsPerSecond, Unit::PhotonsPerSquareMeterPerSecond}) {
+    ResponseSpec rateOverAWindow;
+    rateOverAWindow.metric = Metric::Photon;
+    rateOverAWindow.unit = instantOnly;
+    EXPECT_THROW(buildIntervalResponse(data, keys, integral, 0.0, 100.0, rateOverAWindow),
+                 InputError);
+  }
+}
+
+// An unmodelled continuum understates a photon count exactly as it understates an exposure:
+// the flag, the energy fraction, and the ranking must all carry it. And the optical-depth
+// caveat attaches only to the quantity that actually used the point geometry -- a strength
+// number has no path to be thick, a fluence number carries the path it was built in.
+TEST(ResponsePhoton, CarriesTheCaveatsTheMetricActuallyUsed) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  arrays.emEnergyEv = {0.0, 2.0e6, 0.0};
+  arrays.continuumPhotonEv = {0.0, 1.0e6, 0.0};  // half the emitter's photon energy
+  synth::addLines(arrays, 1, {1.0e6}, {1.0});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec strength;
+  strength.metric = Metric::Photon;
+  strength.unit = Unit::PhotonsPerSecond;
+  const ResponseTable strengthTable = buildResponse(data, result, strength);
+
+  int flagged = 0;
+  for (const int flags : strengthTable.flags) {
+    flagged += (flags & kFlagUnmodeledContinuum) != 0 ? 1 : 0;
+  }
+  ASSERT_EQ(flagged, 1) << "the emitter should be flagged when the metric is photon strength";
+  ASSERT_EQ(strengthTable.unmodeledEnergyFraction.size(), 1u);
+  EXPECT_NEAR(strengthTable.unmodeledEnergyFraction[0], 0.5, 1e-9);
+  EXPECT_NEAR(rank(strengthTable, 0, RankRequest{}).unmodeledEnergyFraction, 0.5, 1e-9);
+  EXPECT_TRUE(strengthTable.meanOpticalDepth.empty())
+      << "a strength number at no distance has no air path to be thick";
+
+  ResponseSpec fluence = strength;
+  fluence.unit = Unit::PhotonsPerSquareMeterPerSecond;
+  fluence.geometry.distanceM = 100.0;
+  const ResponseTable fluenceTable = buildResponse(data, result, fluence);
+
+  flagged = 0;
+  for (const int flags : fluenceTable.flags) {
+    flagged += (flags & kFlagUnmodeledContinuum) != 0 ? 1 : 0;
+  }
+  ASSERT_EQ(flagged, 1) << "the emitter should be flagged when the metric is photon fluence";
+  ASSERT_EQ(fluenceTable.meanOpticalDepth.size(), 1u);
+  const double expectedDepth =
+      exposure::airMassAttenuation(1.0e6) * fluence.geometry.airDensityKgM3 * 100.0;
+  EXPECT_NEAR(fluenceTable.meanOpticalDepth[0], expectedDepth, expectedDepth * 1e-12);
+
+  // Activity remains caveat-free: the flags describe a photon model it never ran.
+  for (const int flags : buildResponse(data, result, ResponseSpec{}).flags) {
+    EXPECT_EQ(flags & kFlagUnmodeledContinuum, 0);
+  }
+}
+
 // --- unit spellings -----------------------------------------------------------
 
 // The CLI and the Python binding each carried their own table of spellings, and they had
@@ -938,9 +1250,19 @@ TEST(ResponseExposure, ActivityCarriesNoUnmodelledFlagEither) {
 // table, derived from the names the reports print, is what makes "a notebook and a terminal
 // never disagree" structural rather than a promise.
 TEST(Units, AcceptEverySpellingTheyPrint) {
-  const Unit all[] = {Unit::Becquerel,       Unit::Curie,       Unit::Decays,
-                      Unit::RoentgenPerHour, Unit::GrayPerHour, Unit::SievertPerHour,
-                      Unit::Roentgen,        Unit::Gray,        Unit::Sievert};
+  const Unit all[] = {Unit::Becquerel,
+                      Unit::Curie,
+                      Unit::Decays,
+                      Unit::RoentgenPerHour,
+                      Unit::GrayPerHour,
+                      Unit::SievertPerHour,
+                      Unit::Roentgen,
+                      Unit::Gray,
+                      Unit::Sievert,
+                      Unit::PhotonsPerSecond,
+                      Unit::Photons,
+                      Unit::PhotonsPerSquareMeterPerSecond,
+                      Unit::PhotonsPerSquareMeter};
   for (const Unit unit : all) {
     Unit parsed = Unit::Becquerel;
     ASSERT_TRUE(parseUnit(unitName(unit), parsed)) << unitName(unit);
@@ -970,7 +1292,7 @@ TEST(Units, RejectWhatIsNotAUnit) {
 // Naming no unit is the ordinary invocation, so the default has to satisfy both the metric and
 // the domain -- otherwise the simplest command fails on a unit nobody chose.
 TEST(Units, DefaultSatisfiesBothTheMetricAndTheDomain) {
-  for (const Metric metric : {Metric::Activity, Metric::Exposure}) {
+  for (const Metric metric : {Metric::Activity, Metric::Exposure, Metric::Photon}) {
     for (const Domain domain : {Domain::Instant, Domain::Interval}) {
       const Unit unit = defaultUnit(metric, domain);
       EXPECT_TRUE(unitSuitsMetric(unit, metric)) << unitName(unit);
@@ -978,6 +1300,14 @@ TEST(Units, DefaultSatisfiesBothTheMetricAndTheDomain) {
       EXPECT_EQ(requireUnit("", metric, domain), unit);
     }
   }
+  // The photon default is the STRENGTH unit in both domains: a photon answer that does not
+  // name a distance must not silently become one at some distance.
+  EXPECT_EQ(defaultUnit(Metric::Photon, Domain::Instant), Unit::PhotonsPerSecond);
+  EXPECT_EQ(defaultUnit(Metric::Photon, Domain::Interval), Unit::Photons);
+  EXPECT_FALSE(isFluenceUnit(defaultUnit(Metric::Photon, Domain::Instant)));
+  EXPECT_FALSE(isFluenceUnit(defaultUnit(Metric::Photon, Domain::Interval)));
+  EXPECT_TRUE(isFluenceUnit(Unit::PhotonsPerSquareMeterPerSecond));
+  EXPECT_TRUE(isFluenceUnit(Unit::PhotonsPerSquareMeter));
 }
 
 // The message has to name the spellings that would have worked; "not a unit" alone leaves the
@@ -991,6 +1321,16 @@ TEST(Units, RequireThrowsNamingTheSpellingsThatWouldHaveWorked) {
     EXPECT_NE(what.find("rem"), std::string::npos) << what;
     EXPECT_NE(what.find("Gy/h"), std::string::npos) << what;
     EXPECT_NE(what.find("decays"), std::string::npos) << what;
+  }
+
+  try {
+    requireUnit("rem", Metric::Photon, Domain::Instant);
+    FAIL() << "expected InputError";
+  } catch (const InputError& e) {
+    const std::string what = e.what();
+    EXPECT_NE(what.find("rem"), std::string::npos) << what;
+    EXPECT_NE(what.find("photons/s"), std::string::npos) << what;
+    EXPECT_NE(what.find("photons/m2/s"), std::string::npos) << what;
   }
 }
 

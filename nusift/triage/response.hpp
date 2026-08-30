@@ -39,16 +39,21 @@ class NuclearData;
 enum class Metric {
   Activity,  // decays per second, or a count of decays over an interval
   Exposure,  // photon exposure rate, or exposure accrued over an interval
+  // Photon output, in the quantity a detector or a transport code wants rather than the dose
+  // the photons would make: how many photons are emitted (strength), and how many arrive at a
+  // point (fluence). Energy-free on purpose -- it is the exposure kernel with the kerma factor
+  // removed, so a missing dose model cannot make the source term wrong.
+  Photon,
 };
 
 enum class Aggregate {
   Nuclide,
   MassChain,  // isobars: everything sharing a mass number A
   Element,    // everything sharing an atomic number Z
-  // One column per discrete photon line. Exposure only -- a line has no activity of its own,
-  // it is a way its emitter's decays get out. This is the aggregate no tool that collapses a
-  // spectrum to a single per-nuclide constant can offer, and it is what a shielding or
-  // detector question actually needs: not "which nuclide", but "which energy".
+  // One column per discrete photon line. Exposure and photon metrics only -- a line has no
+  // activity of its own, it is a way its emitter's decays get out. This is the aggregate no
+  // tool that collapses a spectrum to a single per-nuclide constant can offer, and it is what
+  // a shielding or detector question actually needs: not "which nuclide", but "which energy".
   GammaLine,
 };
 
@@ -73,6 +78,14 @@ enum class Unit {
   Roentgen,  // interval only
   Gray,      // interval only
   Sievert,   // interval only
+
+  // Photon. Strength (no geometry) and fluence at the point the geometry names (with one),
+  // each as a rate and as a count over an interval. The existing unit gating draws the same
+  // rate-versus-count line here as everywhere else.
+  PhotonsPerSecond,          // instant: photons emitted per second
+  Photons,                   // interval only: photons emitted over the window
+  PhotonsPerSquareMeterPerSecond,  // instant: fluence rate at the point
+  PhotonsPerSquareMeter,     // interval only: fluence at the point over the window
 };
 
 // Which metric a unit can express. Reporting exposure in becquerel is not a rounding error,
@@ -83,6 +96,12 @@ bool unitSuitsMetric(Unit unit, Metric metric);
 // total; a count of decays cannot describe an instant. Checked at the boundary so the error
 // names the mismatch instead of silently reporting a number in the wrong dimension.
 bool unitSuitsDomain(Unit unit, Domain domain);
+
+// The photon units that carry the point geometry: the fluence at the distance, rather than
+// the strength at the source. Named once because the weight, the line assembler, and the
+// report header all have to agree about which geometry a photon number rides on.
+bool isFluenceUnit(Unit unit);
+
 const char* unitName(Unit unit);
 
 // Parse a unit spelling, case-insensitively against the names unitName() prints -- so "Bq",
@@ -204,10 +223,11 @@ struct ResponseSpec {
   Aggregate aggregate = Aggregate::Nuclide;
   Unit unit = Unit::Becquerel;
 
-  // Used only by Metric::Exposure. Held here rather than passed separately because the
-  // geometry is part of what the resulting numbers MEAN -- an exposure table without the
-  // distance it was computed at is not interpretable, and keeping them together makes it hard
-  // to report one without the other.
+  // Used by Metric::Exposure and by the photon fluence units. Held here rather than passed
+  // separately because the geometry is part of what the resulting numbers MEAN -- an exposure
+  // table without the distance it was computed at is not interpretable, and keeping them
+  // together makes it hard to report one without the other. The photon strength units ignore
+  // it, which is what makes them the metric's geometry-free default.
   exposure::PointSourceGeometry geometry;
 };
 

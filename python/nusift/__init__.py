@@ -1,4 +1,4 @@
-"""NuSIFT: which isotopes dominate activity or exposure, and when.
+"""NuSIFT: which isotopes dominate activity, exposure, or photon output, and when.
 
 Given an isotopic inventory -- born from burnup, activation, or fission -- decay it forward
 and rank what contributes, by nuclide, mass chain, element, or individual photon line.

@@ -7,6 +7,7 @@
 #include "nusift/exposure/air_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/nucdata/photon_lines.hpp"
+#include "nusift/units.hpp"
 
 namespace nusift::exposure {
 namespace {
@@ -267,12 +268,97 @@ TEST(PointSource, BuildupIsACleanMultiplicativeScale) {
               exposureRate(spanOf(lines), 1.0e9, plain) * 1e-12);
 }
 
+// --- the fluence kernel ------------------------------------------------------
+//
+// Fluence shares its transport with exposure: the same inverse-square spreading, the same air
+// attenuation, the same buildup. The only difference is that the kerma-to-exposure conversion
+// is left out. Every test in this section checks that identity directly, so a change to one
+// kernel cannot move the other's numbers without being seen.
+
+// Exposure is fluence times the kerma conversion, so the ratio of the two per-energy
+// coefficients must be exactly that conversion at every energy. If the kernels ever
+// diverged, every fluence number would be silently wrong in exactly the places where the
+// exposure is still right.
+TEST(PointSource, FluenceCoefficientIsTheExposureKernelWithoutKerma) {
+  const PointSourceGeometry geometry;
+  for (const double energy : {1.0e4, 1.0e5, 6.61657e5, 2.0e6, 1.0e7}) {
+    const double conversion = energy * units::kEvToJ * airMassEnergyAbsorption(energy) *
+                              units::kSecondsPerHour / units::kGyPerR;
+    const double exposure = pointExposureCoeff(energy, geometry);
+    EXPECT_NEAR(pointFluenceCoeff(energy, geometry) * conversion, exposure, exposure * 1e-12)
+        << "at " << energy << " eV";
+  }
+}
+
+// What a person can check on paper: the per-becquerel fluence rate is the sum over the
+// spectrum of (1 / 4 pi r^2) times the exponential attenuation times the buildup, weighted
+// by intensity -- and the rate scales linearly with the activity.
+TEST(PointSource, FluenceRateMatchesSpreadingAttenuationAndBuildup) {
+  const std::vector<GammaLine> lines = {{661657.0, 0.9, SpectrumType::Gamma},
+                                        {1.0e6, 0.1, SpectrumType::Gamma}};
+  PointSourceGeometry geometry;
+  geometry.distanceM = 3.0;
+  geometry.buildup = 2.5;
+
+  const double d = geometry.distanceM;
+  double expected = 0.0;
+  for (const auto& line : lines) {
+    expected += line.intensity / (4.0 * M_PI * d * d) *
+                std::exp(-airMassAttenuation(line.energyEv) * geometry.airDensityKgM3 * d) *
+                geometry.buildup;
+  }
+
+  EXPECT_DOUBLE_EQ(fluenceRatePerBecquerel(spanOf(lines), geometry), expected);
+  // Two identical emitters double the fluence: the coefficient is linear in the spectrum.
+  std::vector<GammaLine> doubled = lines;
+  doubled.insert(doubled.end(), lines.begin(), lines.end());
+  EXPECT_DOUBLE_EQ(fluenceRatePerBecquerel(spanOf(doubled), geometry), 2.0 * expected);
+}
+
+// With attenuation off, a unit-intensity line at 1 m is exactly 1 / (4 pi) photons per
+// square metre per second per becquerel, and the inverse-square scaling is exact: there is
+// nowhere for an error in the geometric term to hide.
+TEST(PointSource, FluenceIsExactlyInverseSquareInVacuum) {
+  const std::vector<GammaLine> lines = {{661657.0, 0.9, SpectrumType::Gamma}};
+  const std::vector<GammaLine> unity = {{661657.0, 1.0, SpectrumType::Gamma}};
+  PointSourceGeometry geometry;
+  geometry.airAttenuation = false;
+
+  geometry.distanceM = 1.0;
+  const double atOne = fluenceRatePerBecquerel(spanOf(lines), geometry);
+  geometry.distanceM = 2.0;
+  const double atTwo = fluenceRatePerBecquerel(spanOf(lines), geometry);
+  geometry.distanceM = 10.0;
+  const double atTen = fluenceRatePerBecquerel(spanOf(lines), geometry);
+
+  EXPECT_NEAR(atTwo, atOne / 4.0, atOne * 1e-14);
+  EXPECT_NEAR(atTen, atOne / 100.0, atOne * 1e-14);
+  geometry.distanceM = 1.0;
+  EXPECT_DOUBLE_EQ(fluenceRatePerBecquerel(spanOf(unity), geometry), 1.0 / (4.0 * M_PI));
+}
+
+// The guards the exposure path has must hold on the fluence path as well: a zero distance
+// would put an infinity into a report, and a zero buildup a number that looks meaningful.
+TEST(PointSource, FluenceRefusesAnImpossibleGeometry) {
+  const std::vector<GammaLine> lines = {{661657.0, 0.9, SpectrumType::Gamma}};
+  PointSourceGeometry atSource;
+  atSource.distanceM = 0.0;
+  EXPECT_THROW(pointFluenceCoeff(661657.0, atSource), InputError);
+  EXPECT_THROW(fluenceRatePerBecquerel(spanOf(lines), atSource), InputError);
+
+  PointSourceGeometry noBuildup;
+  noBuildup.buildup = 0.0;
+  EXPECT_THROW(pointFluenceCoeff(661657.0, noBuildup), InputError);
+  EXPECT_THROW(fluenceRatePerBecquerel(spanOf(lines), noBuildup), InputError);
+}
+
 TEST(PointSource, ANuclideWithNoLinesHasNoExposure) {
   const std::vector<GammaLine> none;
   const PointSourceGeometry geometry;
   EXPECT_DOUBLE_EQ(exposureRate(spanOf(none), 1.0e15, geometry), 0.0);
   EXPECT_DOUBLE_EQ(gammaConstant(spanOf(none)), 0.0);
   EXPECT_DOUBLE_EQ(meanOpticalDepth(spanOf(none), geometry), 0.0);
+  EXPECT_DOUBLE_EQ(fluenceRatePerBecquerel(spanOf(none), geometry), 0.0);
 }
 
 // --- the air path ----------------------------------------------------------

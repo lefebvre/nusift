@@ -30,6 +30,13 @@
       "architecture": "x64"
     },
     {
+      "name": "dev-linux",
+      "displayName": "Developer build (Linux, system packages)",
+      "description": "The Linux counterpart of dev-windows: the dev configuration with no vcpkg toolchain, finding HDF5 and Eigen from the system.",
+      "inherits": "base",
+      "generator": "Ninja"
+    },
+    {
       "name": "release",
       "displayName": "Installable build (requires an installed cram and a system Eigen)",
       "description": "The runtime configuration. Point CMAKE_PREFIX_PATH at a cram install prefix; this is the only configuration that can export a package.",
@@ -62,6 +69,7 @@
   "buildPresets": [
     { "name": "dev", "configurePreset": "dev" },
     { "name": "dev-windows", "configurePreset": "dev-windows", "configuration": "Release" },
+    { "name": "dev-linux", "configurePreset": "dev-linux" },
     { "name": "release", "configurePreset": "release" },
     { "name": "staging", "configurePreset": "staging" },
     { "name": "asan", "configurePreset": "asan" }
@@ -71,6 +79,13 @@
       "name": "unit",
       "displayName": "Fast unit tests (no data files)",
       "configurePreset": "dev",
+      "filter": { "include": { "label": "unit" } },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "unit-linux",
+      "displayName": "Fast unit tests (no data files, dev-linux tree)",
+      "configurePreset": "dev-linux",
       "filter": { "include": { "label": "unit" } },
       "output": { "outputOnFailure": true }
     },

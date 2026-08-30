@@ -35,10 +35,15 @@ spaces:
 | --- | --- | --- | --- |
 | Activity | `λᵢ` | Bq | decays |
 | Exposure | `λᵢ · Σ_j y_j k(E_j)` | R/h | R |
+| Photon | `λᵢ · Σ_j y_j` · `λᵢ · Σ_j y_j f(E_j)` | photons/s · photons/m²/s | photons · photons/m² |
 
-Both metrics are λ times *something*: activity stops there, exposure carries on into the photon
-spectrum. That shared factor is not a coincidence — every quantity NuSIFT reports is per-decay,
-so it is proportional to the decay rate, and the metric is what each decay is worth.
+Every metric is λ times *something*: activity stops there; exposure and photon fluence carry on
+into the photon transport (`k(E_j)` and `f(E_j)` of [Exposure §1](exposure.md#1-the-model-in-full));
+and photon strength stops at the discrete photon yield, `Σ_j y_j` — geometry-free, the only
+metric that is a property of the inventory alone, which is what makes it the one to compare
+inventories with before a site has been chosen. That shared factor is not a coincidence — every
+quantity NuSIFT reports is per-decay, so it is proportional to the decay rate, and the metric is
+what each decay is worth.
 
 **Domain is a separate axis from metric**, which is why the same weight serves both columns: λ
 against atoms is a rate in becquerel; λ against atom-seconds is a count of decays. One weight,
@@ -51,7 +56,8 @@ creeping into the physics.
 
 ### Units are gated by both metric and domain
 
-`decays`, `R`, `Gy`, `Sv` are interval-only; `Bq`, `Ci`, `R/h`, `Gy/h`, `Sv/h` are instant-only.
+`decays`, `R`, `Gy`, `Sv`, `photons`, `photons/m2` are interval-only; `Bq`, `Ci`, `R/h`, `Gy/h`,
+`Sv/h`, `photons/s`, `photons/m2/s` are instant-only.
 Asking for the wrong one is refused with a message that says which axis was violated:
 
 ```console
@@ -93,13 +99,16 @@ actually address.
 ### Line aggregation
 
 A line's weight is `λᵢ · y_ij · k(E_j)`: the emitter's decay rate, the photons per decay at that
-energy, and the geometry coefficient for that energy. Multiplied by the emitter's atom count it
-gives what that one line contributes — the same atoms as every other aggregate, weighted more
-finely.
+energy, and the geometry coefficient for that energy — the fluence coefficient `f(E_j)` for a
+photon fluence unit, and nothing at all for photon strength, where the weight is `λᵢ · y_ij` and
+a line is ranked by its intensity rather than the energy it carries. Multiplied by the
+emitter's atom count it gives what that one line contributes — the same atoms as every other
+aggregate, weighted more finely.
 
 A full evaluation carries on the order of 86000 lines (the figure the threshold was sized
-against) and a fission seed reaches thousands of emitters, so columns are thresholded: a line contributing less than **1e-6 of its own emitter's** exposure is
-dropped. Relative to the emitter rather than to the global total, deliberately — a global
+against) and a fission seed reaches thousands of emitters, so columns are thresholded: a line
+contributing less than **1e-6 of its own emitter's** value for the metric in force is dropped.
+Relative to the emitter rather than to the global total, deliberately — a global
 threshold would erase the entire spectrum of every minor nuclide, and *"which line dominates this
 nuclide"* is a question people ask. A dropped line still counts toward the table's total — it
 contributes, it just has no column — so the total by line is the total by nuclide exactly, and
@@ -178,15 +187,16 @@ dominance windows structurally cannot answer about a contributor that never lead
 
 A contributor carrying more than 5% of its photon energy in an unmodelled continuum is flagged,
 and the report footnotes the ranking with the **activity-weighted** magnitude of what is missing.
-The flag is set for exposure only: an incomplete photon spectrum understates an exposure and says
-nothing whatever about a count of decays, so an activity report carrying it would end with a
-paragraph about a metric it never computed.
+The flag is set for exposure and photon only: an incomplete photon spectrum understates a dose
+and a photon count alike and says nothing whatever about a count of decays, so an activity report
+carrying it would end with a paragraph about a metric it never computed.
 
-An exposure ranking carries one more footnote, for the omission the model makes by default: when
-the air path is thicker than about half a mean free path at the energies carrying the exposure
-and `--buildup` was left at 1.0, the report says so and gives the optical depth — see
-[Exposure §7](exposure.md#7-what-is-not-modelled-and-what-it-costs). Both caveats travel with the
-JSON output, as `unmodeled_energy_fraction`, `mean_optical_depth`, and `buildup`.
+An exposure or photon-fluence ranking carries one more footnote, for the omission the model makes
+by default: when the air path is thicker than about half a mean free path at the energies
+carrying the answer and `--buildup` was left at 1.0, the report says so and gives the optical
+depth — see [Exposure §7](exposure.md#7-what-is-not-modelled-and-what-it-costs). Photon strength
+names no distance and carries no such footnote, whatever the geometry record holds. Both caveats
+travel with the JSON output, as `unmodeled_energy_fraction`, `mean_optical_depth`, and `buildup`.
 
 ## 5. The same atoms, ranked twice
 
@@ -249,8 +259,9 @@ see [Interval integration §9](interval-integration.md#9-what-this-method-does-n
 
 Three formats — `text`, `csv`, `json` — from one set of ranking objects, so the numbers cannot
 differ between them. Every text report carries a header naming the store, its library and staging
-date, the seed provenance, and the geometry when the metric is exposure. For a triage answer the
-inputs that produced it are part of it.
+date, the seed provenance, and the geometry when the metric is exposure or photon fluence — the
+two answers that were computed at a point. For a triage answer the inputs that produced it are
+part of it.
 
 Each `--interval` gets its **own** report context rather than sharing the last one. The set of
 contributors carrying unmodelled continuum is a property of that window, and building one context

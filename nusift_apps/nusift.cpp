@@ -115,13 +115,15 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
                     "Integration window T1,T2, repeatable (e.g. 1h,30d)");
   }
 
-  app->add_option("--metric", options.metric, "activity or exposure")
-      ->check(CLI::IsMember({"activity", "exposure"}));
+  app->add_option("--metric", options.metric, "activity, exposure, or photon")
+      ->check(CLI::IsMember({"activity", "exposure", "photon"}));
   app->add_option("--by", options.aggregate,
-                  "Aggregate: nuclide, mass-chain, element, line (line is exposure only)")
+                  "Aggregate: nuclide, mass-chain, element, line (line is exposure or photon "
+                  "only)")
       ->check(CLI::IsMember({"nuclide", "mass-chain", "element", "line"}));
   app->add_option("--units", options.unit,
-                  "activity: Bq, Ci, decays;  exposure: R/h, Gy/h, Sv/h, R, Gy, Sv");
+                  "activity: Bq, Ci, decays;  exposure: R/h, Gy/h, Sv/h, R, Gy, Sv;  photon: "
+                  "photons/s, photons, photons/m2/s, photons/m2");
 
   // Exposure geometry. An exposure number is uninterpretable without the distance it was
   // computed at, so these are reported in the output header alongside the values.
@@ -159,7 +161,13 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
 }
 
 Metric metricFrom(const std::string& text) {
-  return text == "exposure" ? Metric::Exposure : Metric::Activity;
+  if (text == "exposure") {
+    return Metric::Exposure;
+  }
+  if (text == "photon") {
+    return Metric::Photon;
+  }
+  return Metric::Activity;
 }
 
 exposure::PointSourceGeometry geometryFrom(const CommonOptions& options) {
@@ -223,10 +231,14 @@ NuclearData openStore(const CommonOptions& options, const char* argv0, std::stri
   return NuclearData::open(resolved);
 }
 
-// One line describing how an exposure was computed. Empty for activity, which needs no model
-// beyond the decay constants.
-std::string describeGeometry(const CommonOptions& options, Metric metric) {
-  if (metric != Metric::Exposure) {
+// One line describing how an exposure -- or a photon fluence -- was computed. Empty for
+// activity, which needs no model beyond the decay constants, and for photon STRENGTH, which
+// ignores the geometry by definition: a line under a number that does not use it would imply
+// a model the number was not computed with.
+std::string describeGeometry(const CommonOptions& options, Metric metric, Unit unit) {
+  const bool usesGeometry =
+      metric == Metric::Exposure || (metric == Metric::Photon && isFluenceUnit(unit));
+  if (!usesGeometry) {
     return {};
   }
   char distance[32];
@@ -426,7 +438,7 @@ int runAttribute(const CommonOptions& options, const char* argv0) {
   context.storeCreatedUtc = data.provenance().createdUtc;
   context.storeNuclideCount = data.size();
   context.seedProvenance = attribution.seedProvenance;
-  context.geometry = describeGeometry(options, spec.metric);
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
   writeAttribution(out.get(), attribution, context, format);
   return 0;
 }
@@ -452,7 +464,7 @@ int runRank(const CommonOptions& options, const char* argv0) {
   parseReportFormat(options.format, format);
   OutputStream out(options.output);
   ReportContext context = contextFor(data, storePath, inventory, table);
-  context.geometry = describeGeometry(options, spec.metric);
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
   writeRankings(out.get(), rankings, context, format);
   return 0;
 }
@@ -476,7 +488,7 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
   // the set of contributors carrying unmodelled continuum is a property of that interval --
   // building one context from the last table footnoted every ranking with the last interval's
   // emitters, which need not appear in the ranking they annotate.
-  const std::string geometry = describeGeometry(options, spec.metric);
+  const std::string geometry = describeGeometry(options, spec.metric, spec.unit);
   std::vector<Ranking> rankings;
   std::vector<ReportContext> contexts;
   for (const std::string& text : options.intervals) {
@@ -533,7 +545,7 @@ int runForecast(const CommonOptions& options, const char* argv0) {
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
   ReportContext context = contextFor(data, storePath, inventory, table);
-  context.geometry = describeGeometry(options, spec.metric);
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
   OutputStream out(options.output);
   writeForecast(out.get(), windows, tracks, table, context, format);
@@ -694,8 +706,8 @@ int runDataInfo(const std::string& storePath, const char* argv0) {
   }
   if (!data.hasPhotonLines()) {
     std::printf(
-        "\nNote: this store carries no photon lines, so exposure metrics are unavailable.\n"
-        "Stage from ENDF decay tapes to add them.\n");
+        "\nNote: this store carries no photon lines, so exposure and photon metrics are "
+        "unavailable.\nStage from ENDF decay tapes to add them.\n");
   }
   if (!data.hasAtomicWeights()) {
     std::printf(
@@ -841,8 +853,8 @@ int main(int argc, char** argv) {
   CommonOptions spectrumOptions;
   spectrumOptions.metric = "exposure";
   spectrumOptions.aggregate = "line";
-  CLI::App* spectrumCmd =
-      app.add_subcommand("spectrum", "Top contributing photon lines (exposure, by line)");
+  CLI::App* spectrumCmd = app.add_subcommand(
+      "spectrum", "Top contributing photon lines (by line; exposure by default)");
   addCommonOptions(spectrumCmd, spectrumOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
 
   CommonOptions attributeOptions;

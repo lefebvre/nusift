@@ -76,12 +76,12 @@ SeedAttribution attributeToSeed(const NuclearData& data, const Inventory& invent
   out.seedProvenance = inventory.provenance();
   out.buildup = spec.geometry.buildup;
 
-  // The forward solve the caveats need, paid only for exposure because activity carries
-  // neither of them. The adjoint produces the response and its decomposition but never forms
-  // n(T), and both warnings are properties of what is EMITTING at `time` -- the OTHER
+  // The forward solve the caveats need, paid only for exposure and photons because activity
+  // carries neither of them. The adjoint produces the response and its decomposition but never
+  // forms n(T), and both warnings are properties of what is EMITTING at `time` -- the OTHER
   // attribution of this number. Reporting an attributed exposure without them would leave the
   // same figure warned about under `rank` and silent under `attribute`.
-  if (spec.metric == Metric::Exposure) {
+  if (spec.metric == Metric::Exposure || spec.metric == Metric::Photon) {
     const double at[] = {time};
     const DecayResult forward = decay(data, inventory, at, options);
     ExposureCaveats caveats = exposureCaveats(data, forward.nuclideKeys, forward.atomsAt(0), spec);

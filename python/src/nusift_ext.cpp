@@ -54,7 +54,11 @@ Metric metricFrom(const std::string& text) {
   if (text == "exposure") {
     return Metric::Exposure;
   }
-  throw InputError("metric: \"" + text + "\" is not a metric (activity or exposure)");
+  if (text == "photon") {
+    return Metric::Photon;
+  }
+  throw InputError(
+      "metric: \"" + text + "\" is not a metric (activity, exposure, or photon)");
 }
 
 Aggregate aggregateFrom(const std::string& text) {
@@ -151,7 +155,7 @@ const char* domainName(Domain domain) {
 }  // namespace
 
 NB_MODULE(_core, m) {
-  m.doc() = "NuSIFT: which isotopes dominate activity or exposure, and when.";
+  m.doc() = "NuSIFT: which isotopes dominate activity, exposure, or photon output, and when.";
   m.attr("__version__") = nusift::kVersion;
 
   // Every NuSIFT error becomes a Python exception, and InputError derives from NusiftError so
@@ -477,9 +481,9 @@ NB_MODULE(_core, m) {
       .def_ro("time", &Ranking::time)
       .def_ro("unmodeled_energy_fraction", &Ranking::unmodeledEnergyFraction)
       .def_ro("mean_optical_depth", &Ranking::meanOpticalDepth,
-              "Exposure only: the air path in mean free paths at the energies carrying this "
-              "exposure. Past about 0.5 with buildup 1.0, scattered photons are a large "
-              "omission.")
+              "Exposure and photon fluence only: the air path in mean free paths at the "
+              "energies carrying this answer. Past about 0.5 with buildup 1.0, scattered "
+              "photons are a large omission.")
       .def_ro("buildup", &Ranking::buildup)
       .def_prop_ro("labels",
                    [](const Ranking& r) {
@@ -527,13 +531,13 @@ NB_MODULE(_core, m) {
       // ranking's number seen from the other side, so it is understated by the same amount.
       .def_ro("unmodeled_energy_fraction", &SeedAttribution::unmodeledEnergyFraction)
       .def_ro("mean_optical_depth", &SeedAttribution::meanOpticalDepth,
-              "Exposure only: the air path in mean free paths at the energies carrying this "
-              "exposure. Past about 0.5 with buildup 1.0, scattered photons are a large "
-              "omission.")
+              "Exposure and photon fluence only: the air path in mean free paths at the "
+              "energies carrying this answer. Past about 0.5 with buildup 1.0, scattered "
+              "photons are a large omission.")
       .def_ro("buildup", &SeedAttribution::buildup)
       .def_ro("unmodeled_continuum", &SeedAttribution::unmodeledContinuum,
-              "Exposure only: emitters carrying photon energy NuSIFT does not model, so their "
-              "contribution to this exposure is understated.")
+              "Exposure and photon only: emitters carrying photon energy NuSIFT does not "
+              "model, so their contribution to this figure is understated.")
       .def_prop_ro("labels",
                    [](const SeedAttribution& a) {
                      std::vector<std::string> names;
@@ -585,8 +589,9 @@ NB_MODULE(_core, m) {
             const ResponseTable& t = nb::cast<const ResponseTable&>(self);
             return view1d(t.meanOpticalDepth.data(), t.meanOpticalDepth.size(), self);
           },
-          "Exposure only, per time: the air path in mean free paths at the energies carrying "
-          "the exposure. Empty for activity.")
+          "Exposure and photon fluence only, per time: the air path in mean free paths at the "
+          "energies carrying the answer. Empty for activity and for photon strength, which "
+          "uses no geometry.")
       .def_prop_ro(
           "values",
           [](nb::handle self) {
