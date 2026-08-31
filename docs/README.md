@@ -13,7 +13,7 @@ that produced the number you are looking at.
 | 3 | [The decay solve](decay-solve.md) | The matrix, CRAM, the forward-closure pruning, time grids, threads, and determinism |
 | 4 | [Interval integration](interval-integration.md) | Time-integrated answers in closed form, and the cancellation guard |
 | 5 | [Exposure](exposure.md) | The photon transport model: lines, air attenuation, air kerma, and what it excludes |
-| 6 | [Ranking and forecasting](ranking.md) | Weights, aggregation, coverage, dominance windows, located events, and how a report states its own limits |
+| 6 | [Ranking and forecasting](ranking.md) | Weights, aggregation, coverage, dominance windows, located events, maximum allowable scale, and how a report states its own limits |
 | 7 | [Seed attribution](attribution.md) | The other attribution of the same number: which seeded nuclide a response is riding on, from one adjoint solve |
 
 ## The one design decision everything follows from

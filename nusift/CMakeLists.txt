@@ -22,6 +22,7 @@ add_library(nusift
   triage/attribution.cpp
   triage/forecast.cpp
   triage/events.cpp
+  triage/allowable.cpp
   io/time_spec.cpp
   io/inventory_io.cpp
   io/report.cpp)
@@ -97,6 +98,7 @@ if(NUSIFT_INSTALL)
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/exposure)
 
   install(FILES
+    triage/allowable.hpp
     triage/attribution.hpp
     triage/events.hpp
     triage/forecast.hpp
