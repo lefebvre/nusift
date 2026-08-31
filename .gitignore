@@ -55,3 +55,9 @@ BRANCH_REVIEW.md
 # The capability roadmap, same as the two above: a working document that is reasoned over
 # beside the tree rather than shipped with it.
 CAPABILITY_PLANNING.md
+
+# The ICRP publication the dose coefficients are read from. A 14 MB copyrighted document, and
+# the tree carries the TABLE rather than the source it was transcribed from -- cited in
+# validation/references/README.md the way every other published number here is cited, so
+# anyone can check the transcription against their own copy.
+ICRP-116.pdf
