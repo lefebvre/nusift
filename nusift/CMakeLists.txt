@@ -21,6 +21,7 @@ add_library(nusift
   triage/ranking.cpp
   triage/attribution.cpp
   triage/forecast.cpp
+  triage/events.cpp
   io/time_spec.cpp
   io/inventory_io.cpp
   io/report.cpp)
@@ -97,6 +98,7 @@ if(NUSIFT_INSTALL)
 
   install(FILES
     triage/attribution.hpp
+    triage/events.hpp
     triage/forecast.hpp
     triage/ranking.hpp
     triage/response.hpp

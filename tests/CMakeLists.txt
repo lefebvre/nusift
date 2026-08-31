@@ -37,6 +37,7 @@ add_executable(nusift_unit_tests
   unit/test_attribution.cpp
   unit/test_data_store.cpp
   unit/test_decay_engine.cpp
+  unit/test_events.cpp
   unit/test_forecast.cpp
   unit/test_inventory.cpp
   unit/test_inventory_io.cpp
