@@ -350,7 +350,66 @@ The two share the reasoning and the log-linear interpolation but not yet the cod
 change in as one more event kind is the natural next step and would remove the duplication. The
 engine is also library-level today: no CLI verb, report writer, or Python binding reaches it yet.
 
-## 8. Reporting
+## 8. Maximum allowable scale: how much is allowed
+
+Ranking, forecasting and located events all answer questions about the inventory in hand. A
+shipper, a holder or a waste generator asks a different one: *how much of this is allowed.* By
+what factor could the inventory be multiplied before the first limit binds, and how does that
+factor grow as the material decays.
+
+```
+s_max(t) = min  L_q / R_q(t)
+            q
+```
+
+over criteria the caller supplies, each a quantity (a `ResponseSpec`, exactly as a ranking would
+compute it) and a limit on it. The criterion achieving the minimum is the one that **binds**; the
+contributors driving its response are the nuclides that decide the answer, named in the aggregate
+the criterion was posed in.
+
+This is **exact** in the sense [interval-integration.md](interval-integration.md) uses, and for
+the same reason the attribution shares are: every response is a linear functional of the
+inventory, so multiplying the inventory by `s` multiplies every `R_q` by exactly `s`. The scale at
+which a criterion binds is a division. There is no search, no iteration, no convergence criterion
+and no tolerance — which the unit suite checks the only way that means anything, by multiplying
+the inventory *by the answer*, decaying it again, and requiring the binding criterion's response
+to land on its limit.
+
+What is not exact is anything the grid had to observe. `s_max(t)` is therefore reported per
+sample, and locating an instant on it — when the scale first reaches 1, which is the date the
+inventory as it stands becomes shippable — is the [event engine](#7-located-events-when-a-curve-reaches-a-value)'s
+business rather than this layer's. `scaleSeries()` hands the curve over, and the crossing comes
+back with the bracket that found it like any other.
+
+### What this deliberately does not know
+
+Whether a criterion is legitimate, whether it is genuinely linear, and how a regulation composes
+several of them. A sum-of-fractions index, a per-table threshold, a package-type condition, a
+fissile exception: those are a **rule layer** above these weights, versioned with them, and none
+of it is here. A criterion is a quantity and a number, and the caller is the one asserting that
+dividing by it means something. Naming it is required for exactly that reason — a report that
+says the binding criterion is `""` has not said anything.
+
+The responses are built through the same path a report uses rather than by dotting weights
+against atoms directly. That costs a constant factor and buys the guarantee that the number
+checked against a limit is the number a ranking of the same spec would print — the one divergence
+this layer cannot afford, since the two are read side by side.
+
+### Nothing to constrain is not a large allowance
+
+A criterion whose response is zero permits any scale. It is reported as **unbounded** rather than
+folded away as a very large number, because "nothing here is limited by the transport index" and
+"the transport index allows 10¹⁸ times this" are different statements and only one of them is
+true. When every criterion is unbounded the time carries no scale at all and a `bounded` flag
+says so, rather than a zero that a caller would read as the opposite of what it means. It is the
+same rule the rest of the documentation follows: a silent zero and a real zero must never look
+alike.
+
+Criteria are instantaneous. An interval unit is an accrued total over a window, and a window is
+not what a possession or transport limit constrains, so such a criterion is refused rather than
+quietly reinterpreted.
+
+## 9. Reporting
 
 Three formats — `text`, `csv`, `json` — from one set of ranking objects, so the numbers cannot
 differ between them. Every text report carries a header naming the store, its library and staging
@@ -370,7 +429,7 @@ holds no rank; CSV and JSON carry a `pinned` column and field instead, because a
 cannot tell a row that placed from one fetched below the cut cannot tell a top-N from a top-N plus
 an aside. The CSV column is last, so adding it renumbered nothing anyone already reads by position.
 
-## 9. Source map
+## 10. Source map
 
 | File | Role |
 | --- | --- |
@@ -380,4 +439,6 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/forecast.cpp`](../nusift/triage/forecast.cpp) | `dominanceWindows`, crossing interpolation, `unionTopN`, `persistentTopN` |
 | [`nusift/triage/events.hpp`](../nusift/triage/events.hpp) | `EventSeries`, `TrajectoryEvent`, `LevelWindow`, and the missed-event semantics |
 | [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `crossings`, `extrema`, `windowsAbove`/`windowsBelow`, Illinois and golden-section refinement, and the table-backed series |
+| [`nusift/triage/allowable.hpp`](../nusift/triage/allowable.hpp) | `Criterion`, `CriterionHeadroom`, `AllowableScale`, and what the rule layer above them owns |
+| [`nusift/triage/allowable.cpp`](../nusift/triage/allowable.cpp) | `allowableScale`, the binding-criterion minimum, unbounded semantics, and `scaleSeries` |
 | [`nusift/io/report.cpp`](../nusift/io/report.cpp) | Text, CSV, and JSON writers, and the provenance header |

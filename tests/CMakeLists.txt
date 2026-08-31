@@ -34,6 +34,7 @@ add_executable(nusift_make_test_store tools/make_test_store.cpp)
 target_link_libraries(nusift_make_test_store PRIVATE nusift::nusift nusift_warnings)
 
 add_executable(nusift_unit_tests
+  unit/test_allowable.cpp
   unit/test_attribution.cpp
   unit/test_data_store.cpp
   unit/test_decay_engine.cpp
