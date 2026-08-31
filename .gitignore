@@ -51,3 +51,7 @@ CODE_REVIEW.md
 
 # The branch review notes, same as CODE_REVIEW.md above.
 BRANCH_REVIEW.md
+
+# The capability roadmap, same as the two above: a working document that is reasoned over
+# beside the tree rather than shipped with it.
+CAPABILITY_PLANNING.md
