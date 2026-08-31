@@ -602,7 +602,8 @@ void writeEventsText(std::ostream& out, const EventReport& report, const ReportC
     }
 
     if (!report.windows.empty()) {
-      out << "\n  above the level:\n";
+      const char* side = report.windowsBelowLevel ? "below" : "above";
+      out << "\n  " << side << " the level:\n";
       for (const LevelWindow& window : report.windows) {
         out << "    " << std::setw(10) << formatDuration(window.startSeconds) << " to "
             << std::setw(10) << formatDuration(window.endSeconds);
@@ -611,9 +612,9 @@ void writeEventsText(std::ostream& out, const EventReport& report, const ReportC
         if (!window.entryObserved && !window.exitObserved) {
           out << "   (open at both ends: never observed to rise above or fall below)";
         } else if (!window.entryObserved) {
-          out << "   (already above when the grid started)";
+          out << "   (already " << side << " when the grid started)";
         } else if (!window.exitObserved) {
-          out << "   (still above when the grid ended)";
+          out << "   (still " << side << " when the grid ended)";
         }
         out << '\n';
       }
@@ -645,19 +646,20 @@ void writeEventsCsv(std::ostream& out, const EventReport& report) {
   // Events and windows in one table under a `kind` column: two tables would not be a CSV, and
   // a reader that got only the crossings would lose which grid edges were never observed.
   out << "kind,time_s,end_s,value,bracket_start_s,bracket_end_s,located_to_s,refined,converged,"
-         "entry_observed,exit_observed\n";
+         "entry_observed,exit_observed,side\n";
   for (const TrajectoryEvent& event : report.events) {
     out << eventKindName(event.kind) << ',' << shortestRoundTrip(event.timeSeconds) << ",,"
         << shortestRoundTrip(event.value) << ',' << shortestRoundTrip(event.bracketStartSeconds)
         << ',' << shortestRoundTrip(event.bracketEndSeconds) << ','
         << shortestRoundTrip(event.locatedToSeconds) << ',' << (event.refined ? "true" : "false")
-        << ',' << (event.converged ? "true" : "false") << ",,\n";
+        << ',' << (event.converged ? "true" : "false") << ",,,\n";
   }
   for (const LevelWindow& window : report.windows) {
     out << "window," << shortestRoundTrip(window.startSeconds) << ','
         << shortestRoundTrip(window.endSeconds) << ",,,,,,,"
         << (window.entryObserved ? "true" : "false") << ','
-        << (window.exitObserved ? "true" : "false") << '\n';
+        << (window.exitObserved ? "true" : "false") << ','
+        << (report.windowsBelowLevel ? "below" : "above") << '\n';
   }
 }
 
@@ -685,7 +687,8 @@ void writeEventsJson(std::ostream& out, const EventReport& report) {
         << ", \"converged\": " << (event.converged ? "true" : "false") << "}"
         << (i + 1 < report.events.size() ? ",\n" : "\n");
   }
-  out << "  ],\n  \"windows\": [\n";
+  out << "  ],\n  \"windows_side\": \"" << (report.windowsBelowLevel ? "below" : "above")
+      << "\",\n  \"windows\": [\n";
   for (std::size_t i = 0; i < report.windows.size(); ++i) {
     const LevelWindow& window = report.windows[i];
     out << "    {\"start_s\": " << jsonNumber(window.startSeconds)

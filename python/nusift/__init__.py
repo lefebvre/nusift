@@ -26,6 +26,20 @@ and rank what contributes, by nuclide, mass chain, element, or individual photon
     for e in tab.crossings(1e-3):
         print(e.kind, "at", e.time_s, "known to", e.located_to_s)
 
+    # ...narrowed by re-solving inside that bracket, rather than interpolated across it:
+    ev = nusift.evaluator(nd, inv, metric="exposure", units="Sv/h")
+    for e in tab.crossings(1e-3, refine=ev):
+        print(e.time_s, e.refined, e.located_to_s)
+
+    # When to do a fixed-length job, and when it fits a budget. Every sample is an exact
+    # interval integral, so this curve costs solves the rate curve does not:
+    task = nusift.task_series(nd, inv, nusift.logspace("1h", "1y", 40), "1h",
+                              metric="exposure", units="R")
+    for e in task.extrema():
+        print("best start" if e.kind == "minimum" else "worst start", e.time_s)
+    for w in task.windows_below(0.5):
+        print("may start between", w.start_s, "and", w.end_s)
+
     # And how much is allowed, against limits you supply:
     limits = [nusift.Criterion("A2 transport", 3.7e13, metric="activity", units="Bq")]
     for at in nusift.allowable_scale(nd, res, limits):
@@ -52,6 +66,7 @@ from ._core import (  # noqa: F401
     SeedShare,
     DecayResult,
     DominanceWindow,
+    EventSeries,
     InputError,
     IntervalResult,
     Intervention,
@@ -66,6 +81,7 @@ from ._core import (  # noqa: F401
     Ranking,
     RemovedContributor,
     Removal,
+    ResponseEvaluator,
     ResponseTable,
     TrajectoryEvent,
     __version__,
@@ -73,6 +89,7 @@ from ._core import (  # noqa: F401
     attribute,
     compare_interventions,
     decay,
+    evaluator,
     fissions_from_kt,
     format_duration,
     integrate,
@@ -83,6 +100,7 @@ from ._core import (  # noqa: F401
     read_inventory,
     response,
     seed_fission,
+    task_series,
 )
 from ._data import default_store_path  # noqa: F401
 
@@ -95,6 +113,7 @@ __all__ = [
     "SeedShare",
     "DecayResult",
     "DominanceWindow",
+    "EventSeries",
     "InputError",
     "IntervalResult",
     "Intervention",
@@ -109,6 +128,7 @@ __all__ = [
     "Ranking",
     "Removal",
     "RemovedContributor",
+    "ResponseEvaluator",
     "ResponseTable",
     "TrajectoryEvent",
     "__version__",
@@ -117,6 +137,7 @@ __all__ = [
     "compare_interventions",
     "decay",
     "default_store_path",
+    "evaluator",
     "fissions_from_kt",
     "format_duration",
     "integrate",
@@ -127,4 +148,5 @@ __all__ = [
     "read_inventory",
     "response",
     "seed_fission",
+    "task_series",
 ]

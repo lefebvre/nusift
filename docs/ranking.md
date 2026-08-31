@@ -224,11 +224,17 @@ samples with the same leader into runs, and turns each run into a window.
 
 Three decisions shape what comes out:
 
-**Boundaries are interpolated crossings, not sample times.** Between consecutive samples both
+**Boundaries are located crossings, not sample times.** A leader change is the ratio of the two
+contenders passing one, and it is handed to the [event engine](#7-located-events-when-a-curve-reaches-a-value)
+rather than located here: one code path places a crossing, so a boundary in a forecast and a
+crossing from `when` cannot disagree about the same instant. Between consecutive samples both
 contenders are close to exponential, so `log(a/b)` is close to linear in time and its zero is the
-crossing. Reporting the sample index instead would quantise every boundary to the grid. When the
-ratio does not actually change sign across the interval — which happens only if the caller asked
-about the wrong interval — it falls back to the midpoint.
+crossing — which is what the engine's log-linear interpolation of a positive level reduces to for
+a ratio against one, so routing through it did not move any boundary. Reporting the sample index
+instead would quantise every boundary to the grid. When the ratio does not actually change sign
+across the interval — which happens only if the caller asked about the wrong interval — it falls
+back to the midpoint. The overload taking a `ResponseEvaluator` refines each boundary by solving
+inside its bracket, on the same terms and at the same cost as any other refined event.
 
 **Runs the grid barely resolved are absorbed** (`minSamples`, default 2). Near a crossover two
 contenders trade places sample to sample within numerical noise, and reporting six one-sample
@@ -331,7 +337,9 @@ freshly separated Sr-90, sealed Ra-226 and Pu-241 all have a minimum in accrued 
 location is where the answer to that question changes sign.
 
 `windowsAbove` and `windowsBelow` pair the crossings into intervals and partition the grid between
-them. A window whose entry or exit the grid never observed is **flagged open at that end** rather
+them — the CLI's `--windows above|below` chooses, defaulting to above for a rate and below for a
+task budget, since the same pair of instants is a stay time on one side and a permitted start on
+the other. A window whose entry or exit the grid never observed is **flagged open at that end** rather
 than clipped: reporting the grid's own first sample as an entry time would invent a crossing, and
 "it was already above when we started looking" is a different statement from "it rose above at
 this instant".
@@ -343,18 +351,49 @@ where its denominator has not grown in yet, rather than reporting an infinity th
 front of every real crossing as a spurious one; a denominator that returns to zero *later* is a
 pole inside the grid, no bracket spanning it would mean anything, and that is refused.
 
-### What is not folded in yet
+### The fixed-duration task
 
-`dominanceWindows()` still locates its own boundaries in [`forecast.cpp`](../nusift/triage/forecast.cpp).
-The two share the reasoning and the log-linear interpolation but not yet the code; folding a leader
-change in as one more event kind is the natural next step and would remove the duplication.
+Everything above searches a curve of *rates*. "How much does a one-hour job cost, and when should
+it be done" is not a question about that curve: it is a question about the total **accrued** over a
+window of fixed length, as a function of when the window starts, and no point of it is a point of
+the rate curve.
+
+`taskSeries()` builds exactly that, one exact interval integral per start time, and then every
+search above applies to it unchanged — which is the point of making it a series rather than a
+command of its own:
+
+| search | the question it becomes |
+| --- | --- |
+| `extrema` | the best and the worst time to start. For an ingrowth-fed mixture the best start is not the earliest, and not the latest |
+| `crossings` | when the job first fits a budget, and when it stops fitting |
+| `windowsBelow` | every stretch of start times the budget allows |
+
+The units are interval units — roentgen rather than roentgen per hour, decays rather than
+becquerel — because the values are accrued totals, and `buildIntervalResponse()` refuses the rest
+on the same gating every other interval answer uses. What the budget *means* is the caller's:
+today's sievert column is air kerma with a photon weighting factor of 1
+([exposure.md §6](exposure.md)), so a worker-dose budget is not yet what this inverts.
+
+This is the expensive curve in the library, and deliberately not disguised as a cheap one. Each
+sample is an interval integral — two to three solves rather than one, with nothing shared between
+samples — so a sixty-point start grid is a couple of hundred solves, seconds rather than
+milliseconds, and refinement adds more. What it buys is a curve whose every point is exact within
+its own window, which is what makes inverting it worth doing at all.
+
+### Reaching it
 
 The engine is reachable from all three front ends: `nusift when` on the command line,
-`ResponseTable.crossings` / `.extrema` / `.windows_above` / `.windows_below` from Python, and
-`writeEvents()` in the report writers. Each carries the bracket, because an instant without one
-claims a precision the sampling does not support — and a series built from a table has no
-evaluator, so everything those three produce is interpolated inside its grid bracket rather than
-refined.
+`ResponseTable.crossings` / `.extrema` / `.windows_above` / `.windows_below` and
+`nusift.task_series` from Python, and `writeEvents()` in the report writers. Each carries the
+bracket, because an instant without one claims a precision the sampling does not support.
+
+Refinement is **opt in**, because it is solves: `--refine` on `when` and on `forecast`,
+`refine=` taking a `nusift.evaluator(...)` from Python. Without it a series built from a table
+carries samples and no evaluator, so what comes back is interpolated inside its grid bracket and
+says so — `refined` is false and the reported width is the whole interval. An evaluator has to
+describe the same curve the table does, down to the geometry; one built for another metric, unit
+or distance is refused rather than quietly narrowing an event on one curve with values from
+another.
 
 ## 8. Maximum allowable scale: how much is allowed
 

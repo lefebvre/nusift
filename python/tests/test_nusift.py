@@ -701,6 +701,62 @@ def test_windows_flag_the_edges_the_grid_never_observed(data, result):
 
 
 @needs_store
+def test_an_evaluator_narrows_events_a_table_alone_interpolates(data, result):
+    """The table carries samples; the evaluator carries a way to ask what happens between two of
+    them. Same grid, same crossing, placed by solving instead of by interpolating -- and
+    `refined` says which happened rather than leaving it to be inferred."""
+    inv, res = result
+    table = nusift.response(data, res, metric="activity")
+    level = float(table.totals[0]) / 10.0
+
+    ev = nusift.evaluator(data, inv, metric="activity")
+    wide = table.crossings(level)[0]
+    narrow = table.crossings(level, refine=ev)[0]
+
+    assert wide.refined is False
+    assert narrow.refined is True
+    assert narrow.located_to_s < wide.located_to_s / 100.0
+    assert wide.bracket_start_s <= narrow.time_s <= wide.bracket_end_s
+    assert ev.solves > 0
+
+    # A boundary is a located event too, and takes refinement on the same terms.
+    refined_windows = table.dominance_windows(refine=ev)
+    assert len(refined_windows) == len(table.dominance_windows())
+
+
+@needs_store
+def test_an_evaluator_for_another_curve_is_refused(data, result):
+    inv, res = result
+    table = nusift.response(data, res, metric="activity")
+    with pytest.raises(nusift.InputError):
+        table.crossings(1.0, refine=nusift.evaluator(data, inv, metric="exposure", units="R/h"))
+
+
+@needs_store
+def test_a_task_curve_answers_when_to_start_and_when_it_fits(data, result):
+    """What a fixed-length job accrues, against when it starts. Not a slice of the rate curve:
+    every sample is an exact interval integral over its own window."""
+    inv, _ = result
+    starts = nusift.logspace("1h", "10y", 20)
+    task = nusift.task_series(data, inv, starts, "1h", metric="activity", units="decays")
+
+    assert len(task.values) == len(starts)
+    assert task.refines is False
+    assert all(v > 0.0 for v in task.values)
+
+    # Waiting makes this job cheaper, so a budget between the first and last sample is met from
+    # some start onwards and never stops being met.
+    budget = (float(task.values[0]) + float(task.values[-1])) / 2.0
+    allowed = task.windows_below(budget)
+    assert allowed
+    assert allowed[-1].exit_observed is False
+
+    events = task.crossings(budget)
+    assert events and events[0].kind == "falling"
+    assert events[0].time_s == pytest.approx(allowed[-1].start_s)
+
+
+@needs_store
 def test_extrema_find_an_ingrowth_peak(data):
     """Y-90 grows into equilibrium with Sr-90 and then follows its parent down, so the curve
     turns. A monotone one does not, and reporting a turn on it would be an artefact."""

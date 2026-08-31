@@ -96,7 +96,8 @@ int columnFor(const ResponseTable& table, const std::string& name) {
 // Which curve an event search runs over: the total, one contributor, or a ratio of two. Shared
 // by every search method so `of=` and `ratio=` cannot come to mean different things on
 // different calls.
-EventSeries seriesFor(const ResponseTable& table, const nb::object& of, const nb::object& ratio) {
+EventSeries seriesFor(const ResponseTable& table, const nb::object& of, const nb::object& ratio,
+                      const ResponseEvaluator* evaluator = nullptr) {
   if (!ratio.is_none()) {
     std::vector<std::string> names;
     for (const nb::handle item : ratio) {
@@ -106,12 +107,36 @@ EventSeries seriesFor(const ResponseTable& table, const nb::object& of, const nb
       throw InputError(
           "trajectory: ratio takes exactly two contributors, e.g. (\"Zr-95\", \"Nb-95\")");
     }
-    return ratioSeries(table, columnFor(table, names[0]), columnFor(table, names[1]));
+    const int numerator = columnFor(table, names[0]);
+    const int denominator = columnFor(table, names[1]);
+    return evaluator != nullptr ? ratioSeries(table, numerator, denominator, *evaluator)
+                                : ratioSeries(table, numerator, denominator);
   }
   if (!of.is_none()) {
-    return contributorSeries(table, columnFor(table, nb::cast<std::string>(of)));
+    const int column = columnFor(table, nb::cast<std::string>(of));
+    return evaluator != nullptr ? contributorSeries(table, column, *evaluator)
+                                : contributorSeries(table, column);
   }
-  return totalSeries(table);
+  return evaluator != nullptr ? totalSeries(table, *evaluator) : totalSeries(table);
+}
+
+// The evaluator a search was handed, or nothing. Written once because every search takes the
+// same pair of optional arguments, and a `refine=` that meant something different on one of
+// them would be worse than not offering it there.
+const ResponseEvaluator* evaluatorFrom(const nb::object& refine) {
+  if (refine.is_none()) {
+    return nullptr;
+  }
+  // A reference cast rather than a pointer one: it fails loudly when `refine` is not an
+  // evaluator, instead of handing a search something that is not a curve.
+  const ResponseEvaluator& evaluator = nb::cast<const ResponseEvaluator&>(refine);
+  return &evaluator;
+}
+
+EventTolerance toleranceOf(double relative) {
+  EventTolerance tolerance;
+  tolerance.relative = relative;
+  return tolerance;
 }
 
 double timeFrom(const nb::object& value) {
@@ -682,38 +707,62 @@ NB_MODULE(_core, m) {
           "actually hold.")
       .def(
           "dominance_windows",
-          [](const ResponseTable& table, int min_samples) {
-            return dominanceWindows(table, min_samples);
+          [](const ResponseTable& table, int min_samples, const nb::object& refine,
+             double tolerance) {
+            const ResponseEvaluator* evaluator = evaluatorFrom(refine);
+            return evaluator != nullptr
+                       ? dominanceWindows(table, *evaluator, min_samples, toleranceOf(tolerance))
+                       : dominanceWindows(table, min_samples);
           },
-          "min_samples"_a = 2, "Who leads, and over which windows.")
+          "min_samples"_a = 2, "refine"_a = nb::none(), "tolerance"_a = 1.0e-6,
+          "Who leads, and over which windows. A boundary is a located event like any other: "
+          "pass an `evaluator` as `refine` to place it by re-solving inside its bracket "
+          "instead of interpolating across it.")
       .def(
           "crossings",
           [](const ResponseTable& table, double level, const nb::object& of,
-             const nb::object& ratio) { return crossings(seriesFor(table, of, ratio), level); },
-          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(),
+             const nb::object& ratio, const nb::object& refine, double tolerance) {
+            return crossings(seriesFor(table, of, ratio, evaluatorFrom(refine)), level,
+                             toleranceOf(tolerance));
+          },
+          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(), "refine"_a = nb::none(),
+          "tolerance"_a = 1.0e-6,
           "Every crossing of `level` the grid observed, in time order. `of` follows one "
           "contributor instead of the total; `ratio` a pair of them. An excursion between two "
-          "samples leaves no sign change and is not found -- the grid decides what is seen.")
+          "samples leaves no sign change and is not found -- the grid decides what is seen. "
+          "`refine` takes an `evaluator`, which narrows each event by re-solving rather than "
+          "interpolating; `TrajectoryEvent.refined` says which happened.")
       .def(
           "extrema",
-          [](const ResponseTable& table, const nb::object& of, const nb::object& ratio) {
-            return extrema(seriesFor(table, of, ratio));
+          [](const ResponseTable& table, const nb::object& of, const nb::object& ratio,
+             const nb::object& refine, double tolerance) {
+            return extrema(seriesFor(table, of, ratio, evaluatorFrom(refine)),
+                           toleranceOf(tolerance));
           },
-          "of"_a = nb::none(), "ratio"_a = nb::none(),
+          "of"_a = nb::none(), "ratio"_a = nb::none(), "refine"_a = nb::none(),
+          "tolerance"_a = 1.0e-6,
           "Interior maxima and minima. A turn needs three samples to be told from a monotone "
           "run, so one in the first or last interval is not reported.")
       .def(
           "windows_above",
           [](const ResponseTable& table, double level, const nb::object& of,
-             const nb::object& ratio) { return windowsAbove(seriesFor(table, of, ratio), level); },
-          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(),
+             const nb::object& ratio, const nb::object& refine, double tolerance) {
+            return windowsAbove(seriesFor(table, of, ratio, evaluatorFrom(refine)), level,
+                                toleranceOf(tolerance));
+          },
+          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(), "refine"_a = nb::none(),
+          "tolerance"_a = 1.0e-6,
           "The stretches at or above `level`. An edge the grid never observed is flagged open "
           "rather than clipped to the grid's own endpoint.")
       .def(
           "windows_below",
           [](const ResponseTable& table, double level, const nb::object& of,
-             const nb::object& ratio) { return windowsBelow(seriesFor(table, of, ratio), level); },
-          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(),
+             const nb::object& ratio, const nb::object& refine, double tolerance) {
+            return windowsBelow(seriesFor(table, of, ratio, evaluatorFrom(refine)), level,
+                                toleranceOf(tolerance));
+          },
+          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(), "refine"_a = nb::none(),
+          "tolerance"_a = 1.0e-6,
           "The complement of windows_above, and the shape a \"when is it safe\" question takes.")
       .def("__repr__", [](const ResponseTable& t) {
         return "<ResponseTable " + std::to_string(t.timeCount()) + " times x " +
@@ -755,6 +804,128 @@ NB_MODULE(_core, m) {
                formatDuration(w.endSeconds) + (w.entryObserved && w.exitObserved ? "" : " (open)") +
                ">";
       });
+
+  // Whether an event is NARROWED or merely interpolated turns on whether the curve can be
+  // asked what it does between two samples. For a response that is a single-time solve, and
+  // this is the object that performs it -- passed to any search as `refine=`.
+  //
+  // It has to describe the same response the table does: the same store, inventory, metric,
+  // aggregate, units and geometry. A mismatch is refused rather than quietly refining an event
+  // on one curve with values taken from another.
+  nb::class_<ResponseEvaluator>(m, "ResponseEvaluator")
+      .def_prop_ro("solves", &ResponseEvaluator::solves,
+                   "Single-time solves spent so far. What refinement cost is not visible in "
+                   "the events it produced.")
+      .def("__repr__", [](const ResponseEvaluator& e) {
+        return "<ResponseEvaluator " + std::string(metricName(e.spec().metric)) + " in " +
+               std::string(unitName(e.spec().unit)) + ", " + std::to_string(e.solves()) +
+               " solves>";
+      });
+
+  m.def(
+      "evaluator",
+      [](const NuclearData& data, const Inventory& inventory, const std::string& metric,
+         const std::string& by, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, bool prune, int cram_order) {
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        spec.aggregate = aggregateFrom(by);
+        spec.unit = requireUnit(units, spec.metric, Domain::Instant);
+        spec.geometry = geometry;
+        DecayOptions options;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        return ResponseEvaluator(data, inventory, spec, options);
+      },
+      "data"_a, "inventory"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
+      "geometry"_a = exposure::PointSourceGeometry{}, "prune"_a = true, "cram_order"_a = 48,
+      // The evaluator reads the store and the inventory on every call, so Python must not
+      // collect either while it lives.
+      nb::keep_alive<0, 1>(), nb::keep_alive<0, 2>(),
+      "A re-solver for the response described by these arguments, to hand to a search as "
+      "`refine=`. Build it from the same arguments the table was built from.");
+
+  // A curve to locate events on, when that curve is not a column of a response table. The
+  // searches are the same functions the table methods call, so a task curve and a rate curve
+  // are found the same way and reported the same way.
+  nb::class_<EventSeries>(m, "EventSeries")
+      .def_prop_ro("times",
+                   [](nb::handle self) {
+                     const EventSeries& s = nb::cast<const EventSeries&>(self);
+                     return view1d(s.times.data(), s.times.size(), self);
+                   })
+      .def_prop_ro("values",
+                   [](nb::handle self) {
+                     const EventSeries& s = nb::cast<const EventSeries&>(self);
+                     return view1d(s.values.data(), s.values.size(), self);
+                   })
+      .def_prop_ro(
+          "refines", [](const EventSeries& s) { return static_cast<bool>(s.evaluate); },
+          "True when the curve can be evaluated between samples, so events are "
+          "narrowed rather than interpolated.")
+      .def(
+          "crossings",
+          [](const EventSeries& series, double level, double tolerance) {
+            return crossings(series, level, toleranceOf(tolerance));
+          },
+          "level"_a, "tolerance"_a = 1.0e-6)
+      .def(
+          "extrema",
+          [](const EventSeries& series, double tolerance) {
+            return extrema(series, toleranceOf(tolerance));
+          },
+          "tolerance"_a = 1.0e-6)
+      .def(
+          "windows_above",
+          [](const EventSeries& series, double level, double tolerance) {
+            return windowsAbove(series, level, toleranceOf(tolerance));
+          },
+          "level"_a, "tolerance"_a = 1.0e-6)
+      .def(
+          "windows_below",
+          [](const EventSeries& series, double level, double tolerance) {
+            return windowsBelow(series, level, toleranceOf(tolerance));
+          },
+          "level"_a, "tolerance"_a = 1.0e-6)
+      .def("__repr__", [](const EventSeries& s) {
+        return "<EventSeries " + std::to_string(s.times.size()) + " samples" +
+               (s.evaluate ? ", refinable>" : ">");
+      });
+
+  // The fixed-duration task: what a job of a given length accrues, against WHEN it starts.
+  // Every sample is an exact interval integral, so this is the expensive curve in the library
+  // -- two to three solves a sample -- and the reason to pay for it is that its extrema answer
+  // "when should this be done" and its crossings answer "when does it fit the budget", neither
+  // of which is a question about the rate curve.
+  m.def(
+      "task_series",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& starts,
+         const nb::object& duration, const std::string& metric, const std::string& by,
+         const std::string& units, const exposure::PointSourceGeometry& geometry, bool refine,
+         int threads, bool prune, int cram_order) {
+        std::vector<double> startTimes;
+        for (const nb::handle item : starts) {
+          startTimes.push_back(timeFrom(nb::borrow<nb::object>(item)));
+        }
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        spec.aggregate = aggregateFrom(by);
+        spec.unit = requireUnit(units, spec.metric, Domain::Interval);
+        spec.geometry = geometry;
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        return taskSeries(data, inventory, spec, startTimes, timeFrom(duration), options, refine);
+      },
+      "data"_a, "inventory"_a, "starts"_a, "duration"_a, "metric"_a = "activity",
+      "by"_a = "nuclide", "units"_a = "", "geometry"_a = exposure::PointSourceGeometry{},
+      "refine"_a = false, "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
+      // Like the evaluator, the refining form holds the store and the inventory and reads them
+      // during the search.
+      nb::keep_alive<0, 1>(), nb::keep_alive<0, 2>(),
+      "What a task of `duration` accrues, sampled at each start in `starts`. The units are "
+      "interval units -- roentgen, decays -- because the values are accrued totals.");
 
   m.def(
       "response",
