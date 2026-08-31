@@ -566,5 +566,189 @@ TEST(Report, AttributionTextFootnotesTheSameCaveatsTheRankingDoes) {
   EXPECT_NE(text.find("mean free paths"), std::string::npos) << text;
 }
 
+// --- located events -----------------------------------------------------------
+
+EventReport oneCrossing() {
+  EventReport report;
+  report.metric = "activity";
+  report.curve = "the total";
+  report.unit = "Bq";
+  report.gridStartSeconds = 3600.0;
+  report.gridEndSeconds = 3.0e9;
+  report.gridPoints = 60;
+  report.hasLevel = true;
+  report.level = 5.0e13;
+
+  TrajectoryEvent event;
+  event.kind = EventKind::Falling;
+  event.timeSeconds = 2.0e9;
+  event.value = 5.0e13;
+  event.bracketStartSeconds = 1.9e9;
+  event.bracketEndSeconds = 2.2e9;
+  event.locatedToSeconds = 3.0e8;
+  event.refined = false;
+  report.events.push_back(event);
+
+  LevelWindow window;
+  window.startSeconds = 3600.0;
+  window.endSeconds = 2.0e9;
+  window.entryObserved = false;
+  window.exitObserved = true;
+  report.windows.push_back(window);
+  return report;
+}
+
+std::string eventsAs(const EventReport& report, ReportFormat format) {
+  std::ostringstream out;
+  writeEvents(out, report, ReportContext{}, format);
+  return out.str();
+}
+
+// The bracket is the honest error bar on the instant. A report that printed the crossing time
+// alone would claim a precision the sampling does not support, so every format carries it.
+TEST(Report, EveryFormatCarriesTheBracketAnEventWasFoundIn) {
+  const EventReport report = oneCrossing();
+
+  const std::string text = eventsAs(report, ReportFormat::Text);
+  EXPECT_NE(text.find("bracket"), std::string::npos) << text;
+  EXPECT_NE(text.find("interpolated"), std::string::npos)
+      << "an interpolated event has to say so: " << text;
+
+  const std::string json = eventsAs(report, ReportFormat::Json);
+  EXPECT_DOUBLE_EQ(jsonNumberValue(json, "bracket_start_s"), 1.9e9);
+  EXPECT_DOUBLE_EQ(jsonNumberValue(json, "located_to_s"), 3.0e8);
+  EXPECT_EQ(jsonValue(json, "refined"), "false");
+
+  const std::string csv = eventsAs(report, ReportFormat::Csv);
+  EXPECT_NE(csv.find("bracket_start_s"), std::string::npos) << csv;
+  EXPECT_NE(csv.find("located_to_s"), std::string::npos) << csv;
+}
+
+// A reader who does not know the grid decides what is findable will read an empty list as "it
+// never happens" rather than "the sampling did not resolve it".
+TEST(Report, TheTextReportSaysWhatTheGridCouldNotHaveSeen) {
+  EventReport report = oneCrossing();
+  report.events.clear();
+  report.windows.clear();
+
+  const std::string text = eventsAs(report, ReportFormat::Text);
+  EXPECT_NE(text.find("crossings: none"), std::string::npos) << text;
+  EXPECT_NE(text.find("rises and falls back between two samples"), std::string::npos) << text;
+}
+
+// An edge outside the grid is a bound, not a crossing, and the report has to say which it is.
+TEST(Report, AnUnobservedWindowEdgeIsNamedRatherThanPrintedAsACrossing) {
+  const std::string text = eventsAs(oneCrossing(), ReportFormat::Text);
+  EXPECT_NE(text.find("already above when the grid started"), std::string::npos) << text;
+
+  const std::string json = eventsAs(oneCrossing(), ReportFormat::Json);
+  EXPECT_NE(json.find("\"entry_observed\": false"), std::string::npos) << json;
+}
+
+// Two tables would not be a CSV, and a reader given only the crossings would lose which grid
+// edges were never observed. One table, with `kind` saying which row is which.
+TEST(Report, EventsAndWindowsShareOneCsvUnderAKindColumn) {
+  const std::string csv = eventsAs(oneCrossing(), ReportFormat::Csv);
+  EXPECT_EQ(csv.substr(0, 4), "kind");
+  EXPECT_NE(csv.find("\nfalling,"), std::string::npos) << csv;
+  EXPECT_NE(csv.find("\nwindow,"), std::string::npos) << csv;
+}
+
+TEST(Report, ARatioCurveIsNotGivenAUnit) {
+  EventReport report = oneCrossing();
+  report.curve = "Zr-95 / Nb-95";
+  report.unit.clear();
+
+  const std::string json = eventsAs(report, ReportFormat::Json);
+  EXPECT_NE(json.find("\"unit\": null"), std::string::npos)
+      << "a ratio is dimensionless, and naming a unit would say it is a count of becquerel: "
+      << json;
+}
+
+// --- maximum allowable scale ---------------------------------------------------
+
+std::vector<Criterion> oneCriterion() {
+  Criterion criterion;
+  criterion.name = "A2 transport";
+  criterion.limit = 3.7e13;
+  // ResponseSpec defaults to instantaneous activity in becquerel, which is what the limit above
+  // is quoted in.
+  return std::vector<Criterion>{criterion};
+}
+
+std::vector<AllowableScale> boundedThenNot() {
+  std::vector<AllowableScale> scaled(2);
+
+  scaled[0].timeSeconds = 3600.0;
+  scaled[0].bounded = true;
+  scaled[0].scale = 0.25;
+  scaled[0].bindingIndex = 0;
+  CriterionHeadroom bound;
+  bound.name = "A2 transport";
+  bound.limit = 3.7e13;
+  bound.response = 1.48e14;
+  bound.fraction = 4.0;
+  bound.scale = 0.25;
+  bound.binding = true;
+  scaled[0].criteria.push_back(bound);
+  scaled[0].limiting.push_back(LimitingContributor{ContributorId{}, "Cs-137", 0.62});
+
+  scaled[1].timeSeconds = 3.0e9;
+  scaled[1].bounded = false;
+  CriterionHeadroom free;
+  free.name = "A2 transport";
+  free.limit = 3.7e13;
+  free.unbounded = true;
+  scaled[1].criteria.push_back(free);
+  return scaled;
+}
+
+std::string allowableAs(ReportFormat format) {
+  const std::vector<Criterion> criteria = oneCriterion();
+  std::ostringstream out;
+  writeAllowable(out, boundedThenNot(), criteria, ReportContext{}, format);
+  return out.str();
+}
+
+// "Nothing here is limited by this" and "this allows an enormous multiple" are different
+// statements, and a report that printed the second when it meant the first would be lying in
+// the direction that matters.
+TEST(Report, AnUnconstrainedTimeIsNamedRatherThanGivenAHugeNumber) {
+  const std::string text = allowableAs(ReportFormat::Text);
+  EXPECT_NE(text.find("unbounded"), std::string::npos) << text;
+  EXPECT_NE(text.find("not\n  that a very large multiple is permitted"), std::string::npos)
+      << "the footnote has to explain what unbounded means: " << text;
+
+  // null, not a number: the only encoding a parser cannot mistake for a bound of zero.
+  const std::string json = allowableAs(ReportFormat::Json);
+  EXPECT_NE(json.find("\"scale\": null"), std::string::npos) << json;
+  EXPECT_NE(json.find("\"binding\": null"), std::string::npos) << json;
+  EXPECT_NE(json.find("\"unbounded\": true"), std::string::npos) << json;
+}
+
+TEST(Report, TheAllowableTextNamesTheBindingCriterionAndWhatDrivesIt) {
+  const std::string text = allowableAs(ReportFormat::Text);
+  EXPECT_NE(text.find("A2 transport"), std::string::npos) << text;
+  EXPECT_NE(text.find("Cs-137"), std::string::npos) << text;
+}
+
+// Long format, one row per time per criterion: every criterion's headroom is in the file, not
+// only the binding one's, which is what makes "how close was the runner-up" answerable.
+TEST(Report, TheAllowableCsvCarriesEveryCriterionAtEveryTime) {
+  const std::string csv = allowableAs(ReportFormat::Csv);
+  EXPECT_EQ(csv.substr(0, 6), "time_s");
+  EXPECT_NE(csv.find("criterion_scale"), std::string::npos) << csv;
+  EXPECT_NE(csv.find("allowed_scale"), std::string::npos) << csv;
+
+  // Two times, one criterion, so two data rows follow the header.
+  int rows = 0;
+  for (const char c : csv) {
+    if (c == '\n') {
+      ++rows;
+    }
+  }
+  EXPECT_EQ(rows, 3) << csv;
+}
+
 }  // namespace
 }  // namespace nusift

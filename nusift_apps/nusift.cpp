@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -30,7 +31,9 @@
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
 #include "nusift/seed/seed_fission.hpp"
+#include "nusift/triage/allowable.hpp"
 #include "nusift/triage/attribution.hpp"
+#include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
@@ -832,6 +835,181 @@ int runNuclide(const std::vector<std::string>& names) {
   return 0;
 }
 
+// --- locating events on a curve ----------------------------------------------
+
+// Options for `when`. Separate from CommonOptions because nothing else takes them, and folding
+// a level into the options every subcommand shares would put `--level` in the help of six
+// commands that ignore it.
+struct WhenOptions {
+  double level = 0.0;
+  bool hasLevel = false;
+  std::string of;
+  std::string ratio;
+  bool peaks = false;
+};
+
+std::string trimmedText(std::string_view text) {
+  std::size_t first = text.find_first_not_of(" \t");
+  if (first == std::string_view::npos) {
+    return {};
+  }
+  std::size_t last = text.find_last_not_of(" \t");
+  return std::string(text.substr(first, last - first + 1));
+}
+
+// requirePin does the naming half -- accepting "Cs-137", "A=140" or "Cs" against whatever
+// aggregate the table was built with -- and returns a key. A series needs the column.
+int columnFor(const ResponseTable& table, const std::string& name) {
+  const std::int64_t key = requirePin(table, name);
+  for (int c = 0; c < table.contributorCount(); ++c) {
+    if (table.contributors[static_cast<std::size_t>(c)].key == key) {
+      return c;
+    }
+  }
+  // requirePin refuses a name this table does not carry, so arriving here is a bug rather than
+  // bad input, and the exit code should say so.
+  throw NusiftError("trajectory: \"" + name + "\" resolved to a key the table does not hold");
+}
+
+int runWhen(const CommonOptions& options, const WhenOptions& when, const char* argv0) {
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() < 2) {
+    throw InputError("time: an event has to sit between two samples -- try --times 1h:100y:log:60");
+  }
+  const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options.metric);
+  spec.aggregate = aggregateFrom(options.aggregate);
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.geometry = geometryFrom(options);
+  const ResponseTable table = buildResponse(data, result, spec);
+
+  EventReport report;
+  report.metric = metricName(spec.metric);
+  report.gridStartSeconds = table.times.front();
+  report.gridEndSeconds = table.times.back();
+  report.gridPoints = table.timeCount();
+  report.hasLevel = when.hasLevel;
+  report.level = when.level;
+
+  EventSeries series;
+  if (!when.ratio.empty()) {
+    const std::size_t slash = when.ratio.find('/');
+    if (slash == std::string::npos) {
+      throw InputError(
+          "trajectory: --ratio names two contributors as A/B, e.g. --ratio Zr-95/Nb-95");
+    }
+    const std::string top = trimmedText(std::string_view(when.ratio).substr(0, slash));
+    const std::string bottom = trimmedText(std::string_view(when.ratio).substr(slash + 1));
+    series = ratioSeries(table, columnFor(table, top), columnFor(table, bottom));
+    report.curve = top + " / " + bottom;
+    // A ratio of two quantities in the same unit is dimensionless, and printing the unit would
+    // say it is a number of becquerel when it is a number of times.
+    report.unit.clear();
+  } else if (!when.of.empty()) {
+    const int column = columnFor(table, when.of);
+    series = contributorSeries(table, column);
+    report.curve = table.labels[static_cast<std::size_t>(column)];
+    report.unit = unitName(table.unit);
+  } else {
+    series = totalSeries(table);
+    report.curve = "the total";
+    report.unit = unitName(table.unit);
+  }
+
+  if (when.hasLevel) {
+    report.events = crossings(series, when.level);
+    report.windows = windowsAbove(series, when.level);
+  }
+  // With no level there is nothing to cross, so the turns are the whole answer rather than an
+  // extra. With one they are an extra, and only if asked for.
+  if (when.peaks || !when.hasLevel) {
+    const std::vector<TrajectoryEvent> turns = extrema(series);
+    report.events.insert(report.events.end(), turns.begin(), turns.end());
+    std::sort(report.events.begin(), report.events.end(),
+              [](const TrajectoryEvent& a, const TrajectoryEvent& b) {
+                return a.timeSeconds < b.timeSeconds;
+              });
+  }
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context = contextFor(data, storePath, inventory, table);
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+
+  OutputStream out(options.output);
+  writeEvents(out.get(), report, context, format);
+  return 0;
+}
+
+// --- how much is allowed ------------------------------------------------------
+
+struct AllowableOptions {
+  double limit = 0.0;
+  std::string limitName;
+  int limitingCount = 3;
+};
+
+int runAllowable(const CommonOptions& options, const AllowableOptions& allow, const char* argv0) {
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+
+  const std::vector<double> times = timesFrom(options);
+  const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
+
+  // One criterion, taking the metric, unit and geometry the command was given. Several criteria
+  // over DIFFERENT metrics is where this capability earns its keep -- and is where the binding
+  // one can change over time -- but expressing that needs a limits file this front end does not
+  // have yet, so the library and the Python binding take a list and the CLI takes one.
+  Criterion criterion;
+  criterion.spec.metric = metricFrom(options.metric);
+  criterion.spec.aggregate = aggregateFrom(options.aggregate);
+  criterion.spec.unit = requireUnit(options.unit, criterion.spec.metric, Domain::Instant);
+  criterion.spec.geometry = geometryFrom(options);
+  criterion.limit = allow.limit;
+  criterion.name = allow.limitName.empty()
+                       ? std::string(metricName(criterion.spec.metric)) + " limit"
+                       : allow.limitName;
+
+  const std::vector<Criterion> criteria = {criterion};
+  const std::vector<AllowableScale> scaled =
+      allowableScale(data, result, criteria, allow.limitingCount);
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  const ResponseTable table = buildResponse(data, result, criterion.spec);
+  ReportContext context = contextFor(data, storePath, inventory, table);
+  context.geometry = describeGeometry(options, criterion.spec.metric, criterion.spec.unit);
+
+  OutputStream out(options.output);
+  writeAllowable(out.get(), scaled, criteria, context, format);
+
+  // The single number a reader of this table came for, in the format a person reads. CSV and
+  // JSON carry the curve it comes from, and a consumer wanting the instant locates it the same
+  // way rather than being handed a derived field it cannot check.
+  if (format == ReportFormat::Text && scaled.size() >= 2) {
+    try {
+      const std::optional<TrajectoryEvent> fits = firstCrossing(scaleSeries(scaled), 1.0);
+      if (fits.has_value() && fits->kind == EventKind::Rising) {
+        out.get() << "\n  The inventory as it stands first fits every limit at "
+                  << formatDuration(fits->timeSeconds) << ", located within "
+                  << formatDuration(fits->locatedToSeconds) << ".\n";
+      }
+    } catch (const InputError&) {
+      // The scale is not one searchable curve over this grid: unbounded stretches, or too few
+      // bounded samples. The table above already reports everything that was computed, and
+      // inventing a date from a curve with a hole in it is exactly what scaleSeries refuses.
+    }
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -866,6 +1044,34 @@ int main(int argc, char** argv) {
   CLI::App* forecastCmd =
       app.add_subcommand("forecast", "Who dominates, and over which time windows");
   addCommonOptions(forecastCmd, forecastOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+
+  CommonOptions whenOptions;
+  WhenOptions whenExtra;
+  CLI::App* whenCmd =
+      app.add_subcommand("when", "When a curve crosses a level, peaks, or holds above it");
+  addCommonOptions(whenCmd, whenOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  CLI::Option* levelOption =
+      whenCmd->add_option("--level", whenExtra.level,
+                          "Level to cross, in the metric's units; without one only turns are "
+                          "reported");
+  whenCmd->add_option("--of", whenExtra.of,
+                      "Follow one contributor instead of the total, e.g. --of Cs-137");
+  whenCmd->add_option("--ratio", whenExtra.ratio,
+                      "Follow a ratio of two contributors, e.g. --ratio Zr-95/Nb-95");
+  whenCmd->add_flag("--peaks", whenExtra.peaks, "Report turns as well as crossings");
+
+  CommonOptions allowableOptions;
+  AllowableOptions allowableExtra;
+  CLI::App* allowableCmd = app.add_subcommand(
+      "allowable", "By what factor this inventory can be scaled before a limit binds");
+  addCommonOptions(allowableCmd, allowableOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  allowableCmd->add_option("--limit", allowableExtra.limit, "The limit, in the metric's units")
+      ->required()
+      ->check(CLI::PositiveNumber);
+  allowableCmd->add_option("--limit-name", allowableExtra.limitName,
+                           "What the limit is, named in the report (e.g. \"A2 transport\")");
+  allowableCmd->add_option("--limiting", allowableExtra.limitingCount,
+                           "How many contributors to name as driving the binding criterion");
 
   CommonOptions decayCmdOptions;
   CLI::App* decayCmd = app.add_subcommand("decay", "Raw inventory versus time, unranked");
@@ -929,6 +1135,15 @@ int main(int argc, char** argv) {
     }
     if (forecastCmd->parsed()) {
       return runForecast(forecastOptions, argv0);
+    }
+    if (whenCmd->parsed()) {
+      // Whether a level was GIVEN, not whether it is non-zero: zero is a perfectly good level
+      // to ask about, and a default of zero would otherwise be indistinguishable from one.
+      whenExtra.hasLevel = levelOption->count() > 0;
+      return runWhen(whenOptions, whenExtra, argv0);
+    }
+    if (allowableCmd->parsed()) {
+      return runAllowable(allowableOptions, allowableExtra, argv0);
     }
     if (decayCmd->parsed()) {
       return runDecay(decayCmdOptions, argv0);

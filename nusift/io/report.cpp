@@ -532,6 +532,305 @@ void writeJsonRanking(std::ostream& out, const Ranking& ranking, const ReportCon
   out << pad << "}";
 }
 
+// --- located events ----------------------------------------------------------
+
+// The provenance of an instant: the grid interval that observed it, how tightly it was placed,
+// and whether real evaluations did the placing. Printed on every event because without it a
+// crossing time is indistinguishable from a grid artefact.
+std::string bracketNote(const TrajectoryEvent& event) {
+  std::string note = "bracket " + formatDuration(event.bracketStartSeconds) + " to " +
+                     formatDuration(event.bracketEndSeconds) + ", within " +
+                     formatDuration(event.locatedToSeconds);
+  note += event.refined ? "" : " (interpolated)";
+  if (!event.converged) {
+    note += " (refinement did not reach its tolerance)";
+  }
+  return note;
+}
+
+bool isTurn(const TrajectoryEvent& event) {
+  return event.kind == EventKind::Maximum || event.kind == EventKind::Minimum;
+}
+
+// Said once, wherever a search came back with less than the reader might expect. The grid is
+// what decides which events exist to be found, and a reader who does not know that will read
+// an empty list as "it never happens" rather than "the sampling did not resolve it".
+void writeGridNote(std::ostream& out) {
+  out << "\n  Events are found only where consecutive samples straddle them. An excursion that\n"
+         "  rises and falls back between two samples leaves no sign change and is not found; a\n"
+         "  denser grid is what resolves one.\n";
+}
+
+void writeEventsText(std::ostream& out, const EventReport& report, const ReportContext& context) {
+  out << "NuSIFT " << report.metric << " events on " << report.curve << '\n';
+  if (report.gridPoints > 0) {
+    out << "  " << formatDuration(report.gridStartSeconds) << " to "
+        << formatDuration(report.gridEndSeconds) << ", " << report.gridPoints << " points\n";
+  }
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  if (report.hasLevel) {
+    out << "  level: " << sci(report.level);
+    if (!report.unit.empty()) {
+      out << ' ' << report.unit;
+    }
+    out << '\n';
+  }
+  out << '\n';
+
+  const bool anyCrossing = std::any_of(report.events.begin(), report.events.end(),
+                                       [](const TrajectoryEvent& event) { return !isTurn(event); });
+  const bool anyTurn = std::any_of(report.events.begin(), report.events.end(), isTurn);
+
+  if (report.hasLevel) {
+    if (anyCrossing) {
+      out << "  crossings:\n";
+      for (const TrajectoryEvent& event : report.events) {
+        if (isTurn(event)) {
+          continue;
+        }
+        out << "    " << std::left << std::setw(8) << eventKindName(event.kind) << std::right
+            << "  at " << std::setw(10) << formatDuration(event.timeSeconds) << "   "
+            << bracketNote(event) << '\n';
+      }
+    } else {
+      out << "  crossings: none -- the grid never observed this curve cross the level\n";
+    }
+
+    if (!report.windows.empty()) {
+      out << "\n  above the level:\n";
+      for (const LevelWindow& window : report.windows) {
+        out << "    " << std::setw(10) << formatDuration(window.startSeconds) << " to "
+            << std::setw(10) << formatDuration(window.endSeconds);
+        // An edge the grid never observed is a bound, not a crossing, and the difference is
+        // the whole reason the flags exist.
+        if (!window.entryObserved && !window.exitObserved) {
+          out << "   (open at both ends: never observed to rise above or fall below)";
+        } else if (!window.entryObserved) {
+          out << "   (already above when the grid started)";
+        } else if (!window.exitObserved) {
+          out << "   (still above when the grid ended)";
+        }
+        out << '\n';
+      }
+    }
+  }
+
+  if (anyTurn) {
+    out << (report.hasLevel ? "\n  turns:\n" : "  turns:\n");
+    for (const TrajectoryEvent& event : report.events) {
+      if (!isTurn(event)) {
+        continue;
+      }
+      out << "    " << std::left << std::setw(8) << eventKindName(event.kind) << std::right
+          << "  at " << std::setw(10) << formatDuration(event.timeSeconds) << "   value "
+          << sci(event.value);
+      if (!report.unit.empty()) {
+        out << ' ' << report.unit;
+      }
+      out << "   " << bracketNote(event) << '\n';
+    }
+  } else if (!report.hasLevel) {
+    out << "  turns: none -- the grid resolved no maximum or minimum on this curve\n";
+  }
+
+  writeGridNote(out);
+}
+
+void writeEventsCsv(std::ostream& out, const EventReport& report) {
+  // Events and windows in one table under a `kind` column: two tables would not be a CSV, and
+  // a reader that got only the crossings would lose which grid edges were never observed.
+  out << "kind,time_s,end_s,value,bracket_start_s,bracket_end_s,located_to_s,refined,converged,"
+         "entry_observed,exit_observed\n";
+  for (const TrajectoryEvent& event : report.events) {
+    out << eventKindName(event.kind) << ',' << shortestRoundTrip(event.timeSeconds) << ",,"
+        << shortestRoundTrip(event.value) << ',' << shortestRoundTrip(event.bracketStartSeconds)
+        << ',' << shortestRoundTrip(event.bracketEndSeconds) << ','
+        << shortestRoundTrip(event.locatedToSeconds) << ',' << (event.refined ? "true" : "false")
+        << ',' << (event.converged ? "true" : "false") << ",,\n";
+  }
+  for (const LevelWindow& window : report.windows) {
+    out << "window," << shortestRoundTrip(window.startSeconds) << ','
+        << shortestRoundTrip(window.endSeconds) << ",,,,,,,"
+        << (window.entryObserved ? "true" : "false") << ','
+        << (window.exitObserved ? "true" : "false") << '\n';
+  }
+}
+
+void writeEventsJson(std::ostream& out, const EventReport& report) {
+  out << "{\n";
+  out << "  \"metric\": \"" << escapeJson(report.metric) << "\",\n";
+  out << "  \"curve\": \"" << escapeJson(report.curve) << "\",\n";
+  out << "  \"unit\": " << (report.unit.empty() ? "null" : "\"" + escapeJson(report.unit) + "\"")
+      << ",\n";
+  out << "  \"level\": " << (report.hasLevel ? jsonNumber(report.level) : "null") << ",\n";
+  out << "  \"grid\": {\"start_s\": " << jsonNumber(report.gridStartSeconds)
+      << ", \"end_s\": " << jsonNumber(report.gridEndSeconds)
+      << ", \"points\": " << report.gridPoints << "},\n";
+
+  out << "  \"events\": [\n";
+  for (std::size_t i = 0; i < report.events.size(); ++i) {
+    const TrajectoryEvent& event = report.events[i];
+    out << "    {\"kind\": \"" << eventKindName(event.kind)
+        << "\", \"time_s\": " << jsonNumber(event.timeSeconds)
+        << ", \"value\": " << jsonNumber(event.value)
+        << ", \"bracket_start_s\": " << jsonNumber(event.bracketStartSeconds)
+        << ", \"bracket_end_s\": " << jsonNumber(event.bracketEndSeconds)
+        << ", \"located_to_s\": " << jsonNumber(event.locatedToSeconds)
+        << ", \"refined\": " << (event.refined ? "true" : "false")
+        << ", \"converged\": " << (event.converged ? "true" : "false") << "}"
+        << (i + 1 < report.events.size() ? ",\n" : "\n");
+  }
+  out << "  ],\n  \"windows\": [\n";
+  for (std::size_t i = 0; i < report.windows.size(); ++i) {
+    const LevelWindow& window = report.windows[i];
+    out << "    {\"start_s\": " << jsonNumber(window.startSeconds)
+        << ", \"end_s\": " << jsonNumber(window.endSeconds)
+        << ", \"entry_observed\": " << (window.entryObserved ? "true" : "false")
+        << ", \"exit_observed\": " << (window.exitObserved ? "true" : "false") << "}"
+        << (i + 1 < report.windows.size() ? ",\n" : "\n");
+  }
+  out << "  ]\n}\n";
+}
+
+// --- maximum allowable scale --------------------------------------------------
+
+std::string limitingSummary(const AllowableScale& at) {
+  std::string text;
+  for (std::size_t i = 0; i < at.limiting.size(); ++i) {
+    if (i > 0) {
+      text += ", ";
+    }
+    text += at.limiting[i].label + " " + percent(at.limiting[i].fraction);
+  }
+  return text;
+}
+
+void writeAllowableText(std::ostream& out, const std::vector<AllowableScale>& scaled,
+                        std::span<const Criterion> criteria, const ReportContext& context) {
+  out << "NuSIFT maximum allowable scale\n";
+  if (!scaled.empty()) {
+    out << "  " << formatDuration(scaled.front().timeSeconds) << " to "
+        << formatDuration(scaled.back().timeSeconds) << ", " << scaled.size() << " points\n";
+  }
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+
+  std::size_t nameWidth = 8;
+  for (const Criterion& criterion : criteria) {
+    nameWidth = std::max(nameWidth, criterion.name.size());
+  }
+
+  out << "\n  criteria:\n";
+  for (const Criterion& criterion : criteria) {
+    out << "    " << std::left << std::setw(static_cast<int>(nameWidth)) << criterion.name
+        << std::right << "  " << sci(criterion.limit) << ' ' << unitName(criterion.spec.unit)
+        << '\n';
+  }
+
+  out << "\n  " << std::setw(12) << "time" << "  " << std::setw(11) << "scale" << "  " << std::left
+      << std::setw(static_cast<int>(nameWidth)) << "binding" << std::right << "  driven by\n";
+  for (const AllowableScale& at : scaled) {
+    out << "  " << std::setw(12) << formatDuration(at.timeSeconds) << "  ";
+    if (!at.bounded) {
+      // Not a very large number. Nothing constrains the inventory here at all, and the two
+      // statements are different.
+      out << std::setw(11) << "unbounded" << "  " << std::left
+          << std::setw(static_cast<int>(nameWidth)) << "--" << std::right << '\n';
+      continue;
+    }
+    out << std::setw(11) << sci(at.scale) << "  " << std::left
+        << std::setw(static_cast<int>(nameWidth))
+        << criteria[static_cast<std::size_t>(at.bindingIndex)].name << std::right << "  "
+        << limitingSummary(at) << '\n';
+  }
+
+  const bool anyUnbounded = std::any_of(scaled.begin(), scaled.end(),
+                                        [](const AllowableScale& at) { return !at.bounded; });
+  if (anyUnbounded) {
+    out << "\n  \"unbounded\" means no criterion has anything to constrain at that time -- not\n"
+           "  that a very large multiple is permitted.\n";
+  }
+}
+
+void writeAllowableCsv(std::ostream& out, const std::vector<AllowableScale>& scaled,
+                       std::span<const Criterion> criteria) {
+  // Long format, one row per time per criterion: every criterion's headroom is in the table
+  // rather than only the binding one's, which is what makes "how close was the runner-up"
+  // answerable from the file.
+  out << "time_s,criterion,unit,response,limit,fraction,criterion_scale,binding,unbounded,"
+         "allowed_scale\n";
+  for (const AllowableScale& at : scaled) {
+    for (std::size_t q = 0; q < at.criteria.size(); ++q) {
+      const CriterionHeadroom& headroom = at.criteria[q];
+      out << shortestRoundTrip(at.timeSeconds) << ',' << csvField(headroom.name) << ','
+          << csvField(unitName(criteria[q].spec.unit)) << ','
+          << shortestRoundTrip(headroom.response) << ',' << shortestRoundTrip(headroom.limit)
+          << ',';
+      if (headroom.unbounded) {
+        out << ",,";
+      } else {
+        out << shortestRoundTrip(headroom.fraction) << ',' << shortestRoundTrip(headroom.scale)
+            << ',';
+      }
+      out << (headroom.binding ? "true" : "false") << ',' << (headroom.unbounded ? "true" : "false")
+          << ',';
+      if (at.bounded) {
+        out << shortestRoundTrip(at.scale);
+      }
+      out << '\n';
+    }
+  }
+}
+
+void writeAllowableJson(std::ostream& out, const std::vector<AllowableScale>& scaled,
+                        std::span<const Criterion> criteria) {
+  out << "{\n  \"criteria\": [\n";
+  for (std::size_t q = 0; q < criteria.size(); ++q) {
+    out << "    {\"name\": \"" << escapeJson(criteria[q].name) << "\", \"unit\": \""
+        << unitName(criteria[q].spec.unit) << "\", \"limit\": " << jsonNumber(criteria[q].limit)
+        << "}" << (q + 1 < criteria.size() ? ",\n" : "\n");
+  }
+  out << "  ],\n  \"times\": [\n";
+  for (std::size_t k = 0; k < scaled.size(); ++k) {
+    const AllowableScale& at = scaled[k];
+    out << "    {\"time_s\": " << jsonNumber(at.timeSeconds) << ",\n";
+    // null rather than a number: the only encoding a parser cannot mistake for a bound of zero.
+    out << "     \"scale\": " << (at.bounded ? jsonNumber(at.scale) : "null") << ",\n";
+    out << "     \"binding\": "
+        << (at.bounded
+                ? "\"" + escapeJson(criteria[static_cast<std::size_t>(at.bindingIndex)].name) + "\""
+                : "null")
+        << ",\n";
+    out << "     \"criteria\": [";
+    for (std::size_t q = 0; q < at.criteria.size(); ++q) {
+      const CriterionHeadroom& headroom = at.criteria[q];
+      out << (q == 0 ? "\n" : ",\n") << "       {\"name\": \"" << escapeJson(headroom.name)
+          << "\", \"response\": " << jsonNumber(headroom.response)
+          << ", \"fraction\": " << (headroom.unbounded ? "null" : jsonNumber(headroom.fraction))
+          << ", \"scale\": " << (headroom.unbounded ? "null" : jsonNumber(headroom.scale))
+          << ", \"unbounded\": " << (headroom.unbounded ? "true" : "false") << "}";
+    }
+    out << (at.criteria.empty() ? "" : "\n     ") << "],\n";
+    out << "     \"limiting\": [";
+    for (std::size_t i = 0; i < at.limiting.size(); ++i) {
+      out << (i == 0 ? "\n" : ",\n") << "       {\"label\": \"" << escapeJson(at.limiting[i].label)
+          << "\", \"key\": " << at.limiting[i].id.key
+          << ", \"fraction\": " << jsonNumber(at.limiting[i].fraction) << "}";
+    }
+    out << (at.limiting.empty() ? "" : "\n     ") << "]}" << (k + 1 < scaled.size() ? ",\n" : "\n");
+  }
+  out << "  ]\n}\n";
+}
+
 }  // namespace
 
 bool parseReportFormat(std::string_view text, ReportFormat& out) {
@@ -770,6 +1069,37 @@ void writeRankings(std::ostream& out, const std::vector<Ranking>& rankings,
       }
       out << "]\n";
       break;
+  }
+}
+
+void writeEvents(std::ostream& out, const EventReport& report, const ReportContext& context,
+                 ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeEventsText(out, report, context);
+      return;
+    case ReportFormat::Csv:
+      writeEventsCsv(out, report);
+      return;
+    case ReportFormat::Json:
+      writeEventsJson(out, report);
+      return;
+  }
+}
+
+void writeAllowable(std::ostream& out, const std::vector<AllowableScale>& scaled,
+                    std::span<const Criterion> criteria, const ReportContext& context,
+                    ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeAllowableText(out, scaled, criteria, context);
+      return;
+    case ReportFormat::Csv:
+      writeAllowableCsv(out, scaled, criteria);
+      return;
+    case ReportFormat::Json:
+      writeAllowableJson(out, scaled, criteria);
+      return;
   }
 }
 

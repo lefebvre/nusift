@@ -29,11 +29,14 @@
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/engine/inventory.hpp"
 #include "nusift/io/inventory_io.hpp"
+#include "nusift/io/number_format.hpp"
 #include "nusift/io/time_spec.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
 #include "nusift/seed/seed_fission.hpp"
+#include "nusift/triage/allowable.hpp"
 #include "nusift/triage/attribution.hpp"
+#include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
@@ -57,8 +60,7 @@ Metric metricFrom(const std::string& text) {
   if (text == "photon") {
     return Metric::Photon;
   }
-  throw InputError(
-      "metric: \"" + text + "\" is not a metric (activity, exposure, or photon)");
+  throw InputError("metric: \"" + text + "\" is not a metric (activity, exposure, or photon)");
 }
 
 Aggregate aggregateFrom(const std::string& text) {
@@ -78,6 +80,39 @@ Aggregate aggregateFrom(const std::string& text) {
 }
 
 // A time given either as a number of seconds or as a string the CLI would accept.
+// Resolve a contributor named the way a user writes one into its column. requirePin does the
+// naming half -- "Cs-137", "A=140", "Cs" -- and returns a key; a series needs the column.
+int columnFor(const ResponseTable& table, const std::string& name) {
+  const std::int64_t key = requirePin(table, name);
+  for (int c = 0; c < table.contributorCount(); ++c) {
+    if (table.contributors[static_cast<std::size_t>(c)].key == key) {
+      return c;
+    }
+  }
+  throw NusiftError("trajectory: \"" + name + "\" resolved to a key the table does not hold");
+}
+
+// Which curve an event search runs over: the total, one contributor, or a ratio of two. Shared
+// by every search method so `of=` and `ratio=` cannot come to mean different things on
+// different calls.
+EventSeries seriesFor(const ResponseTable& table, const nb::object& of, const nb::object& ratio) {
+  if (!ratio.is_none()) {
+    std::vector<std::string> names;
+    for (const nb::handle item : ratio) {
+      names.push_back(nb::cast<std::string>(item));
+    }
+    if (names.size() != 2) {
+      throw InputError(
+          "trajectory: ratio takes exactly two contributors, e.g. (\"Zr-95\", \"Nb-95\")");
+    }
+    return ratioSeries(table, columnFor(table, names[0]), columnFor(table, names[1]));
+  }
+  if (!of.is_none()) {
+    return contributorSeries(table, columnFor(table, nb::cast<std::string>(of)));
+  }
+  return totalSeries(table);
+}
+
 double timeFrom(const nb::object& value) {
   if (nb::isinstance<nb::str>(value)) {
     return parseDuration(nb::cast<std::string>(value));
@@ -650,9 +685,74 @@ NB_MODULE(_core, m) {
             return dominanceWindows(table, min_samples);
           },
           "min_samples"_a = 2, "Who leads, and over which windows.")
+      .def(
+          "crossings",
+          [](const ResponseTable& table, double level, const nb::object& of,
+             const nb::object& ratio) { return crossings(seriesFor(table, of, ratio), level); },
+          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(),
+          "Every crossing of `level` the grid observed, in time order. `of` follows one "
+          "contributor instead of the total; `ratio` a pair of them. An excursion between two "
+          "samples leaves no sign change and is not found -- the grid decides what is seen.")
+      .def(
+          "extrema",
+          [](const ResponseTable& table, const nb::object& of, const nb::object& ratio) {
+            return extrema(seriesFor(table, of, ratio));
+          },
+          "of"_a = nb::none(), "ratio"_a = nb::none(),
+          "Interior maxima and minima. A turn needs three samples to be told from a monotone "
+          "run, so one in the first or last interval is not reported.")
+      .def(
+          "windows_above",
+          [](const ResponseTable& table, double level, const nb::object& of,
+             const nb::object& ratio) { return windowsAbove(seriesFor(table, of, ratio), level); },
+          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(),
+          "The stretches at or above `level`. An edge the grid never observed is flagged open "
+          "rather than clipped to the grid's own endpoint.")
+      .def(
+          "windows_below",
+          [](const ResponseTable& table, double level, const nb::object& of,
+             const nb::object& ratio) { return windowsBelow(seriesFor(table, of, ratio), level); },
+          "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(),
+          "The complement of windows_above, and the shape a \"when is it safe\" question takes.")
       .def("__repr__", [](const ResponseTable& t) {
         return "<ResponseTable " + std::to_string(t.timeCount()) + " times x " +
                std::to_string(t.contributorCount()) + " contributors, " + unitName(t.unit) + ">";
+      });
+
+  // A located event is the one quantity NuSIFT reports that is not exact, and the bracket is
+  // why: it is the grid interval that observed the event, and `located_to_s` is how tightly the
+  // instant was placed inside it. A consumer reading `time_s` alone has thrown away the error
+  // bar.
+  nb::class_<TrajectoryEvent>(m, "TrajectoryEvent")
+      .def_prop_ro("kind",
+                   [](const TrajectoryEvent& e) { return std::string(eventKindName(e.kind)); })
+      .def_ro("time_s", &TrajectoryEvent::timeSeconds)
+      .def_ro("value", &TrajectoryEvent::value)
+      .def_ro("bracket_start_s", &TrajectoryEvent::bracketStartSeconds)
+      .def_ro("bracket_end_s", &TrajectoryEvent::bracketEndSeconds)
+      .def_ro("located_to_s", &TrajectoryEvent::locatedToSeconds,
+              "The width the location was narrowed to: the honest error bar on time_s.")
+      .def_ro("refined", &TrajectoryEvent::refined,
+              "True when real evaluations placed it, False when it is an interpolation between "
+              "two samples.")
+      .def_ro("converged", &TrajectoryEvent::converged)
+      .def("__repr__", [](const TrajectoryEvent& e) {
+        return "<TrajectoryEvent " + std::string(eventKindName(e.kind)) + " at " +
+               formatDuration(e.timeSeconds) + " within " + formatDuration(e.locatedToSeconds) +
+               ">";
+      });
+
+  nb::class_<LevelWindow>(m, "LevelWindow")
+      .def_ro("start_s", &LevelWindow::startSeconds)
+      .def_ro("end_s", &LevelWindow::endSeconds)
+      .def_ro("entry_observed", &LevelWindow::entryObserved,
+              "False when the grid began already inside: the start is a bound, not a crossing.")
+      .def_ro("exit_observed", &LevelWindow::exitObserved,
+              "False when the grid ended still inside.")
+      .def("__repr__", [](const LevelWindow& w) {
+        return "<LevelWindow " + formatDuration(w.startSeconds) + " to " +
+               formatDuration(w.endSeconds) + (w.entryObserved && w.exitObserved ? "" : " (open)") +
+               ">";
       });
 
   m.def(
@@ -742,4 +842,94 @@ NB_MODULE(_core, m) {
       "min_fraction"_a = 0.0, "pin"_a = nb::none(), "prune"_a = true, "cram_order"_a = 48,
       "Attribute the response at `at` to the nuclides in `inventory`. `at` is seconds or a "
       "duration string; `pin` is a seed name, or several.");
+
+  // --- how much is allowed ----------------------------------------------------
+
+  // A criterion is a quantity and a limit on it. Whether the limit is legitimate, genuinely
+  // linear, or composed correctly with others is a rule layer above this one -- naming it is
+  // the caller's assertion that dividing by it means something.
+  nb::class_<Criterion>(m, "Criterion", "A quantity, and how much of it is allowed.")
+      .def(
+          "__init__",
+          [](Criterion* self, const std::string& name, double limit, const std::string& metric,
+             const std::string& by, const std::string& units,
+             const exposure::PointSourceGeometry& geometry) {
+            new (self) Criterion();
+            self->name = name;
+            self->limit = limit;
+            self->spec.metric = metricFrom(metric);
+            self->spec.aggregate = aggregateFrom(by);
+            // Instant, always: an interval unit is an accrued total over a window, and a window
+            // is not what a possession or transport limit constrains.
+            self->spec.unit = requireUnit(units, self->spec.metric, Domain::Instant);
+            self->spec.geometry = geometry;
+          },
+          "name"_a, "limit"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
+          "geometry"_a = exposure::PointSourceGeometry{})
+      .def_ro("name", &Criterion::name)
+      .def_ro("limit", &Criterion::limit)
+      .def_prop_ro("units", [](const Criterion& c) { return std::string(unitName(c.spec.unit)); })
+      .def_prop_ro("metric",
+                   [](const Criterion& c) { return std::string(metricName(c.spec.metric)); })
+      .def("__repr__", [](const Criterion& c) {
+        return "<Criterion " + c.name + " <= " + shortestRoundTrip(c.limit) + " " +
+               unitName(c.spec.unit) + ">";
+      });
+
+  nb::class_<LimitingContributor>(m, "LimitingContributor")
+      .def_ro("label", &LimitingContributor::label)
+      .def_ro("fraction", &LimitingContributor::fraction)
+      .def("__repr__",
+           [](const LimitingContributor& c) { return "<LimitingContributor " + c.label + ">"; });
+
+  nb::class_<CriterionHeadroom>(m, "CriterionHeadroom")
+      .def_ro("name", &CriterionHeadroom::name)
+      .def_ro("response", &CriterionHeadroom::response)
+      .def_ro("limit", &CriterionHeadroom::limit)
+      .def_ro("fraction", &CriterionHeadroom::fraction, "R/L, the sum-of-fractions idiom.")
+      .def_ro("scale", &CriterionHeadroom::scale, "L/R, the factor this criterion alone allows.")
+      .def_ro("binding", &CriterionHeadroom::binding)
+      .def_ro("unbounded", &CriterionHeadroom::unbounded,
+              "The response is zero, so this criterion constrains nothing. Not a very large "
+              "allowance -- no allowance at issue.")
+      .def("__repr__", [](const CriterionHeadroom& h) {
+        return "<CriterionHeadroom " + h.name + (h.unbounded ? " unbounded>" : ">");
+      });
+
+  nb::class_<AllowableScale>(m, "AllowableScale")
+      .def_ro("time_s", &AllowableScale::timeSeconds)
+      .def_prop_ro(
+          "scale",
+          [](const AllowableScale& at) {
+            // None rather than a number when nothing binds: a zero here would read as the exact
+            // opposite of what it means, and Python has a value for "there isn't one".
+            return at.bounded ? nb::cast(at.scale) : nb::none();
+          },
+          "The largest factor the inventory can be multiplied by, or None when nothing "
+          "constrains it at this time.")
+      .def_ro("bounded", &AllowableScale::bounded)
+      .def_prop_ro(
+          "binding",
+          [](const AllowableScale& at) {
+            return at.bounded
+                       ? nb::cast(at.criteria[static_cast<std::size_t>(at.bindingIndex)].name)
+                       : nb::none();
+          })
+      .def_ro("criteria", &AllowableScale::criteria)
+      .def_ro("limiting", &AllowableScale::limiting,
+              "The contributors driving the binding criterion, most first.")
+      .def("__repr__", [](const AllowableScale& at) {
+        return "<AllowableScale at " + formatDuration(at.timeSeconds) +
+               (at.bounded ? " x" + shortestRoundTrip(at.scale) : " unbounded") + ">";
+      });
+
+  m.def(
+      "allowable_scale",
+      [](const NuclearData& data, const DecayResult& result, const std::vector<Criterion>& criteria,
+         int limiting) { return allowableScale(data, result, criteria, limiting); },
+      "data"_a, "result"_a, "criteria"_a, "limiting"_a = 3,
+      "By what factor the inventory can be multiplied before the first limit binds, at every "
+      "time on the grid. Exact: every response is linear in the inventory, so the scale at "
+      "which a criterion binds is a division rather than a search. Criteria over DIFFERENT "
+      "metrics are where this earns its keep, since only then can the binding one change.");
 }
