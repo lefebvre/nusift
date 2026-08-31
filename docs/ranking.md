@@ -424,7 +424,69 @@ Criteria are instantaneous. An interval unit is an accrued total over a window, 
 not what a possession or transport limit constrains, so such a criterion is refused rather than
 quietly reinterpreted.
 
-## 9. Reporting
+## 9. Counterfactual interventions: what taking something out would buy
+
+Attribution says which seeded nuclide a response is riding on. This asks the question a process
+engineer arrives with instead: if I take something **out** on a given date, what is that worth
+later. What does a Cs/Sr separation before storage actually buy against the dose rate at thirty
+years — in the tool's own currency rather than as a rule of thumb.
+
+The whole thing is one adjoint solve. Decay is linear, so `R(T) = ⟨g, n(t₀)⟩` where
+`gᵢ = dR(T)/dnᵢ(t₀)` is the importance of an atom present at the intervention date, and the
+adjoint delivers every `gᵢ` from a single solve over `[t₀, T]` — the same duality identity
+[attribution.md](attribution.md) rests on. Once `g` is in hand, removing a fraction `f` of
+nuclide `i` costs the response exactly `f · nᵢ(t₀) · gᵢ`, and every alternative on the list is a
+dot product against the same vector. Comparing a dozen processing schedules is a dozen dot
+products, not a dozen solves.
+
+It is **exact**, with no search, no perturbation, no finite difference and no tolerance. The
+unit suite checks it the only way that means anything: it rebuilds the counterfactual inventory
+by hand, decays it forward in full, and requires the adjoint's answer to match. What is *not*
+exact is the premise — that the removal is instantaneous and complete to the stated fraction.
+
+### What removing a parent does, and does not do
+
+Removing a nuclide at `t₀` removes its atoms and, with them, everything they would have gone on
+to produce after `t₀`. That second part is not bolted on: the importance `gᵢ` already carries the
+whole forward evolution from `t₀` to `T`, so a parent's value includes the daughters it would
+have fed. The benefit is nonetheless booked against the **parent that was removed**, not the
+daughter that would have emitted.
+
+What it does not do is remove the daughters already present at `t₀`. Take out caesium and the
+barium standing in the drum at that instant stays, because it is barium. That is exactly what a
+chemical separation does, and it is why the benefit of stripping Cs-137 an hour before the
+response is nearly nothing while stripping it thirty years ahead is nearly everything.
+
+This is also why the element form of a selector is the physically meaningful one. A separation
+cannot pick one isotope out of another, so "remove Cs-137 but leave Cs-134" is not a process that
+exists; the nuclide form remains available because "what is this one nuclide worth" is still a
+fair question to ask of the arithmetic.
+
+### Two refusals worth stating
+
+A selector that names nothing the inventory's chain reaches is **refused**, for the reason a pin
+naming nothing is refused: a removal that silently matches nothing reads as "taking this out is
+worth nothing", when in fact the question never arrived. But a selector that resolves and finds
+no atoms left by `t₀` is **not** an error — "there is no caesium by then" is a real answer to a
+question someone actually asked. Keeping those two apart is why the selector is matched against
+the chain reachable from the original seed rather than against the adjoint's own index space:
+`forwardClosure()` roots only at non-zero entries, so a nuclide that has decayed away is pruned
+out, and checking against the pruned set would collapse the distinction.
+
+The same nuclide named twice within one intervention is refused as well. Half of something taken
+out twice is not a stated quantity, and choosing between 75% and 100% on the user's behalf would
+be a guess dressed as an answer.
+
+### Reaching it
+
+`nusift intervene` compares alternatives by default — each `--remove` is its own counterfactual
+against the shared baseline, which is the "which separation is worth doing" question — with
+`--together` for the combined one. `nusift.compare_interventions` takes the same list from
+Python. Every format carries the baseline, because a benefit is uninterpretable without it, and
+the text form states outright that its rows are alternatives rather than a sequence: they look
+perfectly addable, and adding two of them would describe a schedule nobody computed.
+
+## 10. Reporting
 
 Three formats — `text`, `csv`, `json` — from one set of ranking objects, so the numbers cannot
 differ between them. Every text report carries a header naming the store, its library and staging
@@ -453,7 +515,7 @@ holds no rank; CSV and JSON carry a `pinned` column and field instead, because a
 cannot tell a row that placed from one fetched below the cut cannot tell a top-N from a top-N plus
 an aside. The CSV column is last, so adding it renumbered nothing anyone already reads by position.
 
-## 10. Source map
+## 11. Source map
 
 | File | Role |
 | --- | --- |
@@ -465,5 +527,7 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `crossings`, `extrema`, `windowsAbove`/`windowsBelow`, Illinois and golden-section refinement, and the table-backed series |
 | [`nusift/triage/allowable.hpp`](../nusift/triage/allowable.hpp) | `Criterion`, `CriterionHeadroom`, `AllowableScale`, and what the rule layer above them owns |
 | [`nusift/triage/allowable.cpp`](../nusift/triage/allowable.cpp) | `allowableScale`, the binding-criterion minimum, unbounded semantics, and `scaleSeries` |
+| [`nusift/triage/intervention.hpp`](../nusift/triage/intervention.hpp) | `Removal`, `Intervention`, `InterventionStudy`, and what removing a parent does and does not do |
+| [`nusift/triage/intervention.cpp`](../nusift/triage/intervention.cpp) | `compareInterventions`, selector resolution, and the reachable-versus-present distinction |
 | [`nusift/io/report.cpp`](../nusift/io/report.cpp) | Text, CSV, and JSON writers, and the provenance header |
 | [`nusift_apps/nusift.cpp`](../nusift_apps/nusift.cpp) | The `when` and `allowable` verbs, and the `--of` / `--ratio` curve select |

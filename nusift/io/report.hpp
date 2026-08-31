@@ -20,6 +20,7 @@
 #include "nusift/triage/attribution.hpp"
 #include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
+#include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
 
 namespace nusift {
@@ -119,5 +120,14 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
 void writeAllowable(std::ostream& out, const std::vector<AllowableScale>& scaled,
                     std::span<const Criterion> criteria, const ReportContext& context,
                     ReportFormat format);
+
+// Render a set of counterfactual interventions: what each one is worth against the same
+// baseline, and which nuclides the benefit came from.
+//
+// The interventions are ALTERNATIVES compared against one baseline, not a sequence, and the
+// text form says so -- a reader who added two rows together would be describing a schedule
+// nobody computed.
+void writeInterventions(std::ostream& out, const InterventionStudy& study,
+                        const ReportContext& context, ReportFormat format);
 
 }  // namespace nusift

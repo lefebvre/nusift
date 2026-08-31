@@ -56,6 +56,10 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 nusift allowable -i inventory.csv --times 1h:300y:log:60 --limit 3.7e13 \
         --limit-name "A2 transport"
 
+# What would a Cs or Sr separation before storage actually buy at 30 years?
+nusift intervene -i inventory.csv --remove-at 30d --at 30y --remove Cs --remove Sr \
+        --metric exposure --units Sv/h
+
 # What does the data store actually cover?
 nusift data info
 

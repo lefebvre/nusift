@@ -750,5 +750,69 @@ TEST(Report, TheAllowableCsvCarriesEveryCriterionAtEveryTime) {
   EXPECT_EQ(rows, 3) << csv;
 }
 
+// --- counterfactual interventions -----------------------------------------------
+
+InterventionStudy twoAlternatives() {
+  InterventionStudy study;
+  study.metric = Metric::Exposure;
+  study.unit = Unit::SievertPerHour;
+  study.interventionTimeSeconds = 2.592e6;
+  study.responseTimeSeconds = 9.4672e8;
+  study.baseline = 4.6102;
+
+  InterventionEffect big;
+  big.name = "Cs separation";
+  big.removed = 4.61;
+  big.response = study.baseline - big.removed;
+  big.removedFraction = big.removed / study.baseline;
+  big.contributors.push_back(RemovedContributor{551370, "Cs-137", 1.6e23, 4.61, 1.0});
+  study.effects.push_back(big);
+
+  InterventionEffect small;
+  small.name = "Sr separation";
+  small.removed = 3.1e-5;
+  small.response = study.baseline - small.removed;
+  small.removedFraction = small.removed / study.baseline;
+  small.contributors.push_back(RemovedContributor{380900, "Sr-90", 2.0e22, 3.1e-5, 1.0});
+  study.effects.push_back(small);
+  return study;
+}
+
+std::string interventionsAs(ReportFormat format) {
+  std::ostringstream out;
+  writeInterventions(out, twoAlternatives(), ReportContext{}, format);
+  return out.str();
+}
+
+// The rows are alternatives against one baseline, and they look perfectly addable. A reader who
+// summed two of them would be describing a schedule nobody computed, so the report says so.
+TEST(Report, TheInterventionReportSaysItsRowsAreAlternativesNotASequence) {
+  const std::string text = interventionsAs(ReportFormat::Text);
+  EXPECT_NE(text.find("two rows do not add"), std::string::npos) << text;
+  EXPECT_NE(text.find("baseline"), std::string::npos) << text;
+  EXPECT_NE(text.find("Cs separation"), std::string::npos) << text;
+}
+
+// A benefit is only interpretable against the baseline it was measured from, so every format
+// carries it rather than leaving the reader to reconstruct it from two other columns.
+TEST(Report, EveryInterventionFormatCarriesTheBaseline) {
+  const std::string json = interventionsAs(ReportFormat::Json);
+  EXPECT_DOUBLE_EQ(jsonNumberValue(json, "baseline"), 4.6102);
+  EXPECT_NE(json.find("\"removed_fraction\""), std::string::npos) << json;
+
+  const std::string csv = interventionsAs(ReportFormat::Csv);
+  EXPECT_EQ(csv.substr(0, 12), "intervention");
+  EXPECT_NE(csv.find("removed_fraction"), std::string::npos) << csv;
+}
+
+// Long format, one row per intervention per nuclide: a summary-only table would drop what the
+// benefit was actually made of, which is the half that says whether it is worth doing.
+TEST(Report, TheInterventionCsvCarriesWhatEachBenefitWasMadeOf) {
+  const std::string csv = interventionsAs(ReportFormat::Csv);
+  EXPECT_NE(csv.find("Cs-137"), std::string::npos) << csv;
+  EXPECT_NE(csv.find("Sr-90"), std::string::npos) << csv;
+  EXPECT_NE(csv.find("atoms_removed"), std::string::npos) << csv;
+}
+
 }  // namespace
 }  // namespace nusift

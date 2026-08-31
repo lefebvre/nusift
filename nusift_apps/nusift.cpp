@@ -35,6 +35,7 @@
 #include "nusift/triage/attribution.hpp"
 #include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
+#include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
 #include "nusift/version.hpp"
@@ -1010,6 +1011,104 @@ int runAllowable(const CommonOptions& options, const AllowableOptions& allow, co
   return 0;
 }
 
+// --- counterfactual interventions ---------------------------------------------
+
+struct IntervenOptions {
+  std::vector<std::string> removals;  // "Cs", "Sr-90=0.5"
+  std::string removeAt = "0";
+  bool together = false;
+};
+
+// "Cs" or "Sr-90=0.5": a selector, optionally with the fraction removed. Without one the
+// removal is complete, which is the upper bound on any real separation and the honest default
+// for a question about what a separation could buy at most.
+Removal parseRemoval(const std::string& text) {
+  Removal removal;
+  const std::size_t equals = text.rfind('=');
+  // "Z=55" and "A=137" are selectors that contain their own '=', so a suffix only counts as a
+  // fraction when it actually parses as one.
+  if (equals != std::string::npos) {
+    const std::string tail = text.substr(equals + 1);
+    try {
+      std::size_t used = 0;
+      const double fraction = std::stod(tail, &used);
+      if (used == tail.size()) {
+        removal.selector = text.substr(0, equals);
+        removal.fraction = fraction;
+        return removal;
+      }
+    } catch (const std::exception&) {
+      // Not a number, so the '=' belongs to the selector.
+    }
+  }
+  removal.selector = text;
+  removal.fraction = 1.0;
+  return removal;
+}
+
+int runIntervene(const CommonOptions& options, const IntervenOptions& intervene,
+                 const char* argv0) {
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() != 1) {
+    throw InputError(
+        "time: intervene reports one response time; pass a single --at (the benefit is measured "
+        "against the response at that instant)");
+  }
+  const double removeAt = parseDuration(intervene.removeAt);
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options.metric);
+  spec.aggregate = aggregateFrom(options.aggregate);
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.geometry = geometryFrom(options);
+
+  std::vector<Intervention> interventions;
+  if (intervene.together) {
+    // One intervention doing everything: the combined separation, rather than a comparison of
+    // separations.
+    Intervention combined;
+    for (const std::string& text : intervene.removals) {
+      const Removal removal = parseRemoval(text);
+      combined.name += combined.name.empty() ? "" : " + ";
+      combined.name += removal.selector;
+      combined.removals.push_back(removal);
+    }
+    interventions.push_back(std::move(combined));
+  } else {
+    // The default is a COMPARISON: each removal is its own alternative, measured against the
+    // same baseline. That is the question "which separation is worth doing", which is the one
+    // people arrive with; --together answers "what does doing all of them buy".
+    for (const std::string& text : intervene.removals) {
+      const Removal removal = parseRemoval(text);
+      Intervention one;
+      one.name = removal.selector;
+      one.removals.push_back(removal);
+      interventions.push_back(std::move(one));
+    }
+  }
+
+  const InterventionStudy study = compareInterventions(
+      data, inventory, removeAt, times.front(), spec, interventions, decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.size();
+  context.seedProvenance = study.seedProvenance;
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+
+  OutputStream out(options.output);
+  writeInterventions(out.get(), study, context, format);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1072,6 +1171,23 @@ int main(int argc, char** argv) {
                            "What the limit is, named in the report (e.g. \"A2 transport\")");
   allowableCmd->add_option("--limiting", allowableExtra.limitingCount,
                            "How many contributors to name as driving the binding criterion");
+
+  CommonOptions intervenOptions;
+  IntervenOptions intervenExtra;
+  CLI::App* intervenCmd = app.add_subcommand(
+      "intervene", "What removing something on a given date is worth to a later response");
+  addCommonOptions(intervenCmd, intervenOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  intervenCmd
+      ->add_option("--remove", intervenExtra.removals,
+                   "Take this out: a nuclide, an element, Z=55 or A=137, optionally with the "
+                   "fraction removed (Cs, Sr-90=0.5). Repeatable; each is a separate "
+                   "alternative unless --together")
+      ->required();
+  intervenCmd->add_option("--remove-at", intervenExtra.removeAt,
+                          "When the removal happens (default now)");
+  intervenCmd->add_flag("--together", intervenExtra.together,
+                        "Apply every --remove as one combined intervention rather than "
+                        "comparing them");
 
   CommonOptions decayCmdOptions;
   CLI::App* decayCmd = app.add_subcommand("decay", "Raw inventory versus time, unranked");
@@ -1144,6 +1260,9 @@ int main(int argc, char** argv) {
     }
     if (allowableCmd->parsed()) {
       return runAllowable(allowableOptions, allowableExtra, argv0);
+    }
+    if (intervenCmd->parsed()) {
+      return runIntervene(intervenOptions, intervenExtra, argv0);
     }
     if (decayCmd->parsed()) {
       return runDecay(decayCmdOptions, argv0);
