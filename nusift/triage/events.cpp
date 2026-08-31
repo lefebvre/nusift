@@ -526,4 +526,158 @@ EventSeries ratioSeries(const ResponseTable& table, int numerator, int denominat
   return series;
 }
 
+// --- refining an event by re-solving -----------------------------------------
+
+namespace {
+
+// An evaluator narrows an event by producing values the grid never sampled, so it has to be
+// producing values of the SAME curve. Metric, aggregate and unit are the identity of what is
+// plotted; the geometry is part of what an exposure or a fluence MEANS, and two distances are
+// two different curves however alike they look.
+void requireSameCurve(const ResponseTable& table, const ResponseEvaluator& evaluator) {
+  const ResponseSpec& spec = evaluator.spec();
+  const exposure::PointSourceGeometry& sampled = table.geometry;
+  const exposure::PointSourceGeometry& asked = spec.geometry;
+  const bool sameGeometry =
+      sampled.distanceM == asked.distanceM && sampled.airDensityKgM3 == asked.airDensityKgM3 &&
+      sampled.airAttenuation == asked.airAttenuation && sampled.buildup == asked.buildup;
+  if (table.metric != spec.metric || table.aggregate != spec.aggregate || table.unit != spec.unit ||
+      !sameGeometry) {
+    throw InputError(tagged(kModule,
+                            "this evaluator was built for a different response than the table it "
+                            "would refine: it would narrow an event on one curve using values "
+                            "taken from another"));
+  }
+}
+
+}  // namespace
+
+ResponseEvaluator::ResponseEvaluator(const NuclearData& data, const Inventory& inventory,
+                                     const ResponseSpec& spec, const DecayOptions& options)
+    : data_(data), inventory_(inventory), spec_(spec), options_(options) {}
+
+const ResponseTable& ResponseEvaluator::tableAt(double timeSeconds) const {
+  if (hasCache_ && cachedTime_ == timeSeconds) {
+    return cached_;
+  }
+  const double times[] = {timeSeconds};
+  const DecayResult result = decay(data_, inventory_, std::span<const double>(times, 1), options_);
+  cached_ = buildResponse(data_, result, spec_);
+  cachedTime_ = timeSeconds;
+  hasCache_ = true;
+  ++solves_;
+  return cached_;
+}
+
+double ResponseEvaluator::total(double timeSeconds) const {
+  return tableAt(timeSeconds).totals.front();
+}
+
+double ResponseEvaluator::value(const ContributorId& id, double timeSeconds) const {
+  const ResponseTable& table = tableAt(timeSeconds);
+  for (int c = 0; c < table.contributorCount(); ++c) {
+    const ContributorId& other = table.contributors[static_cast<std::size_t>(c)];
+    if (other.key != id.key) {
+      continue;
+    }
+    // A line table carries several columns per emitter, so the key alone does not name one.
+    if (table.aggregate == Aggregate::GammaLine && other.lineEnergyEv != id.lineEnergyEv) {
+      continue;
+    }
+    return table.valuesAt(0)[static_cast<std::size_t>(c)];
+  }
+  // The columns of a response are the buckets of the seed's forward closure, which does not
+  // depend on time, and a line's share of its own emitter is a fixed fraction -- so the same
+  // contributors exist at every instant. Arriving here means the evaluator and the table were
+  // not built from the same seed, which is a programming error rather than bad input.
+  throw NusiftError(tagged(kModule,
+                           "the response at this time carries no column for a contributor the "
+                           "table holds, so the two were not built from the same inventory"));
+}
+
+EventSeries totalSeries(const ResponseTable& table, const ResponseEvaluator& evaluator) {
+  requireSameCurve(table, evaluator);
+  EventSeries series = totalSeries(table);
+  series.evaluate = [&evaluator](double t) { return evaluator.total(t); };
+  return series;
+}
+
+EventSeries contributorSeries(const ResponseTable& table, int contributor,
+                              const ResponseEvaluator& evaluator) {
+  requireSameCurve(table, evaluator);
+  // The sampling half validates the index, so the identity below is only read once it is known
+  // to exist.
+  EventSeries series = contributorSeries(table, contributor);
+  const ContributorId id = table.contributors[static_cast<std::size_t>(contributor)];
+  series.evaluate = [&evaluator, id](double t) { return evaluator.value(id, t); };
+  return series;
+}
+
+EventSeries ratioSeries(const ResponseTable& table, int numerator, int denominator,
+                        const ResponseEvaluator& evaluator) {
+  requireSameCurve(table, evaluator);
+  EventSeries series = ratioSeries(table, numerator, denominator);
+  const ContributorId top = table.contributors[static_cast<std::size_t>(numerator)];
+  const ContributorId bottom = table.contributors[static_cast<std::size_t>(denominator)];
+  series.evaluate = [&evaluator, top, bottom](double t) {
+    const double below = evaluator.value(bottom, t);
+    // The sampled series already refused a denominator that vanishes at any sample, so a zero
+    // here sits between two samples that both saw it present. Returning an infinity would drag
+    // the root to whichever end of the bracket the search last tried; saying what happened is
+    // the only honest answer.
+    if (!(below > 0.0)) {
+      throw InputError(
+          tagged(kModule, "the ratio's denominator vanishes at t=" + std::to_string(t) +
+                              " s, between two samples that both found it present"));
+    }
+    return evaluator.value(top, t) / below;
+  };
+  return series;
+}
+
+EventSeries taskSeries(const NuclearData& data, const Inventory& inventory,
+                       const ResponseSpec& spec, std::span<const double> startTimes,
+                       double durationSeconds, const DecayOptions& options, bool refine) {
+  if (!(durationSeconds > 0.0)) {
+    throw InputError(tagged(kModule,
+                            "a task needs a positive duration: a window of no length accrues "
+                            "nothing, whenever it starts"));
+  }
+  if (startTimes.size() < 2) {
+    throw InputError(tagged(kModule,
+                            "a task curve needs at least two start times for an event to sit "
+                            "between; one start time is a single answer, not a curve"));
+  }
+  for (std::size_t k = 1; k < startTimes.size(); ++k) {
+    if (!(startTimes[k] > startTimes[k - 1])) {
+      throw InputError(tagged(kModule, "task start times must be strictly increasing"));
+    }
+  }
+
+  // Copies rather than captured references: this callable outlives the call when `refine` puts
+  // it in the series, and a spec or a set of solver options that died with the argument list
+  // would be read during the search. The data and the inventory are the caller's to keep alive,
+  // which the header says.
+  const ResponseSpec heldSpec = spec;
+  const DecayOptions heldOptions = options;
+  const auto accrued = [&data, &inventory, heldSpec, heldOptions, durationSeconds](double start) {
+    std::vector<std::int64_t> keys;
+    const std::vector<double> integral =
+        intervalIntegral(data, inventory, start, start + durationSeconds, &keys, heldOptions);
+    return buildIntervalResponse(data, keys, integral, start, start + durationSeconds, heldSpec)
+        .totals.front();
+  };
+
+  EventSeries series;
+  series.times.assign(startTimes.begin(), startTimes.end());
+  series.values.reserve(startTimes.size());
+  for (const double start : startTimes) {
+    series.values.push_back(accrued(start));
+  }
+  if (refine) {
+    series.evaluate = accrued;
+  }
+  return series;
+}
+
 }  // namespace nusift
