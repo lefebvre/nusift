@@ -471,5 +471,190 @@ TEST(TrajectoryEvents, RatioSeriesRefusesADenominatorPresentTooBriefly) {
   EXPECT_THROW(ratioSeries(table, 0, 1), InputError);
 }
 
+// --- refining against a real response -----------------------------------------
+
+// The point of an evaluator: the same grid, the same crossing, placed by solving instead of by
+// interpolating. Activity from one nuclide is a pure exponential, where log-linear
+// interpolation is exact, so this is not a test that refinement is more ACCURATE here -- it is
+// a test that it narrows the bracket it reports and says it did.
+TEST(TrajectoryEvents, AnEvaluatorNarrowsACrossingTheTableAloneOnlyInterpolates) {
+  const double lambda = 1.0e-4;
+  const double atoms = 1.0e20;
+  const double level = 1.0e13;
+  const double expected = std::log(lambda * atoms / level) / lambda;
+
+  const NuclearData data = oneEmitter(lambda);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+
+  const std::vector<double> times = logspace(1.0, 1.0e6, 20);
+  const ResponseTable table = buildResponse(data, decay(data, inv, times), ResponseSpec{});
+
+  const ResponseEvaluator evaluator(data, inv, ResponseSpec{});
+  const EventSeries refined = totalSeries(table, evaluator);
+  const EventSeries sampled = totalSeries(table);
+  ASSERT_EQ(refined.values, sampled.values) << "refinement changes how an event is placed, "
+                                               "not what the grid saw";
+
+  const std::optional<TrajectoryEvent> narrow = firstCrossing(refined, level);
+  const std::optional<TrajectoryEvent> wide = firstCrossing(sampled, level);
+  ASSERT_TRUE(narrow.has_value());
+  ASSERT_TRUE(wide.has_value());
+
+  EXPECT_TRUE(narrow->refined);
+  EXPECT_FALSE(wide->refined);
+  EXPECT_TRUE(narrow->converged);
+  EXPECT_LT(narrow->locatedToSeconds, 1.0e-3 * wide->locatedToSeconds)
+      << "a refined event is placed far more tightly than the interval that found it";
+  EXPECT_NEAR(narrow->timeSeconds, expected, expected * 1.0e-5);
+  EXPECT_GT(evaluator.solves(), 0) << "refinement is solves, and they are countable";
+}
+
+// A curve where interpolation is NOT exact, so refinement moves the answer rather than only
+// tightening the bracket it is reported with. The daughter of a decay chain peaks where its
+// parabola through three log-spaced samples does not.
+TEST(TrajectoryEvents, RefinementMovesAPeakInterpolationPlacesWrongly) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 1.0e-4});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  // The Bateman maximum of the daughter: where its two exponentials balance.
+  const double l0 = 1.0e-3;
+  const double l1 = 1.0e-4;
+  const double expected = std::log(l0 / l1) / (l0 - l1);
+
+  const std::vector<double> times = logspace(10.0, 1.0e6, 25);
+  const ResponseTable table = buildResponse(data, decay(data, inv, times), ResponseSpec{});
+  const int daughter = 1;
+  ASSERT_GT(table.contributorCount(), daughter);
+
+  const ResponseEvaluator evaluator(data, inv, ResponseSpec{});
+  const std::vector<TrajectoryEvent> interpolated = extrema(contributorSeries(table, daughter));
+  const std::vector<TrajectoryEvent> refined =
+      extrema(contributorSeries(table, daughter, evaluator));
+  ASSERT_EQ(interpolated.size(), 1u);
+  ASSERT_EQ(refined.size(), 1u);
+  EXPECT_EQ(refined[0].kind, EventKind::Maximum);
+
+  EXPECT_NEAR(refined[0].timeSeconds, expected, expected * 1.0e-4);
+  EXPECT_LT(std::abs(refined[0].timeSeconds - expected),
+            std::abs(interpolated[0].timeSeconds - expected))
+      << "solving inside the bracket beats fitting a parabola across it";
+}
+
+// An evaluator built for another curve would narrow an event using values that are not on it.
+// Refused at the point the two are joined, rather than producing a plausible wrong instant.
+TEST(TrajectoryEvents, AnEvaluatorForADifferentCurveIsRefused) {
+  const NuclearData data = oneEmitter(1.0e-4);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  const std::vector<double> times = logspace(1.0, 1.0e6, 10);
+  const ResponseTable table = buildResponse(data, decay(data, inv, times), ResponseSpec{});
+
+  ResponseSpec other;
+  other.unit = Unit::Curie;
+  const ResponseEvaluator wrongUnit(data, inv, other);
+  EXPECT_THROW(totalSeries(table, wrongUnit), InputError);
+
+  ResponseSpec elsewhere;
+  elsewhere.geometry.distanceM = 2.0;
+  const ResponseEvaluator wrongDistance(data, inv, elsewhere);
+  EXPECT_THROW(totalSeries(table, wrongDistance), InputError);
+}
+
+// --- the fixed-duration task --------------------------------------------------
+
+// Decays accrued by a task of length D starting at t are N0 e^{-lambda t} (1 - e^{-lambda D}),
+// so the task curve is itself an exponential and the start time at which a budget binds has a
+// closed form. That is the whole inversion the interval integral makes possible.
+TEST(TrajectoryEvents, TaskCurveMatchesTheAnalyticAccrualAndInvertsToAStartTime) {
+  const double lambda = 1.0e-4;
+  const double atoms = 1.0e20;
+  const double duration = 3600.0;
+  const double perTask = atoms * (1.0 - std::exp(-lambda * duration));
+
+  const NuclearData data = oneEmitter(lambda);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  const std::vector<double> starts = logspace(1.0, 1.0e6, 40);
+  const EventSeries series = taskSeries(data, inv, spec, starts, duration);
+  ASSERT_EQ(series.values.size(), starts.size());
+  EXPECT_NEAR(series.values.front(), perTask * std::exp(-lambda * starts.front()), perTask * 1.0e-6)
+      << "every sample is the exact integral over its own window";
+
+  const double budget = 0.1 * perTask;
+  const double expected = std::log(perTask / budget) / lambda;
+  const std::optional<TrajectoryEvent> fits = firstCrossing(series, budget);
+  ASSERT_TRUE(fits.has_value());
+  EXPECT_EQ(fits->kind, EventKind::Falling) << "waiting makes a job cheaper, not dearer";
+  EXPECT_NEAR(fits->timeSeconds, expected, expected * 0.01);
+
+  // And the windows say the same thing as intervals: from that start onwards, the job fits.
+  const std::vector<LevelWindow> allowed = windowsBelow(series, budget);
+  ASSERT_EQ(allowed.size(), 1u);
+  EXPECT_NEAR(allowed.front().startSeconds, expected, expected * 0.01);
+  EXPECT_FALSE(allowed.front().exitObserved) << "it never stops fitting";
+}
+
+// The question the task curve exists for. Where a daughter grows in faster than its parent
+// decays, the accrued total RISES first, so the worst time to do a fixed-length job is neither
+// as soon as possible nor as late as possible -- it is a turn on a curve that no ranking and no
+// forecast shows.
+//
+// Sr-90 -> Y-90 in miniature: a long-lived parent feeding a fast daughter, where the total
+// activity climbs to roughly twice the parent's own while the daughter fills in. Its maximum is
+// closed form -- 2*lambda0*e^{-lambda0 t} = lambda1*e^{-lambda1 t} -- and for a task short
+// against the daughter's half-life the accrued curve turns within a fraction of a percent of
+// the rate curve it integrates.
+TEST(TrajectoryEvents, TaskCurveFindsTheWorstTimeToStartAnIngrowthFedJob) {
+  const double l0 = 1.0e-9;
+  const double l1 = 1.0e-5;
+  StoreArrays arrays = synth::linearChain({l0, l1});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  const double expected = std::log(l1 / (2.0 * l0)) / (l1 - l0);
+  const std::vector<double> starts = logspace(1.0e3, 1.0e7, 30);
+  const EventSeries series =
+      taskSeries(data, inv, spec, starts, 3600.0, DecayOptions{}, /*refine=*/true);
+
+  const std::vector<TrajectoryEvent> turns = extrema(series);
+  ASSERT_EQ(turns.size(), 1u);
+  EXPECT_EQ(turns[0].kind, EventKind::Maximum);
+  EXPECT_TRUE(turns[0].refined) << "the curve was given an evaluator, so the turn was solved for";
+  EXPECT_NEAR(turns[0].timeSeconds, expected, expected * 0.01);
+  EXPECT_LT(turns[0].locatedToSeconds, turns[0].bracketEndSeconds - turns[0].bracketStartSeconds);
+}
+
+TEST(TrajectoryEvents, ATaskRefusesADurationOrAGridItCannotBeAskedAbout) {
+  const NuclearData data = oneEmitter(1.0e-4);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+  const std::vector<double> starts = {1.0, 2.0, 3.0};
+
+  EXPECT_THROW(taskSeries(data, inv, spec, starts, 0.0), InputError);
+  EXPECT_THROW(taskSeries(data, inv, spec, std::vector<double>{1.0}, 60.0), InputError);
+  EXPECT_THROW(taskSeries(data, inv, spec, std::vector<double>{2.0, 1.0}, 60.0), InputError);
+
+  // A rate cannot describe what a window accrued, and the unit gating says so here as it does
+  // everywhere else.
+  ResponseSpec rate;
+  rate.unit = Unit::Becquerel;
+  EXPECT_THROW(taskSeries(data, inv, rate, starts, 60.0), InputError);
+}
+
 }  // namespace
 }  // namespace nusift

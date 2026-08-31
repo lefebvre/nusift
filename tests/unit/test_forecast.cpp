@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "nusift/core/error.hpp"
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/io/time_spec.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
+#include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "synthetic_chain.hpp"
 
@@ -29,6 +32,17 @@ NuclearData twoIndependentEmitters(double lambdaFast, double lambdaSlow) {
   a.modeFinalState = {0, 0};
   a.modeIsFission = {0, 0};
   return NuclearData::fromArrays(std::move(a));
+}
+
+// A column by the name the table prints for it. The table carries a column per nuclide in the
+// chain, stable daughters included, so an emitter's index is not the order it was seeded in.
+int columnOfLabel(const ResponseTable& table, const std::string& label) {
+  for (int c = 0; c < table.contributorCount(); ++c) {
+    if (table.labels[static_cast<std::size_t>(c)] == label) {
+      return c;
+    }
+  }
+  throw NusiftError("test: no column labelled " + label);
 }
 
 ResponseTable tableOver(const NuclearData& data, const Inventory& inventory,
@@ -67,6 +81,64 @@ TEST(Forecast, WindowBoundaryMatchesTheAnalyticCrossing) {
   EXPECT_NEAR(windows[0].endSeconds, expected, expected * 0.01);
   EXPECT_DOUBLE_EQ(windows[1].startSeconds, windows[0].endSeconds)
       << "windows must abut, not overlap or leave a gap";
+}
+
+// The merge, stated as a test: a dominance boundary is a crossing, and it is the SAME crossing
+// the event engine reports for the same pair on the same grid. Two pieces of code placing one
+// instant is the thing this replaces, so nothing here would notice if they drifted apart --
+// except this.
+TEST(Forecast, ABoundaryIsTheCrossingTheEventEngineLocates) {
+  const double fast = 1.0e-3;
+  const double slow = 1.0e-4;
+  const double atoms = 1.0e20;
+  const NuclearData data = twoIndependentEmitters(fast, slow);
+
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+  inv.add(Zai{60, 120, 0}, atoms);
+
+  const ResponseTable table = tableOver(data, inv, logspace(1.0, 1.0e5, 60));
+  const std::vector<DominanceWindow> windows = dominanceWindows(table);
+  ASSERT_EQ(windows.size(), 2u);
+
+  // The leader changes where the ratio of the two contenders passes one. The columns are the
+  // two emitters, which the stable daughters sit between: the table is ordered by key.
+  const int lead = columnOfLabel(table, "Sn-100");
+  const int follower = columnOfLabel(table, "Nd-120");
+  const std::optional<TrajectoryEvent> crossing =
+      firstCrossing(ratioSeries(table, lead, follower), 1.0);
+  ASSERT_TRUE(crossing.has_value());
+  EXPECT_DOUBLE_EQ(windows[0].endSeconds, crossing->timeSeconds);
+}
+
+// Refinement is available to a forecast on the same terms as to `when`: the boundary is placed
+// by solving inside its bracket rather than interpolating across it. For two exponentials the
+// interpolation is already exact, which is what makes this a fair test of AGREEMENT -- the two
+// paths have to land on the same instant, not merely near it.
+TEST(Forecast, RefinedBoundariesAgreeWithTheInterpolatedOnesOnExponentials) {
+  const double fast = 1.0e-3;
+  const double slow = 1.0e-4;
+  const double atoms = 1.0e20;
+  const NuclearData data = twoIndependentEmitters(fast, slow);
+
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+  inv.add(Zai{60, 120, 0}, atoms);
+
+  const double expected = std::log((fast * atoms) / (slow * atoms)) / (fast - slow);
+  const ResponseTable table = tableOver(data, inv, logspace(1.0, 1.0e5, 60));
+
+  const ResponseEvaluator evaluator(data, inv, ResponseSpec{});
+  const std::vector<DominanceWindow> refined = dominanceWindows(table, evaluator);
+  const std::vector<DominanceWindow> interpolated = dominanceWindows(table);
+  ASSERT_EQ(refined.size(), 2u);
+  ASSERT_EQ(interpolated.size(), 2u);
+
+  EXPECT_NEAR(refined[0].endSeconds, expected, expected * 1.0e-5);
+  EXPECT_NEAR(refined[0].endSeconds, interpolated[0].endSeconds, expected * 1.0e-4);
+  EXPECT_DOUBLE_EQ(refined[1].startSeconds, refined[0].endSeconds)
+      << "refining an edge must not open a gap between the windows it separates";
+  EXPECT_GT(evaluator.solves(), 0);
 }
 
 TEST(Forecast, WindowsSpanTheWholeGridInOrder) {

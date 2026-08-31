@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "nusift/triage/events.hpp"
 #include "nusift/triage/response.hpp"
 
 namespace nusift {
@@ -51,11 +52,13 @@ struct RankTrack {
 
 // The windows over which each successive leader holds first place.
 //
-// Boundaries are interpolated rather than snapped to grid points. Between two samples the
-// contenders' values are close to exponential, so the log of their ratio is close to linear in
-// time and crosses zero at a well-defined instant. Reporting the grid point instead would put
-// the crossover wherever the grid happened to fall, which for a log-spaced grid at late times
-// can be years away from the truth.
+// A boundary is a located event like any other, and it is located by the event engine rather
+// than by a second copy of the same reasoning: the ratio of the two contenders crossing one,
+// inside the grid interval that observed the change. Between two samples both are close to
+// exponential, so the log of that ratio is close to linear in time and crosses zero at a
+// well-defined instant. Reporting the grid point instead would put the crossover wherever the
+// grid happened to fall, which for a log-spaced grid at late times can be years away from the
+// truth.
 //
 // Runs shorter than `minSamples` grid points are absorbed into their neighbours: near a
 // crossover the leader can flicker between two contenders within numerical noise, and six
@@ -68,6 +71,15 @@ struct RankTrack {
 // whichever contributor happened to lead first. Sample count is grid-agnostic and says what
 // was meant: a run the grid barely resolved.
 std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table, int minSamples = 2);
+
+// The same, with every interior boundary REFINED by re-solving inside its bracket instead of
+// interpolated across it. Costs a handful of single-time solves per boundary and returns the
+// same windows otherwise, so which one to call is the same judgement `when` leaves to its
+// caller: what a boundary is worth to a decision.
+std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table,
+                                              const ResponseEvaluator& evaluator,
+                                              int minSamples = 2,
+                                              const EventTolerance& tolerance = {});
 
 // Every contributor that reaches the top `n` at any time, ordered by peak share. This is what
 // a forecast prints rows for: a nuclide that only matters at thirty years still belongs in the

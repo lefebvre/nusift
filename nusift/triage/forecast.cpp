@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <span>
 #include <vector>
@@ -33,10 +34,18 @@ int leaderAt(const ResponseTable& table, int timeIndex) {
 
 // Where two contributors' values cross between consecutive samples.
 //
-// Both are close to exponential over a grid interval, so log(a/b) is close to linear in time
-// and its zero is the crossing. Falls back to the interval midpoint when the ratio does not
-// actually change sign, which happens only if the caller asked about the wrong interval.
-double crossingTime(const ResponseTable& table, int leaving, int arriving, int k) {
+// A leader change is a crossing of the ratio a/b through one, so it is handed to the event
+// engine rather than located here: one code path places a crossing, and a boundary in a
+// forecast and a crossing from `when` can never disagree about the same instant. The engine's
+// log-linear interpolation of a positive level reduces, for a ratio against one, to exactly
+// the closed form this function used to carry -- both contenders are close to exponential over
+// one interval -- so the merge does not move an unrefined boundary.
+//
+// With an evaluator the same bracket is narrowed by real solves instead. Falls back to the
+// interval midpoint when the ratio does not actually change sign, which happens only if the
+// caller asked about the wrong interval.
+double crossingTime(const ResponseTable& table, int leaving, int arriving, int k,
+                    const ResponseEvaluator* evaluator, const EventTolerance& tolerance) {
   const double t0 = table.times[static_cast<std::size_t>(k)];
   const double t1 = table.times[static_cast<std::size_t>(k) + 1];
 
@@ -50,12 +59,30 @@ double crossingTime(const ResponseTable& table, int leaving, int arriving, int k
     return 0.5 * (t0 + t1);
   }
 
-  const double d0 = std::log(a0 / b0);
-  const double d1 = std::log(a1 / b1);
-  if (d0 == d1 || (d0 > 0.0) == (d1 > 0.0)) {
+  EventSeries pair;
+  pair.times = {t0, t1};
+  pair.values = {a0 / b0, a1 / b1};
+  if (evaluator != nullptr) {
+    const ContributorId top = table.contributors[static_cast<std::size_t>(leaving)];
+    const ContributorId bottom = table.contributors[static_cast<std::size_t>(arriving)];
+    pair.evaluate = [evaluator, top, bottom](double t) {
+      const double below = evaluator->value(bottom, t);
+      // Both contenders are positive at both ends of this bracket, so a zero in between is a
+      // curve that dipped out and back. The ratio is genuinely unbounded there and the leader
+      // is genuinely the numerator, which is what an infinity says; the search reads it as a
+      // residual with a sign and bisects, rather than stepping to a nonsense time.
+      if (!(below > 0.0)) {
+        return std::numeric_limits<double>::infinity();
+      }
+      return evaluator->value(top, t) / below;
+    };
+  }
+
+  const std::vector<TrajectoryEvent> found = crossings(pair, 1.0, tolerance);
+  if (found.empty()) {
     return 0.5 * (t0 + t1);
   }
-  return t0 + (t1 - t0) * d0 / (d0 - d1);
+  return found.front().timeSeconds;
 }
 
 RankTrack trackOf(const ResponseTable& table, int contributor) {
@@ -88,9 +115,12 @@ RankTrack trackOf(const ResponseTable& table, int contributor) {
   return track;
 }
 
-}  // namespace
-
-std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table, int minSamples) {
+// The body both entry points share. The evaluator is a pointer rather than two copies of two
+// hundred lines: everything about which runs exist and how they are absorbed is identical, and
+// only how tightly the boundaries between them are placed differs.
+std::vector<DominanceWindow> dominanceWindowsImpl(const ResponseTable& table, int minSamples,
+                                                  const ResponseEvaluator* evaluator,
+                                                  const EventTolerance& tolerance) {
   const int nT = table.timeCount();
   if (nT == 0 || table.contributorCount() == 0) {
     return {};
@@ -159,10 +189,11 @@ std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table, int mi
     // boundaries are the interpolated crossings.
     window.startSeconds = r == 0 ? table.times.front()
                                  : crossingTime(table, runs[r - 1].contributor, run.contributor,
-                                                runs[r - 1].lastIndex);
-    window.endSeconds = r + 1 == runs.size() ? table.times.back()
-                                             : crossingTime(table, run.contributor,
-                                                            runs[r + 1].contributor, run.lastIndex);
+                                                runs[r - 1].lastIndex, evaluator, tolerance);
+    window.endSeconds = r + 1 == runs.size()
+                            ? table.times.back()
+                            : crossingTime(table, run.contributor, runs[r + 1].contributor,
+                                           run.lastIndex, evaluator, tolerance);
 
     for (int k = run.firstIndex; k <= run.lastIndex; ++k) {
       const double total = table.totals[static_cast<std::size_t>(k)];
@@ -175,6 +206,18 @@ std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table, int mi
     windows.push_back(std::move(window));
   }
   return windows;
+}
+
+}  // namespace
+
+std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table, int minSamples) {
+  return dominanceWindowsImpl(table, minSamples, /*evaluator=*/nullptr, EventTolerance{});
+}
+
+std::vector<DominanceWindow> dominanceWindows(const ResponseTable& table,
+                                              const ResponseEvaluator& evaluator, int minSamples,
+                                              const EventTolerance& tolerance) {
+  return dominanceWindowsImpl(table, minSamples, &evaluator, tolerance);
 }
 
 std::vector<RankTrack> unionTopN(const ResponseTable& table, int n) {

@@ -36,8 +36,11 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 #include <vector>
 
+#include "nusift/engine/decay_engine.hpp"
+#include "nusift/engine/inventory.hpp"
 #include "nusift/triage/response.hpp"
 
 namespace nusift {
@@ -185,5 +188,102 @@ EventSeries contributorSeries(const ResponseTable& table, int contributor);
 // ratio is discontinuous inside the grid, no bracket across the gap would mean anything, and
 // this throws InputError rather than searching over it.
 EventSeries ratioSeries(const ResponseTable& table, int numerator, int denominator);
+
+// --- refining an event by re-solving ------------------------------------------
+//
+// Everything above locates an event inside a bracket the grid observed. Whether that location
+// is NARROWED or merely INTERPOLATED turns on one thing: whether EventSeries::evaluate can say
+// what the curve does between two samples. For a response curve that evaluation is a
+// single-time solve, costing what any other single-time answer costs, and this is the object
+// that performs it.
+//
+// It is deliberately not automatic. Refinement multiplies solves by the number of events and
+// by the iterations each one takes, and whether that is worth spending is the caller's
+// judgement rather than this layer's. What is not the caller's judgement is being honest about
+// which happened: `TrajectoryEvent::refined` says so either way, and an interpolated event is
+// reported as known no better than its bracket.
+//
+// The evaluator has to be built from the same data, inventory and spec the table was, or it
+// would narrow an event on one curve using values from another. The builders below check what
+// can be checked -- metric, aggregate, unit, geometry -- and refuse a mismatch rather than
+// silently mixing two curves.
+//
+// LIFETIME. A series built with an evaluator holds a reference to it, and the evaluator holds
+// references to the data and the inventory. All three have to outlive every search that uses
+// the series.
+class ResponseEvaluator {
+public:
+  ResponseEvaluator(const NuclearData& data, const Inventory& inventory, const ResponseSpec& spec,
+                    const DecayOptions& options = {});
+
+  // The response total at `timeSeconds`, in the spec's unit.
+  double total(double timeSeconds) const;
+
+  // What one contributor holds at `timeSeconds`, named by the identity the table carries rather
+  // than by a column index. Two tables built from the same seed agree on identities whatever
+  // times they were built at; a column index means nothing away from the table it came from.
+  double value(const ContributorId& id, double timeSeconds) const;
+
+  const ResponseSpec& spec() const { return spec_; }
+
+  // Solves spent so far. What refinement cost is not visible in the events it produced, so a
+  // caller that wants to report the price has to ask for it.
+  int solves() const { return solves_; }
+
+private:
+  const ResponseTable& tableAt(double timeSeconds) const;
+
+  const NuclearData& data_;
+  const Inventory& inventory_;
+  ResponseSpec spec_;
+  DecayOptions options_;
+
+  // The last instant solved for. A ratio asks for two columns at the same time, and every
+  // search asks about the same instant more than once; without this the same solve would be
+  // paid for twice or more.
+  mutable ResponseTable cached_;
+  mutable double cachedTime_ = 0.0;
+  mutable bool hasCache_ = false;
+  mutable int solves_ = 0;
+};
+
+// The same three series, able to refine. Identical sampling to the versions above -- the values
+// still come from the table, so nothing about what the grid SAW changes -- with `evaluate`
+// filled in, so an event inside a bracket can be narrowed instead of interpolated.
+EventSeries totalSeries(const ResponseTable& table, const ResponseEvaluator& evaluator);
+EventSeries contributorSeries(const ResponseTable& table, int contributor,
+                              const ResponseEvaluator& evaluator);
+EventSeries ratioSeries(const ResponseTable& table, int numerator, int denominator,
+                        const ResponseEvaluator& evaluator);
+
+// --- the fixed-duration task --------------------------------------------------
+//
+// "What does a one-hour job cost, and when should it be done" is not a question about the rate
+// curve. It is a question about the total ACCRUED over a window of fixed length, as a function
+// of when that window starts, and no point of that curve is a point of the rate curve.
+//
+// Every sample is an exact interval integral, so the curve inherits the property that makes
+// inverting it worth doing at all: there is no quadrature error inside a window to reason
+// about, only the sampling of the start times. And once it is a series, every search above
+// applies to it unchanged:
+//
+//   extrema()      -- the best and the worst time to start. For an ingrowth-fed mixture the
+//                     best start is not the latest one, which is the whole reason to ask.
+//   crossings()    -- when the job first fits a budget, and when it stops fitting.
+//   windowsBelow() -- every stretch of start times the budget allows.
+//
+// The unit has to be an interval unit, because the values are accrued totals: roentgen rather
+// than roentgen per hour, decays rather than becquerel. buildIntervalResponse() refuses the
+// rest, and this leaves that refusal where it already lives.
+//
+// COST, stated because it is unlike everything else here: each sample is an interval integral,
+// which is two to three solves rather than one, and no work is shared between samples. A
+// sixty-point start grid is a couple of hundred solves -- seconds rather than milliseconds --
+// and `refine` buys tighter events with more of them. Nothing about that is hidden by making
+// the curve look like any other series.
+EventSeries taskSeries(const NuclearData& data, const Inventory& inventory,
+                       const ResponseSpec& spec, std::span<const double> startTimes,
+                       double durationSeconds, const DecayOptions& options = {},
+                       bool refine = false);
 
 }  // namespace nusift
