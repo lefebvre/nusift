@@ -255,7 +255,102 @@ The resolution of all of this is the grid you ask for. Nothing in the forecast p
 half-life-aware, so a log grid dense enough to resolve early churn is the user's responsibility —
 see [Interval integration §9](interval-integration.md#9-what-this-method-does-not-do).
 
-## 7. Reporting
+## 7. Located events: when a curve reaches a value
+
+Dominance windows answer "who leads, and when that changes". The event engine in
+[`events.hpp`](../nusift/triage/events.hpp) answers the question a reader arrives with a number
+already in hand: *when does this quantity reach the value I care about.* When the total falls
+below a release limit, when an ingrowth-fed curve stops getting worse, how long a field stays
+above a level, when a measured ratio leaves the band a scaling factor was calibrated in.
+
+It is worth being blunt about the epistemic status of these answers, because it differs from
+everything else in this documentation. An inventory and an interval integral are **exact** in the
+sense [interval-integration.md](interval-integration.md) uses: closed form within the decay model,
+with no time-grid term. A located event never is. It is the root of a curve that was *sampled*,
+and two rules follow from that.
+
+**The grid decides what is seen.** An event is searched for only inside a bracket the samples
+actually straddle. An excursion that rises and falls back between two consecutive samples leaves
+no sign change behind and is not found — not "unlikely to be found", not found. Two crossings
+inside one interval cancel the same way. No amount of refinement inside the intervals that *were*
+observed will reveal one that was not, so nothing here subdivides the grid on its own: choosing a
+grid dense enough to resolve the excursions you care about is the caller's decision, exactly as it
+is for forecasting. The unit suite asserts this rather than trusting it — a spike between two
+samples is verified absent from the results, and verified present once the grid resolves it.
+
+**The bracket is the honest error bar.** Every event carries the grid interval that observed it
+and the width its location was narrowed to. A crossing reported as a bare instant would claim a
+precision the sampling does not support.
+
+### Refined, or interpolated
+
+An `EventSeries` is the sampled curve plus — optionally — a way to evaluate the same quantity
+between samples. That option is the whole difference between the two accuracies on offer, and
+`TrajectoryEvent::refined` reports which one produced a given answer rather than leaving it to be
+inferred from a tolerance.
+
+| | detection | location | reported width |
+| --- | --- | --- | --- |
+| no evaluator | sign change between samples | interpolated inside the bracket | the whole grid interval |
+| evaluator | sign change between samples | refined by real evaluations | the converged bracket |
+
+Detection is by sample in both rows. Only the *location* changes, which is why supplying an
+evaluator never finds an event the grid missed.
+
+Interpolation is log-linear for a crossing, on the same reasoning the dominance boundaries use:
+over one interval a decay response is close to exponential, so `log(value)` is close to linear in
+time and the crossing of a positive level has a closed form there. It is exact for a pure
+exponential, and the test suite checks it against `t = ln(N/L)/λ` rather than against a stored
+number. A level or a sample at or below zero has no log, and there it falls back to a straight
+line.
+
+Refinement uses **Illinois** — regula falsi with the stale endpoint's residual halved whenever the
+same side is kept twice. The bracket is maintained at every step, so a root can never escape the
+interval the grid observed, and the halving cures the one-sided stalling that makes plain false
+position converge arbitrarily slowly on a convex curve. A decay curve is convex in exactly that
+way, so the fix is not academic. Extrema use **golden section** instead: the series is a callable
+with no gradient, and a section search needs only that the bracket hold one turn — which is
+precisely what three samples straddling a peak establish.
+
+For a decay response each evaluation is a single-time solve, which costs what any other
+single-time answer costs and parallelises the same way. That is what makes it reasonable to place
+a crossing far more tightly than the grid that found it.
+
+### What the vocabulary covers
+
+`crossings` returns every crossing of a level in time order, with `firstCrossing` and
+`lastCrossing` as thin wrappers over it — not cheaper searches of their own, so one code path
+cannot disagree with itself about where a root is. A crossing is recorded where the boolean "the
+series is below the level" flips, which makes a sample sitting exactly *on* the level not-below
+and reports a curve that touches and retreats once on the way in and once on the way out.
+
+`extrema` returns interior maxima and minima. A turn needs three samples to be distinguished from
+a monotone run, so a peak in the first or last interval of the grid is not reported, and a curve
+flat across three samples is not turning. This is the "is waiting actually helping" question:
+freshly separated Sr-90, sealed Ra-226 and Pu-241 all have a minimum in accrued dose, and its
+location is where the answer to that question changes sign.
+
+`windowsAbove` and `windowsBelow` pair the crossings into intervals and partition the grid between
+them. A window whose entry or exit the grid never observed is **flagged open at that end** rather
+than clipped: reporting the grid's own first sample as an entry time would invent a crossing, and
+"it was already above when we started looking" is a different statement from "it rose above at
+this instant".
+
+Series come from a response table three ways — `totalSeries` for the curve a limit is compared
+with, `contributorSeries` for one column, and `ratioSeries` for the clock form (Zr-95/Nb-95 for
+time since fission, Cs-137/Co-60 for a scaling factor's drift). A ratio drops the leading samples
+where its denominator has not grown in yet, rather than reporting an infinity that would sit in
+front of every real crossing as a spurious one; a denominator that returns to zero *later* is a
+pole inside the grid, no bracket spanning it would mean anything, and that is refused.
+
+### What is not folded in yet
+
+`dominanceWindows()` still locates its own boundaries in [`forecast.cpp`](../nusift/triage/forecast.cpp).
+The two share the reasoning and the log-linear interpolation but not yet the code; folding a leader
+change in as one more event kind is the natural next step and would remove the duplication. The
+engine is also library-level today: no CLI verb, report writer, or Python binding reaches it yet.
+
+## 8. Reporting
 
 Three formats — `text`, `csv`, `json` — from one set of ranking objects, so the numbers cannot
 differ between them. Every text report carries a header naming the store, its library and staging
@@ -275,7 +370,7 @@ holds no rank; CSV and JSON carry a `pinned` column and field instead, because a
 cannot tell a row that placed from one fetched below the cut cannot tell a top-N from a top-N plus
 an aside. The CSV column is last, so adding it renumbered nothing anyone already reads by position.
 
-## 8. Source map
+## 9. Source map
 
 | File | Role |
 | --- | --- |
@@ -283,4 +378,6 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `unitScale`, `domainScale`, `assemble`, `assembleLines`, the unmodelled-energy accounting, and `requirePin` |
 | [`nusift/triage/ranking.cpp`](../nusift/triage/ranking.cpp) | Sorting, stop conditions, coverage, the omitted count, and the pinned tail |
 | [`nusift/triage/forecast.cpp`](../nusift/triage/forecast.cpp) | `dominanceWindows`, crossing interpolation, `unionTopN`, `persistentTopN` |
+| [`nusift/triage/events.hpp`](../nusift/triage/events.hpp) | `EventSeries`, `TrajectoryEvent`, `LevelWindow`, and the missed-event semantics |
+| [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `crossings`, `extrema`, `windowsAbove`/`windowsBelow`, Illinois and golden-section refinement, and the table-backed series |
 | [`nusift/io/report.cpp`](../nusift/io/report.cpp) | Text, CSV, and JSON writers, and the provenance header |
