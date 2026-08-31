@@ -52,6 +52,13 @@ nusift when -i inventory.csv --times 1h:300y:log:80 --level 5e13
 # When does an ingrowth-fed nuclide stop getting worse?
 nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 
+# When should a one-hour job be done, and from when does it fit a budget?
+# (each sample is an exact interval integral, so this costs solves the rate curve does not)
+nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
+
+# Place an event by re-solving inside its bracket instead of interpolating across it
+nusift when -i inventory.csv --times 1h:300y:log:80 --level 5e13 --refine
+
 # By what factor can this be scaled before a limit binds, and when does it ship?
 nusift allowable -i inventory.csv --times 1h:300y:log:60 --limit 3.7e13 \
         --limit-name "A2 transport"
@@ -252,6 +259,7 @@ Implemented:
 - Staging a data store from ENDF decay and fission-yield tapes
 - Seeding an inventory from fission, by fission count, kilotons, or joules
 - Dominance forecasting: who leads, and when that changes
+- Located events: crossings, turns, level windows, and when a fixed-length task fits a budget
 - Seed attribution: which seeded nuclide a response is riding on, as an exact partition
 - Python bindings, with zero-copy NumPy views
 

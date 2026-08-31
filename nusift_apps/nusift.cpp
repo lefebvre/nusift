@@ -519,9 +519,16 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
 // Raw inventory versus time, with no ranking. The escape hatch for anyone who wants the
 // numbers rather than the triage, and the first thing to reach for when a ranking looks
 // wrong.
+// Options for `forecast`. Only the refinement knobs, which nothing else in CommonOptions
+// wants: a boundary is a located event, and how tightly to place one is a choice.
+struct ForecastOptions {
+  bool refine = false;
+  double tolerance = 1.0e-6;
+};
+
 // Who leads, and when it changes. The same response table `rank` builds, read down the time
 // axis instead of across it.
-int runForecast(const CommonOptions& options, const char* argv0) {
+int runForecast(const CommonOptions& options, const ForecastOptions& forecast, const char* argv0) {
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
@@ -539,7 +546,17 @@ int runForecast(const CommonOptions& options, const char* argv0) {
   spec.geometry = geometryFrom(options);
   const ResponseTable table = buildResponse(data, result, spec);
 
-  const std::vector<DominanceWindow> windows = dominanceWindows(table);
+  // Refinement re-solves inside each boundary's bracket instead of interpolating across it.
+  // The evaluator outlives the call that uses it, which is all the lifetime this needs.
+  EventTolerance tolerance;
+  tolerance.relative = forecast.tolerance;
+  std::optional<ResponseEvaluator> evaluator;
+  if (forecast.refine) {
+    evaluator.emplace(data, inventory, spec, decayOptionsFrom(options));
+  }
+  const std::vector<DominanceWindow> windows =
+      evaluator ? dominanceWindows(table, *evaluator, /*minSamples=*/2, tolerance)
+                : dominanceWindows(table);
   // topN doubles as the depth of "ever near the top"; 0 means no limit, which for a forecast
   // would print every nuclide in the chain, so it falls back to a readable default.
   const std::vector<std::int64_t> pins = pinsFrom(options, table);
@@ -847,6 +864,19 @@ struct WhenOptions {
   std::string of;
   std::string ratio;
   bool peaks = false;
+
+  // The task form: the curve becomes what a job of this length accrues, plotted against when
+  // the job STARTS, and --level becomes the budget it has to fit inside.
+  std::string task;
+
+  // Which side of the level the windows are wanted on. Empty takes the default for the curve
+  // in force, and the two defaults differ because the questions do: a rate is asked about
+  // above a level -- how long am I taking this -- and a task below a budget -- when may I
+  // start.
+  std::string windows;
+
+  bool refine = false;
+  double tolerance = 1.0e-6;
 };
 
 std::string trimmedText(std::string_view text) {
@@ -881,56 +911,116 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   if (times.size() < 2) {
     throw InputError("time: an event has to sit between two samples -- try --times 1h:100y:log:60");
   }
-  const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
+
+  // A task accrues over its window, so its curve is in INTERVAL units -- roentgen rather than
+  // roentgen per hour, decays rather than becquerel. Resolving the unit against the wrong
+  // domain is how a budget silently becomes a rate.
+  const bool isTask = !when.task.empty();
+  const double taskSeconds = isTask ? parseDuration(when.task) : 0.0;
+  const Domain domain = isTask ? Domain::Interval : Domain::Instant;
 
   ResponseSpec spec;
   spec.metric = metricFrom(options.metric);
   spec.aggregate = aggregateFrom(options.aggregate);
-  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.unit = requireUnit(options.unit, spec.metric, domain);
   spec.geometry = geometryFrom(options);
-  const ResponseTable table = buildResponse(data, result, spec);
+
+  const DecayOptions decayOptions = decayOptionsFrom(options);
+  EventTolerance tolerance;
+  tolerance.relative = when.tolerance;
 
   EventReport report;
   report.metric = metricName(spec.metric);
-  report.gridStartSeconds = table.times.front();
-  report.gridEndSeconds = table.times.back();
-  report.gridPoints = table.timeCount();
+  report.gridStartSeconds = times.front();
+  report.gridEndSeconds = times.back();
+  report.gridPoints = static_cast<int>(times.size());
   report.hasLevel = when.hasLevel;
   report.level = when.level;
 
+  // Windows default to the side the curve is usually asked about, and --windows overrides.
+  bool windowsBelow = isTask;
+  if (when.windows == "below") {
+    windowsBelow = true;
+  } else if (when.windows == "above") {
+    windowsBelow = false;
+  }
+
+  // Both paths end with the same searches over the same kind of series. What differs is what
+  // the series IS: a sampled rate, or a curve every point of which is an interval integral.
   EventSeries series;
-  if (!when.ratio.empty()) {
-    const std::size_t slash = when.ratio.find('/');
-    if (slash == std::string::npos) {
+  ResponseTable contextTable;
+
+  // Declared out here because a series built with an evaluator holds a reference to it, and
+  // the searches below run after this scope would have ended. Unused without --refine, which
+  // is the one thing it must not silently be.
+  std::optional<ResponseEvaluator> evaluator;
+
+  if (isTask) {
+    if (!when.of.empty() || !when.ratio.empty()) {
       throw InputError(
-          "trajectory: --ratio names two contributors as A/B, e.g. --ratio Zr-95/Nb-95");
+          "trajectory: --task follows what the whole inventory accrues over the window. A "
+          "single contributor's share of a task is a ranking question -- try `integrate`");
     }
-    const std::string top = trimmedText(std::string_view(when.ratio).substr(0, slash));
-    const std::string bottom = trimmedText(std::string_view(when.ratio).substr(slash + 1));
-    series = ratioSeries(table, columnFor(table, top), columnFor(table, bottom));
-    report.curve = top + " / " + bottom;
-    // A ratio of two quantities in the same unit is dimensionless, and printing the unit would
-    // say it is a number of becquerel when it is a number of times.
-    report.unit.clear();
-  } else if (!when.of.empty()) {
-    const int column = columnFor(table, when.of);
-    series = contributorSeries(table, column);
-    report.curve = table.labels[static_cast<std::size_t>(column)];
-    report.unit = unitName(table.unit);
+    series = taskSeries(data, inventory, spec, times, taskSeconds, decayOptions, when.refine);
+
+    // The caveats a report carries -- which emitters have unmodelled photon continua -- belong
+    // to the inventory and not to a particular window, so the first one speaks for all of them.
+    std::vector<std::int64_t> keys;
+    const std::vector<double> integral = intervalIntegral(
+        data, inventory, times.front(), times.front() + taskSeconds, &keys, decayOptions);
+    contextTable = buildIntervalResponse(data, keys, integral, times.front(),
+                                         times.front() + taskSeconds, spec);
+
+    report.curve = "a " + formatDuration(taskSeconds) + " task, by when it starts";
+    report.unit = unitName(spec.unit);
   } else {
-    series = totalSeries(table);
-    report.curve = "the total";
-    report.unit = unitName(table.unit);
+    const DecayResult result = decay(data, inventory, times, decayOptions);
+    contextTable = buildResponse(data, result, spec);
+    const ResponseTable& table = contextTable;
+
+    if (when.refine) {
+      evaluator.emplace(data, inventory, spec, decayOptions);
+    }
+
+    if (!when.ratio.empty()) {
+      const std::size_t slash = when.ratio.find('/');
+      if (slash == std::string::npos) {
+        throw InputError(
+            "trajectory: --ratio names two contributors as A/B, e.g. --ratio Zr-95/Nb-95");
+      }
+      const std::string top = trimmedText(std::string_view(when.ratio).substr(0, slash));
+      const std::string bottom = trimmedText(std::string_view(when.ratio).substr(slash + 1));
+      const int numerator = columnFor(table, top);
+      const int denominator = columnFor(table, bottom);
+      series = evaluator ? ratioSeries(table, numerator, denominator, *evaluator)
+                         : ratioSeries(table, numerator, denominator);
+      report.curve = top + " / " + bottom;
+      // A ratio of two quantities in the same unit is dimensionless, and printing the unit
+      // would say it is a number of becquerel when it is a number of times.
+      report.unit.clear();
+    } else if (!when.of.empty()) {
+      const int column = columnFor(table, when.of);
+      series = evaluator ? contributorSeries(table, column, *evaluator)
+                         : contributorSeries(table, column);
+      report.curve = table.labels[static_cast<std::size_t>(column)];
+      report.unit = unitName(table.unit);
+    } else {
+      series = evaluator ? totalSeries(table, *evaluator) : totalSeries(table);
+      report.curve = "the total";
+      report.unit = unitName(table.unit);
+    }
   }
 
   if (when.hasLevel) {
-    report.events = crossings(series, when.level);
-    report.windows = windowsAbove(series, when.level);
+    report.events = crossings(series, when.level, tolerance);
+    report.windows = windowsBelow ? nusift::windowsBelow(series, when.level, tolerance)
+                                  : windowsAbove(series, when.level, tolerance);
+    report.windowsBelowLevel = windowsBelow;
   }
   // With no level there is nothing to cross, so the turns are the whole answer rather than an
   // extra. With one they are an extra, and only if asked for.
   if (when.peaks || !when.hasLevel) {
-    const std::vector<TrajectoryEvent> turns = extrema(series);
+    const std::vector<TrajectoryEvent> turns = extrema(series, tolerance);
     report.events.insert(report.events.end(), turns.begin(), turns.end());
     std::sort(report.events.begin(), report.events.end(),
               [](const TrajectoryEvent& a, const TrajectoryEvent& b) {
@@ -940,7 +1030,7 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
-  ReportContext context = contextFor(data, storePath, inventory, table);
+  ReportContext context = contextFor(data, storePath, inventory, contextTable);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
   OutputStream out(options.output);
@@ -1140,9 +1230,17 @@ int main(int argc, char** argv) {
   addCommonOptions(attributeCmd, attributeOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
 
   CommonOptions forecastOptions;
+  ForecastOptions forecastExtra;
   CLI::App* forecastCmd =
       app.add_subcommand("forecast", "Who dominates, and over which time windows");
   addCommonOptions(forecastCmd, forecastOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  forecastCmd->add_flag("--refine", forecastExtra.refine,
+                        "Place each boundary by re-solving inside its bracket, rather than "
+                        "interpolating across it (costs a few solves per boundary)");
+  forecastCmd
+      ->add_option("--tolerance", forecastExtra.tolerance,
+                   "Relative tolerance for --refine (default 1e-6)")
+      ->check(CLI::PositiveNumber);
 
   CommonOptions whenOptions;
   WhenOptions whenExtra;
@@ -1158,6 +1256,21 @@ int main(int argc, char** argv) {
   whenCmd->add_option("--ratio", whenExtra.ratio,
                       "Follow a ratio of two contributors, e.g. --ratio Zr-95/Nb-95");
   whenCmd->add_flag("--peaks", whenExtra.peaks, "Report turns as well as crossings");
+  whenCmd->add_option("--task", whenExtra.task,
+                      "Follow what a job of this length accrues, against when it starts "
+                      "(e.g. 1h). --level is then the budget it has to fit inside");
+  whenCmd
+      ->add_option("--windows", whenExtra.windows,
+                   "Which side of the level to report windows on; defaults to above for a "
+                   "rate and below for a --task budget")
+      ->check(CLI::IsMember({"above", "below"}));
+  whenCmd->add_flag("--refine", whenExtra.refine,
+                    "Place each event by re-solving inside its bracket, rather than "
+                    "interpolating across it (costs a few solves per event)");
+  whenCmd
+      ->add_option("--tolerance", whenExtra.tolerance,
+                   "Relative tolerance for --refine (default 1e-6)")
+      ->check(CLI::PositiveNumber);
 
   CommonOptions allowableOptions;
   AllowableOptions allowableExtra;
@@ -1250,7 +1363,7 @@ int main(int argc, char** argv) {
       return runAttribute(attributeOptions, argv0);
     }
     if (forecastCmd->parsed()) {
-      return runForecast(forecastOptions, argv0);
+      return runForecast(forecastOptions, forecastExtra, argv0);
     }
     if (whenCmd->parsed()) {
       // Whether a level was GIVEN, not whether it is non-zero: zero is a perfectly good level

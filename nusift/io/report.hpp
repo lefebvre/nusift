@@ -99,6 +99,11 @@ struct EventReport {
 
   std::vector<TrajectoryEvent> events;
   std::vector<LevelWindow> windows;
+
+  // Which side of the level the windows hold on. The two are complements, so a list of
+  // intervals is unreadable without it: the same pair of instants is a stay time on one side
+  // and a waiting period on the other.
+  bool windowsBelowLevel = false;
 };
 
 // Render located events: crossings and turns, each with the bracket that found it, and the

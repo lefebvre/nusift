@@ -654,6 +654,31 @@ TEST(Report, EventsAndWindowsShareOneCsvUnderAKindColumn) {
   EXPECT_NE(csv.find("\nwindow,"), std::string::npos) << csv;
 }
 
+// The same pair of instants means opposite things on the two sides of a level -- a stay time
+// above it, a waiting period below it -- so every format has to say which side it is reporting
+// rather than leaving the reader to assume the usual one.
+TEST(Report, WindowsSayWhichSideOfTheLevelTheyHold) {
+  EventReport report = oneCrossing();
+  report.windowsBelowLevel = true;
+
+  const std::string text = eventsAs(report, ReportFormat::Text);
+  EXPECT_NE(text.find("below the level:"), std::string::npos) << text;
+  EXPECT_EQ(text.find("above the level:"), std::string::npos) << text;
+  EXPECT_NE(text.find("already below when the grid started"), std::string::npos)
+      << "an unobserved edge is described on the side it is open on: " << text;
+
+  const std::string json = eventsAs(report, ReportFormat::Json);
+  EXPECT_NE(json.find("\"windows_side\": \"below\""), std::string::npos) << json;
+
+  const std::string csv = eventsAs(report, ReportFormat::Csv);
+  EXPECT_NE(csv.find(",side"), std::string::npos) << csv;
+  EXPECT_NE(csv.find(",below\n"), std::string::npos) << csv;
+
+  // And the default is the other side, said just as explicitly.
+  const std::string above = eventsAs(oneCrossing(), ReportFormat::Json);
+  EXPECT_NE(above.find("\"windows_side\": \"above\""), std::string::npos) << above;
+}
+
 TEST(Report, ARatioCurveIsNotGivenAUnit) {
   EventReport report = oneCrossing();
   report.curve = "Zr-95 / Nb-95";
