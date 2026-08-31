@@ -347,8 +347,14 @@ pole inside the grid, no bracket spanning it would mean anything, and that is re
 
 `dominanceWindows()` still locates its own boundaries in [`forecast.cpp`](../nusift/triage/forecast.cpp).
 The two share the reasoning and the log-linear interpolation but not yet the code; folding a leader
-change in as one more event kind is the natural next step and would remove the duplication. The
-engine is also library-level today: no CLI verb, report writer, or Python binding reaches it yet.
+change in as one more event kind is the natural next step and would remove the duplication.
+
+The engine is reachable from all three front ends: `nusift when` on the command line,
+`ResponseTable.crossings` / `.extrema` / `.windows_above` / `.windows_below` from Python, and
+`writeEvents()` in the report writers. Each carries the bracket, because an instant without one
+claims a precision the sampling does not support — and a series built from a table has no
+evaluator, so everything those three produce is interpolated inside its grid bracket rather than
+refined.
 
 ## 8. Maximum allowable scale: how much is allowed
 
@@ -395,6 +401,15 @@ against atoms directly. That costs a constant factor and buys the guarantee that
 checked against a limit is the number a ranking of the same spec would print — the one divergence
 this layer cannot afford, since the two are read side by side.
 
+`nusift allowable` takes **one** criterion, from the command's own `--metric`, `--units` and
+geometry, plus `--limit`. That is the honest limit of the flag surface: several criteria over
+*different* metrics is where this capability earns its keep — and the only way the binding one can
+change with time, since criteria on a single metric all scale together — and expressing that needs
+a limits file the CLI does not have yet. The library and `nusift.allowable_scale` take a list. The
+text report closes with the date the scale first reaches 1, located by the event engine above and
+carrying its bracket; CSV and JSON carry the curve it comes from rather than a derived field a
+consumer cannot check.
+
 ### Nothing to constrain is not a large allowance
 
 A criterion whose response is zero permits any scale. It is reported as **unbounded** rather than
@@ -424,6 +439,15 @@ appear in the ranking they annotate. Pins are resolved per interval for the same
 solved over its own index space, so a pin naming something one window's chain does not reach is
 refused for that window rather than silently dropped from one report out of several.
 
+Located events and allowable scale add two more shapes on the same three formats. An event report
+carries the bracket in every one of them, and states in text that the grid decides what is findable
+at all — an empty list means the sampling did not resolve a crossing, not that none exists. CSV
+puts events and windows in one table under a `kind` column, since two tables would not be a CSV and
+a reader given only the crossings would lose which grid edges were never observed. An allowable
+report prints an unconstrained time as `unbounded` rather than as an enormous number, and JSON
+gives it a null scale and a null binding criterion — the only encoding a parser cannot mistake for
+a bound of zero.
+
 The text writer separates pinned rows under a `pinned:` heading and prints `-` where a contributor
 holds no rank; CSV and JSON carry a `pinned` column and field instead, because a loaded table that
 cannot tell a row that placed from one fetched below the cut cannot tell a top-N from a top-N plus
@@ -442,3 +466,4 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/allowable.hpp`](../nusift/triage/allowable.hpp) | `Criterion`, `CriterionHeadroom`, `AllowableScale`, and what the rule layer above them owns |
 | [`nusift/triage/allowable.cpp`](../nusift/triage/allowable.cpp) | `allowableScale`, the binding-criterion minimum, unbounded semantics, and `scaleSeries` |
 | [`nusift/io/report.cpp`](../nusift/io/report.cpp) | Text, CSV, and JSON writers, and the provenance header |
+| [`nusift_apps/nusift.cpp`](../nusift_apps/nusift.cpp) | The `when` and `allowable` verbs, and the `--of` / `--ratio` curve select |

@@ -629,3 +629,169 @@ def test_attribute_does_not_count_an_inert_seed_as_omitted(data):
     assert pinned.shares[-1].value == 0.0
     assert pinned.shares[-1].seed_atoms > 0.0
     assert pinned.omitted_count == 0
+
+
+# --- located events ----------------------------------------------------------
+
+
+@needs_store
+def test_crossings_carry_the_bracket_that_found_them(data, result):
+    """A crossing is a root of a SAMPLED curve, so `time_s` alone is not the answer. The binding
+    has to hand over the grid interval and the width the instant was placed to, or a consumer
+    cannot tell a located event from a grid artefact."""
+    _, res = result
+    table = nusift.response(data, res, metric="activity")
+
+    # A level the total certainly passes on the way down.
+    level = float(table.totals[0]) / 10.0
+    events = table.crossings(level)
+    assert events, "the total falls by more than a decade over this grid"
+
+    first = events[0]
+    assert first.kind == "falling"
+    assert first.bracket_start_s <= first.time_s <= first.bracket_end_s
+    assert first.located_to_s > 0.0
+    # A table carries samples and no evaluator, so every event over it is interpolated.
+    assert first.refined is False
+    assert first.converged is True
+    assert "falling" in repr(first)
+
+
+@needs_store
+def test_crossings_follow_a_contributor_or_a_ratio(data, result):
+    _, res = result
+    table = nusift.response(data, res, metric="activity")
+    labels = table.labels
+
+    # `of` narrows to one column; the total and one contributor are different curves and may
+    # cross a level at different times, or a different number of times.
+    name = labels[0]
+    of_events = table.crossings(1.0, of=name)
+    assert isinstance(of_events, list)
+
+    ratio_events = table.crossings(1.0, ratio=(labels[0], labels[1]))
+    assert isinstance(ratio_events, list)
+
+
+@needs_store
+def test_a_ratio_needs_exactly_two_contributors(data, result):
+    _, res = result
+    table = nusift.response(data, res, metric="activity")
+    with pytest.raises(nusift.InputError):
+        table.crossings(1.0, ratio=(table.labels[0],))
+
+
+@needs_store
+def test_windows_flag_the_edges_the_grid_never_observed(data, result):
+    """An edge outside the grid is a bound, not a crossing. Clipping it to the grid's own
+    endpoint would report an instant that was never seen."""
+    _, res = result
+    table = nusift.response(data, res, metric="activity")
+
+    # Far below anything on the curve, so the whole grid is inside and neither edge is real.
+    windows = table.windows_above(1.0)
+    assert len(windows) == 1
+    assert windows[0].entry_observed is False
+    assert windows[0].exit_observed is False
+    assert "open" in repr(windows[0])
+
+    # Above and below partition the grid, so a level nothing reaches gives one window below.
+    below = table.windows_below(1.0)
+    assert below == [] or below[0].start_s >= 0.0
+
+
+@needs_store
+def test_extrema_find_an_ingrowth_peak(data):
+    """Y-90 grows into equilibrium with Sr-90 and then follows its parent down, so the curve
+    turns. A monotone one does not, and reporting a turn on it would be an artefact."""
+    inv = nusift.Inventory()
+    inv.add("Sr-90", 1.0e20)
+    res = nusift.decay(data, inv, nusift.logspace("1h", "100y", 80))
+    table = nusift.response(data, res, metric="activity")
+
+    turns = table.extrema(of="Y-90")
+    assert turns, "Y-90 ingrowth turns over once it reaches equilibrium"
+    assert turns[0].kind == "maximum"
+    assert turns[0].bracket_start_s <= turns[0].time_s <= turns[0].bracket_end_s
+
+    # The parent only decays, so it has no interior turn at all.
+    assert table.extrema(of="Sr-90") == []
+
+
+# --- how much is allowed ------------------------------------------------------
+
+
+@needs_store
+def test_allowable_scale_is_exact_against_the_limit(data, result):
+    """The scale is a division, not a search: R is linear in the inventory, so R times the
+    scale is the limit. Checked here at the binding layer because a transposed or rescaled
+    number would still look plausible."""
+    _, res = result
+    limit = 3.7e13
+    criteria = [nusift.Criterion("A2 transport", limit, metric="activity", units="Bq")]
+    scaled = nusift.allowable_scale(data, res, criteria)
+
+    assert len(scaled) == len(res.times)
+    for at in scaled:
+        if not at.bounded:
+            continue
+        assert at.binding == "A2 transport"
+        headroom = at.criteria[0]
+        assert math.isclose(headroom.response * at.scale, limit, rel_tol=1e-9)
+        # The two idioms are the same number inverted.
+        assert math.isclose(headroom.fraction, 1.0 / at.scale, rel_tol=1e-9)
+
+
+@needs_store
+def test_an_unconstrained_time_has_no_scale_rather_than_a_zero(data):
+    """`scale` is None where nothing binds. A zero would read as the exact opposite of what it
+    means, which is the one mistake this value must not invite."""
+    inv = nusift.Inventory()
+    inv.add("Cs-133", 1.0e20)  # stable: no activity at any time
+    res = nusift.decay(data, inv, nusift.logspace("1h", "10y", 8))
+
+    criteria = [nusift.Criterion("possession", 1.0e10, metric="activity", units="Bq")]
+    scaled = nusift.allowable_scale(data, res, criteria)
+
+    assert scaled
+    for at in scaled:
+        assert at.bounded is False
+        assert at.scale is None
+        assert at.binding is None
+        assert at.criteria[0].unbounded is True
+        assert at.limiting == []
+
+
+@needs_store
+def test_allowable_scale_names_what_drives_the_binding_criterion(data, result):
+    _, res = result
+    criteria = [nusift.Criterion("possession", 1.0e15, metric="activity", units="Bq")]
+    scaled = nusift.allowable_scale(data, res, criteria, limiting=2)
+
+    bounded = [at for at in scaled if at.bounded]
+    assert bounded
+    assert len(bounded[0].limiting) <= 2
+    assert bounded[0].limiting[0].label
+    assert bounded[0].limiting[0].fraction > 0.0
+    # Ordered by share of the binding criterion's total.
+    fractions = [c.fraction for c in bounded[0].limiting]
+    assert fractions == sorted(fractions, reverse=True)
+
+
+@needs_store
+def test_a_criterion_is_refused_when_it_cannot_mean_anything(data, result):
+    _, res = result
+    # An interval unit is an accrued total over a window, which is not what a possession limit
+    # constrains. Refused where the C++ refuses it -- when the criteria are used, not when the
+    # spelling is parsed -- so the binding and the library agree about which call fails.
+    accrued = nusift.Criterion("decays", 1.0e15, metric="activity", units="decays")
+    with pytest.raises(nusift.InputError, match="total accrued over a window"):
+        nusift.allowable_scale(data, res, [accrued])
+
+    with pytest.raises(nusift.InputError):
+        nusift.allowable_scale(data, res, [])
+
+    with pytest.raises(nusift.InputError):
+        nusift.allowable_scale(
+            data, res, [nusift.Criterion("", 1.0e15, metric="activity", units="Bq")]
+        )

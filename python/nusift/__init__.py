@@ -21,13 +21,26 @@ and rank what contributes, by nuclide, mass chain, element, or individual photon
     for c in nusift.response(nd, window, metric="activity").rank(top=5).contributors:
         print(c.label, c.value, "decays")
 
+    # When a curve reaches a value. Every located event carries the grid bracket that found
+    # it, because a crossing is a root of something SAMPLED and is never exact:
+    for e in tab.crossings(1e-3):
+        print(e.kind, "at", e.time_s, "known to", e.located_to_s)
+
+    # And how much is allowed, against limits you supply:
+    limits = [nusift.Criterion("A2 transport", 3.7e13, metric="activity", units="Bq")]
+    for at in nusift.allowable_scale(nd, res, limits):
+        print(at.time_s, at.scale, at.binding)   # scale is None where nothing binds
+
 The large arrays -- ``DecayResult.atoms``, ``ResponseTable.values`` -- are zero-copy NumPy
 views over the C++ storage rather than copies, so they are cheap to take and must not
 outlive the object they came from. NumPy's own base-object tracking enforces that.
 """
 
 from ._core import (  # noqa: F401
+    AllowableScale,
     Contributor,
+    Criterion,
+    CriterionHeadroom,
     SeedAttribution,
     SeedShare,
     DecayResult,
@@ -35,12 +48,16 @@ from ._core import (  # noqa: F401
     InputError,
     IntervalResult,
     Inventory,
+    LevelWindow,
+    LimitingContributor,
     NuclearData,
     NusiftError,
     PointSource,
     Ranking,
     ResponseTable,
+    TrajectoryEvent,
     __version__,
+    allowable_scale,
     attribute,
     decay,
     fissions_from_kt,
@@ -57,7 +74,10 @@ from ._core import (  # noqa: F401
 from ._data import default_store_path  # noqa: F401
 
 __all__ = [
+    "AllowableScale",
     "Contributor",
+    "Criterion",
+    "CriterionHeadroom",
     "SeedAttribution",
     "SeedShare",
     "DecayResult",
@@ -65,12 +85,16 @@ __all__ = [
     "InputError",
     "IntervalResult",
     "Inventory",
+    "LevelWindow",
+    "LimitingContributor",
     "NuclearData",
     "NusiftError",
     "PointSource",
     "Ranking",
     "ResponseTable",
+    "TrajectoryEvent",
     "__version__",
+    "allowable_scale",
     "attribute",
     "decay",
     "default_store_path",

@@ -45,6 +45,17 @@ nusift forecast -i inventory.csv --times 1d:300y:log:70 --metric exposure
 # Which individual photon lines drive the dose?
 nusift spectrum --seed-fission U-235 --yield-kt 20 --at 1h --top 10
 
+# When does the total fall below a level? Every answer carries the grid bracket
+# that found it -- an event between two samples is not found, and it says so.
+nusift when -i inventory.csv --times 1h:300y:log:80 --level 5e13
+
+# When does an ingrowth-fed nuclide stop getting worse?
+nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
+
+# By what factor can this be scaled before a limit binds, and when does it ship?
+nusift allowable -i inventory.csv --times 1h:300y:log:60 --limit 3.7e13 \
+        --limit-name "A2 transport"
+
 # What does the data store actually cover?
 nusift data info
 

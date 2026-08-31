@@ -12,10 +12,13 @@
 // later.
 //
 #include <iosfwd>
+#include <span>
 #include <string>
 #include <vector>
 
+#include "nusift/triage/allowable.hpp"
 #include "nusift/triage/attribution.hpp"
+#include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/ranking.hpp"
 
@@ -76,5 +79,45 @@ void writeRankings(std::ostream& out, const std::vector<Ranking>& rankings,
 // appear in the ranking above at all. `contexts` must be the same length as `rankings`.
 void writeRankings(std::ostream& out, const std::vector<Ranking>& rankings,
                    const std::vector<ReportContext>& contexts, ReportFormat format);
+
+// What a located-event report is about: which curve was searched, in what unit, and against
+// what level. Bundled rather than passed as six parameters because every one of them is needed
+// to read the numbers -- a crossing time with no curve and no level named is not an answer.
+struct EventReport {
+  std::string curve;  // "total", a contributor's label, or "A / B" for a ratio
+  std::string unit;   // the curve's unit; empty for a ratio, which is dimensionless
+  std::string metric;
+  double gridStartSeconds = 0.0;
+  double gridEndSeconds = 0.0;
+  int gridPoints = 0;
+
+  // Whether a level was asked about at all. Without one only the turns are reported, and
+  // printing a level of zero would look like one that was.
+  bool hasLevel = false;
+  double level = 0.0;
+
+  std::vector<TrajectoryEvent> events;
+  std::vector<LevelWindow> windows;
+};
+
+// Render located events: crossings and turns, each with the bracket that found it, and the
+// windows the crossings pair into.
+//
+// The bracket travels into every format because it is the honest error bar on the instant --
+// a consumer that loads a crossing time without knowing how well it is placed has lost the
+// only thing distinguishing a refined answer from a grid artefact. CSV carries events and
+// windows in one table under a `kind` column, which is what a spreadsheet can actually load.
+void writeEvents(std::ostream& out, const EventReport& report, const ReportContext& context,
+                 ReportFormat format);
+
+// Render the maximum allowable scale over time: what binds, what it permits, and which
+// contributors drive it.
+//
+// A time where nothing constrains the inventory is printed as such rather than as a very large
+// number, in every format -- JSON gives it a null scale and a null binding criterion, which is
+// the only encoding a parser cannot mistake for a bound of zero.
+void writeAllowable(std::ostream& out, const std::vector<AllowableScale>& scaled,
+                    std::span<const Criterion> criteria, const ReportContext& context,
+                    ReportFormat format);
 
 }  // namespace nusift
