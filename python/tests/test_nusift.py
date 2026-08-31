@@ -795,3 +795,132 @@ def test_a_criterion_is_refused_when_it_cannot_mean_anything(data, result):
         nusift.allowable_scale(
             data, res, [nusift.Criterion("", 1.0e15, metric="activity", units="Bq")]
         )
+
+
+# --- counterfactual interventions ---------------------------------------------
+
+
+@needs_store
+def test_an_intervention_is_exact_against_a_forward_solve(data):
+    """The benefit is a dot product against the adjoint, so it has to equal what a full forward
+    solve of the counterfactual gives. Checked at the binding layer because a slip in the time
+    arguments would still produce a plausible-looking number."""
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    inv.add("Sr-90", 5.0e19)
+
+    plan = [nusift.Intervention("strip Cs", [nusift.Removal("Cs")])]
+    study = nusift.compare_interventions(
+        data, inv, remove_at="30d", at="30y", interventions=plan
+    )
+
+    # Rebuild the counterfactual by hand: decay to t0, drop every caesium atom, decay on.
+    res = nusift.decay(data, inv, [nusift.parse_duration("30d")])
+    after = nusift.Inventory()
+    for label, atoms in zip(res.nuclides, res.atoms[0]):
+        if not label.startswith("Cs-"):
+            after.add(label, max(0.0, float(atoms)))
+    window = nusift.parse_duration("30y") - nusift.parse_duration("30d")
+    independently = nusift.response(data, nusift.decay(data, after, [window])).rank(top=0).total
+
+    assert study.effects[0].response == pytest.approx(independently, rel=1e-9)
+
+
+@needs_store
+def test_the_benefit_is_booked_against_what_was_removed(data):
+    """Removing Cs-137 takes with it the Ba-137m it would have fed -- but the benefit belongs to
+    the caesium that was removed, not to the barium that would have emitted."""
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+
+    plan = [nusift.Intervention("strip Cs", [nusift.Removal("Cs")])]
+    study = nusift.compare_interventions(
+        data, inv, remove_at="0", at="30y", interventions=plan, metric="exposure", units="Sv/h"
+    )
+
+    effect = study.effects[0]
+    assert effect.removed_fraction == pytest.approx(1.0, rel=1e-6)
+    labels = [c.label for c in effect.contributors]
+    assert "Cs-137" in labels
+    assert "Ba-137m" not in labels
+
+
+@needs_store
+def test_what_a_separation_buys_depends_on_the_metric(data):
+    """Sr-90 and its Y-90 daughter are beta emitters. They carry real activity and almost no
+    photon exposure, so the same separation is worth wholly different amounts depending on which
+    question is being asked -- which is the reason both metrics exist."""
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    inv.add("Sr-90", 1.0e20)
+
+    plan = [nusift.Intervention("strip Sr", [nusift.Removal("Sr")])]
+    by_activity = nusift.compare_interventions(
+        data, inv, remove_at="30d", at="30y", interventions=plan
+    )
+    by_exposure = nusift.compare_interventions(
+        data, inv, remove_at="30d", at="30y", interventions=plan,
+        metric="exposure", units="Sv/h",
+    )
+
+    assert by_activity.effects[0].removed_fraction > 0.2
+    assert by_exposure.effects[0].removed_fraction < 0.01
+
+
+@needs_store
+def test_alternatives_share_one_baseline(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    inv.add("Sr-90", 1.0e20)
+
+    plan = [
+        nusift.Intervention("Cs", [nusift.Removal("Cs")]),
+        nusift.Intervention("half the Cs", [nusift.Removal("Cs", 0.5)]),
+        nusift.Intervention("both", [nusift.Removal("Cs"), nusift.Removal("Sr")]),
+    ]
+    study = nusift.compare_interventions(data, inv, remove_at="30d", at="30y", interventions=plan)
+
+    assert len(study) == 3
+    full, half, both = study.effects
+    # Linear in the inventory: removing half the caesium is worth exactly half of removing it all.
+    assert half.removed == pytest.approx(full.removed / 2.0, rel=1e-9)
+    assert both.removed > full.removed
+    for effect in study.effects:
+        assert effect.response == pytest.approx(study.baseline - effect.removed, rel=1e-9)
+
+
+@needs_store
+def test_an_intervention_that_cannot_mean_anything_is_refused(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+
+    # A response before the removal: taking something out later cannot change an earlier number.
+    with pytest.raises(nusift.InputError):
+        nusift.compare_interventions(
+            data, inv, remove_at="30y", at="30d",
+            interventions=[nusift.Intervention("late", [nusift.Removal("Cs")])],
+        )
+
+    # A selector naming nothing the chain reaches reads as "worth nothing" when in fact the
+    # question never arrived.
+    with pytest.raises(nusift.InputError):
+        nusift.compare_interventions(
+            data, inv, remove_at="0", at="30y",
+            interventions=[nusift.Intervention("absent", [nusift.Removal("Pu")])],
+        )
+
+    with pytest.raises(nusift.InputError):
+        nusift.compare_interventions(
+            data, inv, remove_at="0", at="30y",
+            interventions=[nusift.Intervention("over", [nusift.Removal("Cs", 1.5)])],
+        )
+
+    # The same nuclide taken out twice is not a stated quantity.
+    with pytest.raises(nusift.InputError):
+        nusift.compare_interventions(
+            data, inv, remove_at="0", at="30y",
+            interventions=[
+                nusift.Intervention("twice", [nusift.Removal("Cs", 0.5),
+                                              nusift.Removal("Cs-137", 0.5)])
+            ],
+        )

@@ -38,6 +38,7 @@
 #include "nusift/triage/attribution.hpp"
 #include "nusift/triage/events.hpp"
 #include "nusift/triage/forecast.hpp"
+#include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
 #include "nusift/version.hpp"
@@ -932,4 +933,102 @@ NB_MODULE(_core, m) {
       "time on the grid. Exact: every response is linear in the inventory, so the scale at "
       "which a criterion binds is a division rather than a search. Criteria over DIFFERENT "
       "metrics are where this earns its keep, since only then can the binding one change.");
+
+  // --- counterfactual interventions ---------------------------------------------
+
+  nb::class_<Removal>(m, "Removal", "Something taken out, and how much of it.")
+      .def(
+          "__init__",
+          [](Removal* self, const std::string& selector, double fraction) {
+            new (self) Removal();
+            self->selector = selector;
+            self->fraction = fraction;
+          },
+          "selector"_a, "fraction"_a = 1.0,
+          "`selector` is a nuclide (\"Cs-137\"), an element (\"Cs\"), Z=55, or A=137. The "
+          "element form is the one a chemical separation can actually perform.")
+      .def_ro("selector", &Removal::selector)
+      .def_ro("fraction", &Removal::fraction)
+      .def("__repr__", [](const Removal& r) {
+        return "<Removal " + r.selector + " x" + shortestRoundTrip(r.fraction) + ">";
+      });
+
+  nb::class_<Intervention>(m, "Intervention", "A set of removals applied at one instant.")
+      .def(
+          "__init__",
+          [](Intervention* self, const std::string& name, const std::vector<Removal>& removals) {
+            new (self) Intervention();
+            self->name = name;
+            self->removals = removals;
+          },
+          "name"_a, "removals"_a)
+      .def_ro("name", &Intervention::name)
+      .def_ro("removals", &Intervention::removals)
+      .def("__repr__", [](const Intervention& i) { return "<Intervention " + i.name + ">"; });
+
+  nb::class_<RemovedContributor>(m, "RemovedContributor")
+      .def_ro("label", &RemovedContributor::label)
+      .def_ro("key", &RemovedContributor::key)
+      .def_ro("atoms_removed", &RemovedContributor::atomsRemoved)
+      .def_ro("value", &RemovedContributor::value,
+              "The response these removed atoms were carrying.")
+      .def_ro("fraction", &RemovedContributor::fraction)
+      .def("__repr__",
+           [](const RemovedContributor& c) { return "<RemovedContributor " + c.label + ">"; });
+
+  nb::class_<InterventionEffect>(m, "InterventionEffect")
+      .def_ro("name", &InterventionEffect::name)
+      .def_ro("response", &InterventionEffect::response, "R(T) once this was applied.")
+      .def_ro("removed", &InterventionEffect::removed, "What it bought: baseline - response.")
+      .def_ro("removed_fraction", &InterventionEffect::removedFraction)
+      .def_ro("contributors", &InterventionEffect::contributors,
+              "The nuclides the benefit came from, most first.")
+      .def("__repr__", [](const InterventionEffect& e) {
+        return "<InterventionEffect " + e.name + " -" + shortestRoundTrip(e.removedFraction) + ">";
+      });
+
+  nb::class_<InterventionStudy>(m, "InterventionStudy")
+      .def_ro("baseline", &InterventionStudy::baseline, "R(T) with nothing removed.")
+      .def_ro("intervention_time_s", &InterventionStudy::interventionTimeSeconds)
+      .def_ro("response_time_s", &InterventionStudy::responseTimeSeconds)
+      .def_ro("effects", &InterventionStudy::effects)
+      .def_prop_ro("unit", [](const InterventionStudy& s) { return std::string(unitName(s.unit)); })
+      .def_prop_ro("metric",
+                   [](const InterventionStudy& s) { return std::string(metricName(s.metric)); })
+      .def("__len__", [](const InterventionStudy& s) { return s.effects.size(); })
+      .def("__repr__", [](const InterventionStudy& s) {
+        return "<InterventionStudy " + std::to_string(s.effects.size()) + " alternatives>";
+      });
+
+  m.def(
+      "compare_interventions",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& remove_at,
+         const nb::object& at, const std::vector<Intervention>& interventions,
+         const std::string& metric, const std::string& by, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, bool prune, int cram_order) {
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        spec.aggregate = aggregateFrom(by);
+        spec.unit = requireUnit(units, spec.metric, Domain::Instant);
+        spec.geometry = geometry;
+
+        DecayOptions options;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+
+        // Every Python argument read before the GIL goes, as attribute() does: the forward and
+        // adjoint solves need nothing from the interpreter, and holding it across them blocks
+        // every other thread.
+        const double t0 = timeFrom(remove_at);
+        const double target = timeFrom(at);
+        const nb::gil_scoped_release release;
+        return compareInterventions(data, inventory, t0, target, spec, interventions, options);
+      },
+      "data"_a, "inventory"_a, "remove_at"_a, "at"_a, "interventions"_a, "metric"_a = "activity",
+      "by"_a = "nuclide", "units"_a = "", "geometry"_a = exposure::PointSourceGeometry{},
+      "prune"_a = true, "cram_order"_a = 48,
+      "What each intervention is worth to R at `at`, from ONE adjoint solve over "
+      "[remove_at, at]. The interventions are alternatives against a common baseline, not a "
+      "sequence; a schedule of removals on different dates is a call per date. Exact: R is "
+      "linear in the inventory, so each answer is a dot product rather than a re-solve.");
 }

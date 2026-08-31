@@ -31,6 +31,13 @@ and rank what contributes, by nuclide, mass chain, element, or individual photon
     for at in nusift.allowable_scale(nd, res, limits):
         print(at.time_s, at.scale, at.binding)   # scale is None where nothing binds
 
+    # And what taking something out would buy, from one adjoint solve over the window:
+    plan = [nusift.Intervention("Cs separation", [nusift.Removal("Cs")])]
+    study = nusift.compare_interventions(nd, inv, remove_at="30d", at="30y",
+                                         interventions=plan, metric="exposure", units="Sv/h")
+    for e in study.effects:
+        print(e.name, "removes", e.removed_fraction, "of", study.baseline)
+
 The large arrays -- ``DecayResult.atoms``, ``ResponseTable.values`` -- are zero-copy NumPy
 views over the C++ storage rather than copies, so they are cheap to take and must not
 outlive the object they came from. NumPy's own base-object tracking enforces that.
@@ -47,6 +54,9 @@ from ._core import (  # noqa: F401
     DominanceWindow,
     InputError,
     IntervalResult,
+    Intervention,
+    InterventionEffect,
+    InterventionStudy,
     Inventory,
     LevelWindow,
     LimitingContributor,
@@ -54,11 +64,14 @@ from ._core import (  # noqa: F401
     NusiftError,
     PointSource,
     Ranking,
+    RemovedContributor,
+    Removal,
     ResponseTable,
     TrajectoryEvent,
     __version__,
     allowable_scale,
     attribute,
+    compare_interventions,
     decay,
     fissions_from_kt,
     format_duration,
@@ -84,6 +97,9 @@ __all__ = [
     "DominanceWindow",
     "InputError",
     "IntervalResult",
+    "Intervention",
+    "InterventionEffect",
+    "InterventionStudy",
     "Inventory",
     "LevelWindow",
     "LimitingContributor",
@@ -91,11 +107,14 @@ __all__ = [
     "NusiftError",
     "PointSource",
     "Ranking",
+    "Removal",
+    "RemovedContributor",
     "ResponseTable",
     "TrajectoryEvent",
     "__version__",
     "allowable_scale",
     "attribute",
+    "compare_interventions",
     "decay",
     "default_store_path",
     "fissions_from_kt",

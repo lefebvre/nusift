@@ -831,6 +831,107 @@ void writeAllowableJson(std::ostream& out, const std::vector<AllowableScale>& sc
   out << "  ]\n}\n";
 }
 
+// --- counterfactual interventions ----------------------------------------------
+
+std::string drivenBy(const InterventionEffect& effect, std::size_t most) {
+  std::string text;
+  for (std::size_t i = 0; i < effect.contributors.size() && i < most; ++i) {
+    if (i > 0) {
+      text += ", ";
+    }
+    text += effect.contributors[i].label + " " + percent(effect.contributors[i].fraction);
+  }
+  return text;
+}
+
+void writeInterventionsText(std::ostream& out, const InterventionStudy& study,
+                            const ReportContext& context) {
+  out << "NuSIFT " << metricName(study.metric) << " interventions\n";
+  out << "  remove at " << formatDuration(study.interventionTimeSeconds) << ", response at "
+      << formatDuration(study.responseTimeSeconds) << '\n';
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!study.seedProvenance.empty()) {
+    out << "  seed:  " << study.seedProvenance << '\n';
+  }
+  out << "\n  baseline: " << sci(study.baseline) << ' ' << unitName(study.unit)
+      << " with nothing removed\n\n";
+
+  std::size_t nameWidth = 12;
+  for (const InterventionEffect& effect : study.effects) {
+    nameWidth = std::max(nameWidth, effect.name.size());
+  }
+
+  out << "  " << std::left << std::setw(static_cast<int>(nameWidth)) << "intervention" << std::right
+      << "  " << std::setw(12) << "after" << "  " << std::setw(12) << "removed"
+      << "  " << std::setw(8) << "of base" << "  driven by\n";
+  for (const InterventionEffect& effect : study.effects) {
+    out << "  " << std::left << std::setw(static_cast<int>(nameWidth)) << effect.name << std::right
+        << "  " << std::setw(12) << sci(effect.response) << "  " << std::setw(12)
+        << sci(effect.removed) << "  " << std::setw(8) << percent(effect.removedFraction) << "  "
+        << drivenBy(effect, 3) << '\n';
+  }
+
+  // Alternatives, not a sequence. Summing two rows would describe a schedule nobody computed,
+  // and the numbers look perfectly addable, so the report has to say it.
+  out << "\n  Each row is an alternative measured against the same baseline, not a step in a\n"
+         "  sequence -- two rows do not add. A schedule of removals on different dates is a\n"
+         "  separate run per date.\n";
+}
+
+void writeInterventionsCsv(std::ostream& out, const InterventionStudy& study) {
+  // Long format, one row per intervention per nuclide, with the intervention's own totals
+  // repeated. A summary-only table would drop what the benefit was actually made of.
+  out << "intervention,response,removed,removed_fraction,unit,nuclide,key,atoms_removed,value,"
+         "fraction\n";
+  for (const InterventionEffect& effect : study.effects) {
+    if (effect.contributors.empty()) {
+      out << csvField(effect.name) << ',' << shortestRoundTrip(effect.response) << ','
+          << shortestRoundTrip(effect.removed) << ',' << shortestRoundTrip(effect.removedFraction)
+          << ',' << unitName(study.unit) << ",,,,,\n";
+      continue;
+    }
+    for (const RemovedContributor& contributor : effect.contributors) {
+      out << csvField(effect.name) << ',' << shortestRoundTrip(effect.response) << ','
+          << shortestRoundTrip(effect.removed) << ',' << shortestRoundTrip(effect.removedFraction)
+          << ',' << unitName(study.unit) << ',' << csvField(contributor.label) << ','
+          << contributor.key << ',' << shortestRoundTrip(contributor.atomsRemoved) << ','
+          << shortestRoundTrip(contributor.value) << ',' << shortestRoundTrip(contributor.fraction)
+          << '\n';
+    }
+  }
+}
+
+void writeInterventionsJson(std::ostream& out, const InterventionStudy& study) {
+  out << "{\n";
+  out << "  \"metric\": \"" << metricName(study.metric) << "\",\n";
+  out << "  \"unit\": \"" << unitName(study.unit) << "\",\n";
+  out << "  \"intervention_time_s\": " << jsonNumber(study.interventionTimeSeconds) << ",\n";
+  out << "  \"response_time_s\": " << jsonNumber(study.responseTimeSeconds) << ",\n";
+  out << "  \"baseline\": " << jsonNumber(study.baseline) << ",\n";
+  out << "  \"interventions\": [\n";
+  for (std::size_t q = 0; q < study.effects.size(); ++q) {
+    const InterventionEffect& effect = study.effects[q];
+    out << "    {\"name\": \"" << escapeJson(effect.name)
+        << "\", \"response\": " << jsonNumber(effect.response)
+        << ", \"removed\": " << jsonNumber(effect.removed)
+        << ", \"removed_fraction\": " << jsonNumber(effect.removedFraction)
+        << ", \"contributors\": [";
+    for (std::size_t i = 0; i < effect.contributors.size(); ++i) {
+      const RemovedContributor& contributor = effect.contributors[i];
+      out << (i == 0 ? "\n" : ",\n") << "      {\"label\": \"" << escapeJson(contributor.label)
+          << "\", \"key\": " << contributor.key
+          << ", \"atoms_removed\": " << jsonNumber(contributor.atomsRemoved)
+          << ", \"value\": " << jsonNumber(contributor.value)
+          << ", \"fraction\": " << jsonNumber(contributor.fraction) << "}";
+    }
+    out << (effect.contributors.empty() ? "" : "\n    ") << "]}"
+        << (q + 1 < study.effects.size() ? ",\n" : "\n");
+  }
+  out << "  ]\n}\n";
+}
+
 }  // namespace
 
 bool parseReportFormat(std::string_view text, ReportFormat& out) {
@@ -1099,6 +1200,21 @@ void writeAllowable(std::ostream& out, const std::vector<AllowableScale>& scaled
       return;
     case ReportFormat::Json:
       writeAllowableJson(out, scaled, criteria);
+      return;
+  }
+}
+
+void writeInterventions(std::ostream& out, const InterventionStudy& study,
+                        const ReportContext& context, ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeInterventionsText(out, study, context);
+      return;
+    case ReportFormat::Csv:
+      writeInterventionsCsv(out, study);
+      return;
+    case ReportFormat::Json:
+      writeInterventionsJson(out, study);
       return;
   }
 }
