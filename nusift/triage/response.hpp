@@ -85,10 +85,10 @@ enum class Unit {
   // Photon. Strength (no geometry) and fluence at the point the geometry names (with one),
   // each as a rate and as a count over an interval. The existing unit gating draws the same
   // rate-versus-count line here as everywhere else.
-  PhotonsPerSecond,          // instant: photons emitted per second
-  Photons,                   // interval only: photons emitted over the window
+  PhotonsPerSecond,                // instant: photons emitted per second
+  Photons,                         // interval only: photons emitted over the window
   PhotonsPerSquareMeterPerSecond,  // instant: fluence rate at the point
-  PhotonsPerSquareMeter,     // interval only: fluence at the point over the window
+  PhotonsPerSquareMeter,           // interval only: fluence at the point over the window
 };
 
 // Which metric a unit can express. Reporting exposure in becquerel is not a rounding error,
