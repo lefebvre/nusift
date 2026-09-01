@@ -124,6 +124,30 @@ because ICRP's denominator is kerma and NIST's µ_en/ρ counts only what is abso
 departure is asserted rather than tolerated, in
 [`tests/unit/test_point_source.cpp`](../../tests/unit/test_point_source.cpp).
 
+**`icrp119`** — ICRP (2012). *Compendium of Dose Coefficients based on ICRP Publication 60.*
+ICRP Publication 119, Ann. ICRP 41(Suppl.).
+
+An INPUT rather than a reference, like `icrp116`: Table A.1's committed effective dose
+coefficients for ingested and inhaled particulates by workers are transcribed into
+[`data/packs/icrp119-ingestion-worker.csv`](../../data/packs/icrp119-ingestion-worker.csv) and
+[`data/packs/icrp119-inhalation-worker-5um.csv`](../../data/packs/icrp119-inhalation-worker-5um.csv).
+733 nuclides, every one of which resolves against the ENDF/B-VIII.1 store.
+
+**The extraction could not use the PDF's text layer, and this is worth recording because the
+failure is silent.** Every exponent's minus sign is a glyph in a symbol font with no ToUnicode
+mapping, so `pdftotext` renders 4.8E-11 as `4.8E11` -- a dose coefficient twenty-two orders of
+magnitude too large, in a column where 1e-11 and 1e11 are equally well-formed numbers. The
+minus survives in poppler's XML rendering as an empty text fragment in font 9 sitting between
+the mantissa and the exponent digits, and the parser reconstructs it from there; 3511 of the
+3513 such fragments in the table sit in exactly that position, the other two being a footnote
+marker in a different font. Coefficients are then checked against the shape of a dose
+coefficient before being accepted, which is what caught the repeated page header leaking into
+the column beneath it.
+
+The values are checked against figures published widely enough to be recognised on sight:
+Cs-137 ingestion 1.3e-8 Sv/Bq, I-131 ingestion 2.2e-8, Sr-90 ingestion 2.8e-8 at f1 = 0.3,
+H-3 (HTO) 1.8e-11, Pu-239 inhalation Type M at 5 um 3.2e-5, Am-241 the same at 2.7e-5.
+
 **`glasstone1977`** — Glasstone, S., & Dolan, P. J. (1977). *The Effects of Nuclear Weapons*
 (3rd ed.). U.S. Department of Defense and Energy Research and Development Administration.
 

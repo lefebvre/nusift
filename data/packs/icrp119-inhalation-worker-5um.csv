@@ -1,0 +1,763 @@
+# pack: icrp119-inhalation-worker-5um
+# version: ICRP Publication 119 (2012)
+# quantity: committed effective dose from inhaling this inventory
+# unit: Sv
+# basis: activity
+# domain: instant
+# progeny: excluded
+# scenario: worker, inhalation, 5 um AMAD, most restrictive absorption type
+# source: ICRP Publication 119, Compendium of Dose Coefficients based on ICRP Publication 60,
+#   Ann. ICRP 41(Suppl.), Table A.1 -- effective dose coefficients e(50) for inhaled
+#   particulates, workers, activity median aerodynamic diameter 5 um.
+#
+# The 5 um column rather than the 1 um one: 5 um AMAD is ICRP's default for occupational
+# exposure, where 1 um describes an environmental aerosol. They are not close -- for Pu-239
+# Type M the two differ by nearly a factor of two, in opposite directions for different nuclides
+# -- so the choice is part of what the number means and is named in the scenario.
+#
+# Where ICRP gives several absorption types -- 468 of the 730 do -- this pack takes the LARGEST
+# coefficient, the most restrictive and so the conservative choice for screening, with the row's
+# note saying which type it came from. The type that applies to a real aerosol follows from the
+# chemical form, which a pack cannot know: a fast-absorbing caesium salt and a slow-absorbing
+# oxide of the same nuclide are different intakes.
+#
+# Everything in the ingestion pack's header about what this quantity IS applies here: a
+# committed dose per unit intake rather than a dose rate, progeny excluded because ICRP's
+# coefficient covers only the daughters formed in vivo, workers rather than the public, and an
+# instantaneous domain because the coefficient multiplies becquerel.
+#
+# H-3, C-11 and C-14 are absent: ICRP 119 gives them no particulate inhalation coefficient at
+# all, referring instead to its Table B.1 for soluble and reactive gases, which is a different
+# quantity with a different intake model. They are omitted rather than approximated, so an
+# inventory carrying them will see them counted against this pack's coverage.
+nuclide,coefficient,folded,note
+Ac-224,9.900000e-08,,most restrictive of 3 absorption types (type S)
+Ac-225,6.500000e-06,,most restrictive of 3 absorption types (type S)
+Ac-226,1.000000e-06,,most restrictive of 3 absorption types (type S)
+Ac-227,6.300000e-04,,most restrictive of 3 absorption types (type F)
+Ac-228,2.900000e-08,,most restrictive of 3 absorption types (type F)
+Ag-102,3.200000e-11,,most restrictive of 3 absorption types (type S)
+Ag-103,4.500000e-11,,most restrictive of 3 absorption types (type S)
+Ag-104,7.100000e-11,,most restrictive of 3 absorption types (type S)
+Ag-104m,4.500000e-11,,most restrictive of 3 absorption types (type S)
+Ag-105,8.000000e-10,,most restrictive of 3 absorption types (type F)
+Ag-106,2.700000e-11,,most restrictive of 3 absorption types (type S)
+Ag-106m,1.600000e-09,,most restrictive of 3 absorption types (type F)
+Ag-108m,1.900000e-08,,most restrictive of 3 absorption types (type S)
+Ag-110m,7.300000e-09,,most restrictive of 3 absorption types (type S)
+Ag-111,1.600000e-09,,most restrictive of 3 absorption types (type S)
+Ag-112,2.600000e-10,,most restrictive of 3 absorption types (type S)
+Ag-115,4.400000e-11,,most restrictive of 3 absorption types (type S)
+Al-26,1.400000e-08,,most restrictive of 2 absorption types (type F)
+Am-237,3.600000e-11,,type M
+Am-238,6.600000e-11,,type M
+Am-239,2.900000e-10,,type M
+Am-240,5.900000e-10,,type M
+Am-241,2.700000e-05,,type M
+Am-242,1.200000e-08,,type M
+Am-242m,2.400000e-05,,type M
+Am-243,2.700000e-05,,type M
+Am-244,1.500000e-09,,type M
+Am-244m,6.200000e-11,,type M
+Am-245,7.600000e-11,,type M
+Am-246,1.100000e-10,,type M
+Am-246m,3.800000e-11,,type M
+As-69,3.500000e-11,,type M
+As-70,1.200000e-10,,type M
+As-71,5.000000e-10,,type M
+As-72,1.300000e-09,,type M
+As-73,6.500000e-10,,type M
+As-74,1.800000e-09,,type M
+As-76,9.200000e-10,,type M
+As-77,4.200000e-10,,type M
+As-78,1.400000e-10,,type M
+At-207,1.900000e-09,,most restrictive of 2 absorption types (type M)
+At-211,1.100000e-07,,most restrictive of 2 absorption types (type M)
+Au-193,1.600000e-10,,most restrictive of 3 absorption types (type S)
+Au-194,3.800000e-10,,most restrictive of 3 absorption types (type S)
+Au-195,1.200000e-09,,most restrictive of 3 absorption types (type S)
+Au-198,1.100000e-09,,most restrictive of 3 absorption types (type S)
+Au-198m,2.000000e-09,,most restrictive of 3 absorption types (type M)
+Au-199,7.600000e-10,,most restrictive of 3 absorption types (type S)
+Au-200,5.600000e-11,,most restrictive of 3 absorption types (type S)
+Au-200m,1.000000e-09,,most restrictive of 3 absorption types (type S)
+Au-201,2.900000e-11,,most restrictive of 3 absorption types (type S)
+Ba-126,1.200000e-10,,type F
+Ba-128,1.300000e-09,,type F
+Ba-131,3.500000e-10,,type F
+Ba-131m,6.400000e-12,,type F
+Ba-133,1.800000e-09,,type F
+Ba-133m,2.800000e-10,,type F
+Ba-135m,2.300000e-10,,type F
+Ba-139,5.500000e-11,,type F
+Ba-140,1.600000e-09,,type F
+Ba-141,3.500000e-11,,type F
+Ba-142,2.700000e-11,,type F
+Be-7,4.600000e-11,,most restrictive of 2 absorption types (type S)
+Be-10,1.900000e-08,,most restrictive of 2 absorption types (type S)
+Bi-200,5.600000e-11,,most restrictive of 2 absorption types (type M)
+Bi-201,1.100000e-10,,most restrictive of 2 absorption types (type M)
+Bi-202,1.000000e-10,,most restrictive of 2 absorption types (type M)
+Bi-203,4.500000e-10,,most restrictive of 2 absorption types (type M)
+Bi-205,1.000000e-09,,most restrictive of 2 absorption types (type M)
+Bi-206,2.100000e-09,,most restrictive of 2 absorption types (type M)
+Bi-207,3.200000e-09,,most restrictive of 2 absorption types (type M)
+Bi-210,6.000000e-08,,most restrictive of 2 absorption types (type M)
+Bi-210m,2.100000e-06,,most restrictive of 2 absorption types (type M)
+Bi-212,3.900000e-08,,most restrictive of 2 absorption types (type M)
+Bi-213,4.100000e-08,,most restrictive of 2 absorption types (type M)
+Bi-214,2.100000e-08,,most restrictive of 2 absorption types (type M)
+Bk-245,1.800000e-09,,type M
+Bk-246,4.600000e-10,,type M
+Bk-247,4.500000e-05,,type M
+Bk-249,1.000000e-07,,type M
+Bk-250,7.100000e-10,,type M
+Br-74,6.800000e-11,,most restrictive of 2 absorption types (type M)
+Br-74m,1.100000e-10,,most restrictive of 2 absorption types (type M)
+Br-75,8.500000e-11,,most restrictive of 2 absorption types (type M)
+Br-76,5.800000e-10,,most restrictive of 2 absorption types (type M)
+Br-77,1.300000e-10,,most restrictive of 2 absorption types (type M)
+Br-80,1.700000e-11,,most restrictive of 2 absorption types (type M)
+Br-80m,1.000000e-10,,most restrictive of 2 absorption types (type M)
+Br-82,8.800000e-10,,most restrictive of 2 absorption types (type M)
+Br-83,6.700000e-11,,most restrictive of 2 absorption types (type M)
+Br-84,6.200000e-11,,most restrictive of 2 absorption types (type M)
+Ca-41,1.900000e-10,,type M
+Ca-45,2.300000e-09,,type M
+Ca-47,2.100000e-09,,type M
+Cd-104,6.300000e-11,,most restrictive of 3 absorption types (type S)
+Cd-107,1.100000e-10,,most restrictive of 3 absorption types (type S)
+Cd-109,9.600000e-09,,most restrictive of 3 absorption types (type F)
+Cd-113,1.400000e-07,,most restrictive of 3 absorption types (type F)
+Cd-113m,1.300000e-07,,most restrictive of 3 absorption types (type F)
+Cd-115,1.300000e-09,,most restrictive of 3 absorption types (type S)
+Cd-115m,6.400000e-09,,most restrictive of 3 absorption types (type F)
+Cd-117,2.500000e-10,,most restrictive of 3 absorption types (type S)
+Cd-117m,3.200000e-10,,most restrictive of 3 absorption types (type S)
+Ce-134,1.600000e-09,,most restrictive of 2 absorption types (type S)
+Ce-135,7.600000e-10,,most restrictive of 2 absorption types (type S)
+Ce-137,1.900000e-11,,most restrictive of 2 absorption types (type S)
+Ce-137m,5.900000e-10,,most restrictive of 2 absorption types (type S)
+Ce-139,1.400000e-09,,most restrictive of 2 absorption types (type S)
+Ce-141,3.100000e-09,,most restrictive of 2 absorption types (type S)
+Ce-143,1.000000e-09,,most restrictive of 2 absorption types (type S)
+Ce-144,2.900000e-08,,most restrictive of 2 absorption types (type S)
+Cf-244,1.800000e-08,,type M
+Cf-246,3.500000e-07,,type M
+Cf-248,6.100000e-06,,type M
+Cf-249,4.500000e-05,,type M
+Cf-250,2.200000e-05,,type M
+Cf-251,4.600000e-05,,type M
+Cf-252,1.300000e-05,,type M
+Cf-253,1.000000e-06,,type M
+Cf-254,2.200000e-05,,type M
+Cl-36,5.100000e-09,,most restrictive of 2 absorption types (type M)
+Cl-38,7.300000e-11,,most restrictive of 2 absorption types (type M)
+Cl-39,7.600000e-11,,most restrictive of 2 absorption types (type M)
+Cm-238,4.800000e-09,,type M
+Cm-240,2.300000e-06,,type M
+Cm-241,2.600000e-08,,type M
+Cm-242,3.700000e-06,,type M
+Cm-243,2.000000e-05,,type M
+Cm-244,1.700000e-05,,type M
+Cm-245,2.700000e-05,,type M
+Cm-246,2.700000e-05,,type M
+Cm-247,2.500000e-05,,type M
+Cm-248,9.500000e-05,,type M
+Cm-249,5.100000e-11,,type M
+Cm-250,5.400000e-04,,type M
+Co-55,8.300000e-10,,most restrictive of 2 absorption types (type S)
+Co-56,4.900000e-09,,most restrictive of 2 absorption types (type S)
+Co-57,6.000000e-10,,most restrictive of 2 absorption types (type S)
+Co-58,1.700000e-09,,most restrictive of 2 absorption types (type S)
+Co-58m,1.700000e-11,,most restrictive of 2 absorption types (type S)
+Co-60,1.700000e-08,,most restrictive of 2 absorption types (type S)
+Co-60m,1.200000e-12,,most restrictive of 2 absorption types (type S)
+Co-61,7.500000e-11,,most restrictive of 2 absorption types (type S)
+Co-62m,3.700000e-11,,most restrictive of 2 absorption types (type S)
+Cr-48,2.500000e-10,,most restrictive of 3 absorption types (type S)
+Cr-49,5.900000e-11,,most restrictive of 3 absorption types (type S)
+Cr-51,3.600000e-11,,most restrictive of 3 absorption types (type S)
+Cs-125,2.300000e-11,,type F
+Cs-127,4.000000e-11,,type F
+Cs-129,8.100000e-11,,type F
+Cs-130,1.500000e-11,,type F
+Cs-131,4.500000e-11,,type F
+Cs-132,3.800000e-10,,type F
+Cs-134,9.600000e-09,,type F
+Cs-134m,2.600000e-11,,type F
+Cs-135,9.900000e-10,,type F
+Cs-135m,2.400000e-11,,type F
+Cs-136,1.900000e-09,,type F
+Cs-137,6.700000e-09,,type F
+Cs-138,4.600000e-11,,type F
+Cu-60,6.200000e-11,,most restrictive of 3 absorption types (type S)
+Cu-61,1.200000e-10,,most restrictive of 3 absorption types (type S)
+Cu-64,1.500000e-10,,most restrictive of 3 absorption types (type S)
+Cu-67,5.800000e-10,,most restrictive of 3 absorption types (type S)
+Dy-155,1.200000e-10,,type M
+Dy-157,5.500000e-11,,type M
+Dy-159,2.500000e-10,,type M
+Dy-165,8.700000e-11,,type M
+Dy-166,1.800000e-09,,type M
+Er-161,8.500000e-11,,type M
+Er-165,1.400000e-11,,type M
+Er-169,9.200000e-10,,type M
+Er-171,3.000000e-10,,type M
+Er-172,1.200000e-09,,type M
+Es-250m,4.200000e-10,,type M
+Es-251,1.700000e-09,,type M
+Es-253,2.100000e-06,,type M
+Es-254,6.000000e-06,,type M
+Es-254m,3.700000e-07,,type M
+Eu-145,7.300000e-10,,type M
+Eu-146,1.200000e-09,,type M
+Eu-147,1.000000e-09,,type M
+Eu-148,2.300000e-09,,type M
+Eu-149,2.300000e-10,,type M
+Eu-150,3.400000e-08,,type M
+Eu-150m,2.800000e-10,,type M
+Eu-152,2.700000e-08,,type M
+Eu-152m,3.200000e-10,,type M
+Eu-154,3.500000e-08,,type M
+Eu-155,4.700000e-09,,type M
+Eu-156,3.000000e-09,,type M
+Eu-157,4.400000e-10,,type M
+Eu-158,7.500000e-11,,type M
+F-18,9.300000e-11,,most restrictive of 3 absorption types (type S)
+Fe-52,9.500000e-10,,most restrictive of 2 absorption types (type M)
+Fe-55,9.200000e-10,,most restrictive of 2 absorption types (type F)
+Fe-59,3.200000e-09,,most restrictive of 2 absorption types (type M)
+Fe-60,3.300000e-07,,most restrictive of 2 absorption types (type F)
+Fm-252,2.600000e-07,,type M
+Fm-253,3.000000e-07,,type M
+Fm-254,7.700000e-08,,type M
+Fm-255,2.600000e-07,,type M
+Fm-257,5.200000e-06,,type M
+Fr-222,2.100000e-08,,type F
+Fr-223,1.300000e-09,,type F
+Ga-65,2.900000e-11,,most restrictive of 2 absorption types (type M)
+Ga-66,7.100000e-10,,most restrictive of 2 absorption types (type M)
+Ga-67,2.800000e-10,,most restrictive of 2 absorption types (type M)
+Ga-68,8.100000e-11,,most restrictive of 2 absorption types (type M)
+Ga-70,2.600000e-11,,most restrictive of 2 absorption types (type M)
+Ga-72,8.400000e-10,,most restrictive of 2 absorption types (type M)
+Ga-73,2.000000e-10,,most restrictive of 2 absorption types (type M)
+Gd-145,3.500000e-11,,most restrictive of 2 absorption types (type M)
+Gd-146,5.200000e-09,,most restrictive of 2 absorption types (type F)
+Gd-147,5.900000e-10,,most restrictive of 2 absorption types (type M)
+Gd-148,3.000000e-05,,most restrictive of 2 absorption types (type F)
+Gd-149,7.900000e-10,,most restrictive of 2 absorption types (type M)
+Gd-151,9.300000e-10,,most restrictive of 2 absorption types (type F)
+Gd-152,2.200000e-05,,most restrictive of 2 absorption types (type F)
+Gd-153,2.500000e-09,,most restrictive of 2 absorption types (type F)
+Gd-159,3.900000e-10,,most restrictive of 2 absorption types (type M)
+Ge-66,1.300000e-10,,most restrictive of 2 absorption types (type M)
+Ge-67,4.200000e-11,,most restrictive of 2 absorption types (type M)
+Ge-68,7.900000e-09,,most restrictive of 2 absorption types (type M)
+Ge-69,3.700000e-10,,most restrictive of 2 absorption types (type M)
+Ge-71,1.100000e-11,,most restrictive of 2 absorption types (type M)
+Ge-75,5.400000e-11,,most restrictive of 2 absorption types (type M)
+Ge-77,4.500000e-10,,most restrictive of 2 absorption types (type M)
+Ge-78,1.400000e-10,,most restrictive of 2 absorption types (type M)
+Hf-170,4.300000e-10,,most restrictive of 2 absorption types (type M)
+Hf-172,3.700000e-08,,most restrictive of 2 absorption types (type F)
+Hf-173,2.200000e-10,,most restrictive of 2 absorption types (type M)
+Hf-175,8.800000e-10,,most restrictive of 2 absorption types (type M)
+Hf-177m,1.500000e-10,,most restrictive of 2 absorption types (type M)
+Hf-178m,3.100000e-07,,most restrictive of 2 absorption types (type F)
+Hf-179m,3.200000e-09,,most restrictive of 2 absorption types (type M)
+Hf-180m,2.000000e-10,,most restrictive of 2 absorption types (type M)
+Hf-181,4.100000e-09,,most restrictive of 2 absorption types (type M)
+Hf-182,3.600000e-07,,most restrictive of 2 absorption types (type F)
+Hf-182m,7.100000e-11,,most restrictive of 2 absorption types (type M)
+Hf-183,8.300000e-11,,most restrictive of 2 absorption types (type M)
+Hf-184,4.500000e-10,,most restrictive of 2 absorption types (type M)
+Hg-193,1.000000e-10,,most restrictive of 3 absorption types (type M)
+Hg-193m,3.800000e-10,,most restrictive of 3 absorption types (type M)
+Hg-194,1.900000e-08,,most restrictive of 3 absorption types (type F)
+Hg-195,9.200000e-11,,most restrictive of 3 absorption types (type M)
+Hg-195m,6.500000e-10,,most restrictive of 3 absorption types (type M)
+Hg-197,2.800000e-10,,most restrictive of 3 absorption types (type M)
+Hg-197m,6.600000e-10,,most restrictive of 3 absorption types (type M)
+Hg-199m,5.200000e-11,,most restrictive of 3 absorption types (type M)
+Hg-203,1.900000e-09,,most restrictive of 3 absorption types (type M)
+Ho-155,3.200000e-11,,type M
+Ho-157,7.600000e-12,,type M
+Ho-159,1.000000e-11,,type M
+Ho-161,1.000000e-11,,type M
+Ho-162,4.500000e-12,,type M
+Ho-162m,3.300000e-11,,type M
+Ho-164,1.300000e-11,,type M
+Ho-164m,1.600000e-11,,type M
+Ho-166,8.300000e-10,,type M
+Ho-166m,7.800000e-08,,type M
+Ho-167,1.000000e-10,,type M
+I-120,1.900000e-10,,type F
+I-120m,1.400000e-10,,type F
+I-121,3.900000e-11,,type F
+I-123,1.100000e-10,,type F
+I-124,6.300000e-09,,type F
+I-125,7.300000e-09,,type F
+I-126,1.400000e-08,,type F
+I-128,2.200000e-11,,type F
+I-129,5.100000e-08,,type F
+I-130,9.600000e-10,,type F
+I-131,1.100000e-08,,type F
+I-132,2.000000e-10,,type F
+I-132m,1.100000e-10,,type F
+I-133,2.100000e-09,,type F
+I-134,7.900000e-11,,type F
+I-135,4.600000e-10,,type F
+In-109,7.300000e-11,,most restrictive of 2 absorption types (type M)
+In-110,2.500000e-10,,most restrictive of 2 absorption types (type M)
+In-110m,8.100000e-11,,most restrictive of 2 absorption types (type M)
+In-111,3.100000e-10,,most restrictive of 2 absorption types (type M)
+In-112,1.300000e-11,,most restrictive of 2 absorption types (type M)
+In-113m,3.200000e-11,,most restrictive of 2 absorption types (type M)
+In-114m,1.100000e-08,,most restrictive of 2 absorption types (type F)
+In-115,4.500000e-07,,most restrictive of 2 absorption types (type F)
+In-115m,8.700000e-11,,most restrictive of 2 absorption types (type M)
+In-116m,8.000000e-11,,most restrictive of 2 absorption types (type M)
+In-117,4.800000e-11,,most restrictive of 2 absorption types (type M)
+In-117m,1.100000e-10,,most restrictive of 2 absorption types (type M)
+In-119m,2.900000e-11,,most restrictive of 2 absorption types (type M)
+Ir-182,4.000000e-11,,most restrictive of 3 absorption types (type S)
+Ir-184,1.900000e-10,,most restrictive of 3 absorption types (type S)
+Ir-185,2.600000e-10,,most restrictive of 3 absorption types (type S)
+Ir-186,5.000000e-10,,most restrictive of 3 absorption types (type S)
+Ir-186m,7.100000e-11,,most restrictive of 3 absorption types (type S)
+Ir-187,1.200000e-10,,most restrictive of 3 absorption types (type S)
+Ir-188,6.200000e-10,,most restrictive of 3 absorption types (type S)
+Ir-189,4.600000e-10,,most restrictive of 3 absorption types (type S)
+Ir-190,2.500000e-09,,most restrictive of 5 absorption types (type S)
+Ir-190m,1.100000e-11,,most restrictive of 3 absorption types (type S)
+Ir-192,1.900000e-08,,most restrictive of 5 absorption types (type S)
+Ir-193m,1.000000e-09,,most restrictive of 3 absorption types (type S)
+Ir-194,7.500000e-10,,most restrictive of 3 absorption types (type S)
+Ir-194m,8.200000e-09,,most restrictive of 3 absorption types (type S)
+Ir-195,1.000000e-10,,most restrictive of 3 absorption types (type S)
+Ir-195m,2.400000e-10,,most restrictive of 3 absorption types (type S)
+K-40,3.000000e-09,,type F
+K-42,2.000000e-10,,type F
+K-43,2.600000e-10,,type F
+K-44,3.700000e-11,,type F
+K-45,2.800000e-11,,type F
+La-131,3.600000e-11,,most restrictive of 2 absorption types (type M)
+La-132,2.800000e-10,,most restrictive of 2 absorption types (type M)
+La-135,2.500000e-11,,most restrictive of 2 absorption types (type M)
+La-137,1.000000e-08,,most restrictive of 2 absorption types (type F)
+La-138,1.800000e-07,,most restrictive of 2 absorption types (type F)
+La-140,1.500000e-09,,most restrictive of 2 absorption types (type M)
+La-141,2.200000e-10,,most restrictive of 2 absorption types (type M)
+La-142,1.500000e-10,,most restrictive of 2 absorption types (type M)
+La-143,3.300000e-11,,most restrictive of 2 absorption types (type M)
+Lu-169,4.900000e-10,,most restrictive of 2 absorption types (type S)
+Lu-170,9.500000e-10,,most restrictive of 2 absorption types (type S)
+Lu-171,9.300000e-10,,most restrictive of 2 absorption types (type S)
+Lu-172,1.800000e-09,,most restrictive of 2 absorption types (type S)
+Lu-173,1.500000e-09,,most restrictive of 2 absorption types (type M)
+Lu-174,2.900000e-09,,most restrictive of 2 absorption types (type M)
+Lu-174m,2.600000e-09,,most restrictive of 2 absorption types (type S)
+Lu-176,4.600000e-08,,most restrictive of 2 absorption types (type M)
+Lu-176m,1.600000e-10,,most restrictive of 2 absorption types (type S)
+Lu-177,1.100000e-09,,most restrictive of 2 absorption types (type S)
+Lu-177m,1.200000e-08,,most restrictive of 2 absorption types (type S)
+Lu-178,4.100000e-11,,most restrictive of 2 absorption types (type S)
+Lu-178m,5.600000e-11,,most restrictive of 2 absorption types (type S)
+Lu-179,1.600000e-10,,most restrictive of 2 absorption types (type S)
+Md-257,2.000000e-08,,type M
+Md-258,4.400000e-06,,type M
+Mg-28,1.700000e-09,,most restrictive of 2 absorption types (type M)
+Mn-51,6.800000e-11,,most restrictive of 2 absorption types (type M)
+Mn-52,1.800000e-09,,most restrictive of 2 absorption types (type M)
+Mn-52m,5.000000e-11,,most restrictive of 2 absorption types (type M)
+Mn-53,3.600000e-11,,most restrictive of 2 absorption types (type M)
+Mn-54,1.200000e-09,,most restrictive of 2 absorption types (type M)
+Mn-56,2.000000e-10,,most restrictive of 2 absorption types (type M)
+Mo-90,5.600000e-10,,most restrictive of 2 absorption types (type S)
+Mo-93,1.400000e-09,,most restrictive of 2 absorption types (type F)
+Mo-93m,3.000000e-10,,most restrictive of 2 absorption types (type S)
+Mo-99,1.100000e-09,,most restrictive of 2 absorption types (type S)
+Mo-101,4.500000e-11,,most restrictive of 2 absorption types (type S)
+Na-22,2.000000e-09,,type F
+Na-24,5.300000e-10,,type F
+Nb-88,5.000000e-11,,most restrictive of 2 absorption types (type S)
+Nb-89,1.900000e-10,,most restrictive of 2 absorption types (type S)
+Nb-89m,1.200000e-10,,most restrictive of 2 absorption types (type S)
+Nb-90,1.100000e-09,,most restrictive of 2 absorption types (type S)
+Nb-93m,8.600000e-10,,most restrictive of 2 absorption types (type S)
+Nb-94,2.500000e-08,,most restrictive of 2 absorption types (type S)
+Nb-95,1.300000e-09,,most restrictive of 2 absorption types (type S)
+Nb-95m,8.500000e-10,,most restrictive of 2 absorption types (type S)
+Nb-96,1.000000e-09,,most restrictive of 2 absorption types (type S)
+Nb-97,7.200000e-11,,most restrictive of 2 absorption types (type S)
+Nb-98m,9.900000e-11,,most restrictive of 2 absorption types (type S)
+Nd-136,8.900000e-11,,most restrictive of 2 absorption types (type S)
+Nd-138,3.800000e-10,,most restrictive of 2 absorption types (type S)
+Nd-139,1.700000e-11,,most restrictive of 2 absorption types (type S)
+Nd-139m,2.500000e-10,,most restrictive of 2 absorption types (type S)
+Nd-141,8.800000e-12,,most restrictive of 2 absorption types (type S)
+Nd-147,2.100000e-09,,most restrictive of 2 absorption types (type S)
+Nd-149,1.300000e-10,,most restrictive of 2 absorption types (type S)
+Nd-151,2.900000e-11,,most restrictive of 2 absorption types (type S)
+Ni-56,9.600000e-10,,most restrictive of 2 absorption types (type M)
+Ni-57,7.600000e-10,,most restrictive of 2 absorption types (type M)
+Ni-59,2.200000e-10,,most restrictive of 2 absorption types (type F)
+Ni-63,5.200000e-10,,most restrictive of 2 absorption types (type F)
+Ni-65,1.300000e-10,,most restrictive of 2 absorption types (type M)
+Ni-66,1.900000e-09,,most restrictive of 2 absorption types (type M)
+Np-232,3.500000e-11,,type M
+Np-233,3.000000e-12,,type M
+Np-234,7.300000e-10,,type M
+Np-235,2.700000e-10,,type M
+Np-236,2.000000e-06,,type M
+Np-236m,3.600000e-09,,type M
+Np-237,1.500000e-05,,type M
+Np-238,1.700000e-09,,type M
+Np-239,1.100000e-09,,type M
+Np-240,1.300000e-10,,type M
+Os-180,2.500000e-11,,most restrictive of 3 absorption types (type S)
+Os-181,1.000000e-10,,most restrictive of 3 absorption types (type S)
+Os-182,5.200000e-10,,most restrictive of 3 absorption types (type S)
+Os-185,1.400000e-09,,most restrictive of 3 absorption types (type F)
+Os-189m,7.900000e-12,,most restrictive of 3 absorption types (type S)
+Os-191,1.500000e-09,,most restrictive of 3 absorption types (type S)
+Os-191m,1.400000e-10,,most restrictive of 3 absorption types (type S)
+Os-193,6.800000e-10,,most restrictive of 3 absorption types (type S)
+Os-194,4.200000e-08,,most restrictive of 3 absorption types (type S)
+P-32,2.900000e-09,,most restrictive of 2 absorption types (type M)
+P-33,1.300000e-09,,most restrictive of 2 absorption types (type M)
+Pa-227,9.700000e-08,,most restrictive of 2 absorption types (type S)
+Pa-228,5.100000e-08,,most restrictive of 2 absorption types (type S)
+Pa-230,5.700000e-07,,most restrictive of 2 absorption types (type S)
+Pa-231,8.900000e-05,,most restrictive of 2 absorption types (type M)
+Pa-232,6.800000e-09,,most restrictive of 2 absorption types (type M)
+Pa-233,3.200000e-09,,most restrictive of 2 absorption types (type S)
+Pa-234,5.800000e-10,,most restrictive of 2 absorption types (type S)
+Pb-195m,3.000000e-11,,type F
+Pb-198,8.700000e-11,,type F
+Pb-199,4.800000e-11,,type F
+Pb-200,2.600000e-10,,type F
+Pb-201,1.200000e-10,,type F
+Pb-202,1.400000e-08,,type F
+Pb-202m,1.200000e-10,,type F
+Pb-203,1.600000e-10,,type F
+Pb-205,4.100000e-10,,type F
+Pb-209,3.200000e-11,,type F
+Pb-210,1.100000e-06,,type F
+Pb-211,5.600000e-09,,type F
+Pb-212,3.300000e-08,,type F
+Pb-214,4.800000e-09,,type F
+Pd-100,9.700000e-10,,most restrictive of 3 absorption types (type S)
+Pd-101,1.000000e-10,,most restrictive of 3 absorption types (type S)
+Pd-103,3.000000e-10,,most restrictive of 3 absorption types (type M)
+Pd-107,2.900000e-10,,most restrictive of 3 absorption types (type S)
+Pd-109,5.000000e-10,,most restrictive of 3 absorption types (type S)
+Pm-141,2.500000e-11,,most restrictive of 2 absorption types (type S)
+Pm-143,9.600000e-10,,most restrictive of 2 absorption types (type M)
+Pm-144,5.400000e-09,,most restrictive of 2 absorption types (type M)
+Pm-145,2.400000e-09,,most restrictive of 2 absorption types (type M)
+Pm-146,1.300000e-08,,most restrictive of 2 absorption types (type M)
+Pm-147,3.500000e-09,,most restrictive of 2 absorption types (type M)
+Pm-148,2.200000e-09,,most restrictive of 2 absorption types (type S)
+Pm-148m,4.300000e-09,,most restrictive of 2 absorption types (type S)
+Pm-149,8.200000e-10,,most restrictive of 2 absorption types (type S)
+Pm-150,2.100000e-10,,most restrictive of 2 absorption types (type S)
+Pm-151,6.400000e-10,,most restrictive of 2 absorption types (type S)
+Po-203,6.100000e-11,,most restrictive of 2 absorption types (type M)
+Po-205,8.900000e-11,,most restrictive of 2 absorption types (type M)
+Po-207,1.500000e-10,,most restrictive of 2 absorption types (type M)
+Po-210,2.200000e-06,,most restrictive of 2 absorption types (type M)
+Pr-136,2.500000e-11,,most restrictive of 2 absorption types (type S)
+Pr-137,3.500000e-11,,most restrictive of 2 absorption types (type S)
+Pr-138m,1.300000e-10,,most restrictive of 2 absorption types (type S)
+Pr-139,3.000000e-11,,most restrictive of 2 absorption types (type S)
+Pr-142,7.400000e-10,,most restrictive of 2 absorption types (type S)
+Pr-142m,9.400000e-12,,most restrictive of 2 absorption types (type S)
+Pr-143,2.200000e-09,,most restrictive of 2 absorption types (type S)
+Pr-144,3.000000e-11,,most restrictive of 2 absorption types (type S)
+Pr-145,2.600000e-10,,most restrictive of 2 absorption types (type S)
+Pr-147,3.000000e-11,,most restrictive of 2 absorption types (type S)
+Pt-186,6.600000e-11,,type F
+Pt-188,6.300000e-10,,type F
+Pt-189,7.300000e-11,,type F
+Pt-191,1.900000e-10,,type F
+Pt-193,2.700000e-11,,type F
+Pt-193m,2.100000e-10,,type F
+Pt-195m,3.100000e-10,,type F
+Pt-197,1.600000e-10,,type F
+Pt-197m,4.300000e-11,,type F
+Pt-199,2.200000e-11,,type F
+Pt-200,4.000000e-10,,type F
+Pu-234,1.800000e-08,,most restrictive of 2 absorption types (type S)
+Pu-235,2.600000e-12,,most restrictive of 2 absorption types (type S)
+Pu-236,1.300000e-05,,most restrictive of 2 absorption types (type M)
+Pu-237,3.000000e-10,,most restrictive of 2 absorption types (type S)
+Pu-238,3.000000e-05,,most restrictive of 2 absorption types (type M)
+Pu-239,3.200000e-05,,most restrictive of 2 absorption types (type M)
+Pu-240,3.200000e-05,,most restrictive of 2 absorption types (type M)
+Pu-241,5.800000e-07,,most restrictive of 2 absorption types (type M)
+Pu-242,3.100000e-05,,most restrictive of 2 absorption types (type M)
+Pu-243,1.100000e-10,,most restrictive of 2 absorption types (type S)
+Pu-244,3.000000e-05,,most restrictive of 2 absorption types (type M)
+Pu-245,6.500000e-10,,most restrictive of 2 absorption types (type S)
+Pu-246,7.000000e-09,,most restrictive of 2 absorption types (type S)
+Ra-223,5.700000e-06,,type M
+Ra-224,2.400000e-06,,type M
+Ra-225,4.800000e-06,,type M
+Ra-226,2.200000e-06,,type M
+Ra-227,2.100000e-10,,type M
+Ra-228,1.700000e-06,,type M
+Rb-79,3.000000e-11,,type F
+Rb-81,6.800000e-11,,type F
+Rb-81m,1.300000e-11,,type F
+Rb-82m,2.200000e-10,,type F
+Rb-83,1.000000e-09,,type F
+Rb-84,1.500000e-09,,type F
+Rb-86,1.300000e-09,,type F
+Rb-87,7.600000e-10,,type F
+Rb-88,2.800000e-11,,type F
+Rb-89,2.500000e-11,,type F
+Re-177,2.200000e-11,,most restrictive of 2 absorption types (type M)
+Re-178,2.400000e-11,,most restrictive of 2 absorption types (type M)
+Re-181,3.700000e-10,,most restrictive of 2 absorption types (type M)
+Re-182,1.700000e-09,,most restrictive of 2 absorption types (type M)
+Re-182m,3.000000e-10,,most restrictive of 2 absorption types (type M)
+Re-184,1.800000e-09,,most restrictive of 2 absorption types (type M)
+Re-184m,4.800000e-09,,most restrictive of 2 absorption types (type M)
+Re-186,1.200000e-09,,most restrictive of 2 absorption types (type M)
+Re-186m,7.900000e-09,,most restrictive of 2 absorption types (type M)
+Re-187,4.600000e-12,,most restrictive of 2 absorption types (type M)
+Re-188,7.400000e-10,,most restrictive of 2 absorption types (type M)
+Re-188m,2.000000e-11,,most restrictive of 2 absorption types (type M)
+Re-189,6.000000e-10,,most restrictive of 2 absorption types (type M)
+Rh-99,8.900000e-10,,most restrictive of 3 absorption types (type S)
+Rh-99m,7.300000e-11,,most restrictive of 3 absorption types (type S)
+Rh-100,6.300000e-10,,most restrictive of 3 absorption types (type S)
+Rh-101,3.100000e-09,,most restrictive of 3 absorption types (type S)
+Rh-101m,2.700000e-10,,most restrictive of 3 absorption types (type S)
+Rh-102,4.200000e-09,,most restrictive of 3 absorption types (type S)
+Rh-102m,9.000000e-09,,most restrictive of 3 absorption types (type S)
+Rh-103m,2.500000e-12,,most restrictive of 3 absorption types (type S)
+Rh-105,4.400000e-10,,most restrictive of 3 absorption types (type S)
+Rh-106m,1.900000e-10,,most restrictive of 3 absorption types (type S)
+Rh-107,2.800000e-11,,most restrictive of 3 absorption types (type S)
+Ru-94,7.400000e-11,,most restrictive of 3 absorption types (type S)
+Ru-97,1.600000e-10,,most restrictive of 3 absorption types (type S)
+Ru-103,2.200000e-09,,most restrictive of 3 absorption types (type S)
+Ru-105,2.500000e-10,,most restrictive of 3 absorption types (type S)
+Ru-106,3.500000e-08,,most restrictive of 3 absorption types (type S)
+S-35,1.100000e-09,,most restrictive of 2 absorption types (type M)
+Sb-115,2.300000e-11,,most restrictive of 2 absorption types (type M)
+Sb-116,2.300000e-11,,most restrictive of 2 absorption types (type M)
+Sb-116m,8.500000e-11,,most restrictive of 2 absorption types (type M)
+Sb-117,2.700000e-11,,most restrictive of 2 absorption types (type M)
+Sb-118m,2.300000e-10,,most restrictive of 2 absorption types (type M)
+Sb-119,5.900000e-11,,most restrictive of 2 absorption types (type M)
+Sb-120,1.200000e-11,,most restrictive of 2 absorption types (type M)
+Sb-120m,1.300000e-09,,most restrictive of 2 absorption types (type M)
+Sb-122,1.200000e-09,,most restrictive of 2 absorption types (type M)
+Sb-124,4.700000e-09,,most restrictive of 3 absorption types (type M)
+Sb-125,3.300000e-09,,most restrictive of 2 absorption types (type M)
+Sb-126,3.200000e-09,,most restrictive of 2 absorption types (type M)
+Sb-126m,3.300000e-11,,most restrictive of 2 absorption types (type M)
+Sb-127,1.700000e-09,,most restrictive of 2 absorption types (type M)
+Sb-128,6.700000e-10,,most restrictive of 2 absorption types (type M)
+Sb-128m,2.600000e-11,,most restrictive of 2 absorption types (type M)
+Sb-129,3.500000e-10,,most restrictive of 2 absorption types (type M)
+Sb-130,9.100000e-11,,most restrictive of 2 absorption types (type M)
+Sb-131,8.300000e-11,,most restrictive of 2 absorption types (type M)
+Sc-43,1.800000e-10,,type S
+Sc-44,3.000000e-10,,type S
+Sc-44m,2.000000e-09,,type S
+Sc-46,4.800000e-09,,type S
+Sc-47,7.300000e-10,,type S
+Sc-48,1.600000e-09,,type S
+Sc-49,6.100000e-11,,type S
+Se-70,1.200000e-10,,most restrictive of 2 absorption types (type M)
+Se-73,2.400000e-10,,most restrictive of 2 absorption types (type M)
+Se-73m,2.700000e-11,,most restrictive of 2 absorption types (type M)
+Se-75,1.700000e-09,,most restrictive of 2 absorption types (type M)
+Se-79,3.100000e-09,,most restrictive of 2 absorption types (type M)
+Se-81,2.400000e-11,,most restrictive of 2 absorption types (type M)
+Se-81m,6.800000e-11,,most restrictive of 2 absorption types (type M)
+Se-83,5.300000e-11,,most restrictive of 2 absorption types (type M)
+Si-31,1.100000e-10,,most restrictive of 3 absorption types (type S)
+Si-32,5.500000e-08,,most restrictive of 3 absorption types (type S)
+Sm-141,2.700000e-11,,type M
+Sm-141m,5.600000e-11,,type M
+Sm-142,1.100000e-10,,type M
+Sm-145,1.100000e-09,,type M
+Sm-146,6.700000e-06,,type M
+Sm-147,6.100000e-06,,type M
+Sm-151,2.600000e-09,,type M
+Sm-153,6.800000e-10,,type M
+Sm-155,2.800000e-11,,type M
+Sm-156,2.800000e-10,,type M
+Sn-110,2.600000e-10,,most restrictive of 2 absorption types (type M)
+Sn-111,2.200000e-11,,most restrictive of 2 absorption types (type M)
+Sn-113,1.900000e-09,,most restrictive of 2 absorption types (type M)
+Sn-117m,2.200000e-09,,most restrictive of 2 absorption types (type M)
+Sn-119m,1.500000e-09,,most restrictive of 2 absorption types (type M)
+Sn-121,2.800000e-10,,most restrictive of 2 absorption types (type M)
+Sn-121m,3.300000e-09,,most restrictive of 2 absorption types (type M)
+Sn-123,5.600000e-09,,most restrictive of 2 absorption types (type M)
+Sn-123m,4.400000e-11,,most restrictive of 2 absorption types (type M)
+Sn-125,2.800000e-09,,most restrictive of 2 absorption types (type M)
+Sn-126,1.800000e-08,,most restrictive of 2 absorption types (type M)
+Sn-127,2.000000e-10,,most restrictive of 2 absorption types (type M)
+Sn-128,1.500000e-10,,most restrictive of 2 absorption types (type M)
+Sr-80,2.100000e-10,,most restrictive of 2 absorption types (type S)
+Sr-81,6.100000e-11,,most restrictive of 2 absorption types (type S)
+Sr-82,7.700000e-09,,most restrictive of 2 absorption types (type S)
+Sr-83,4.900000e-10,,most restrictive of 2 absorption types (type S)
+Sr-85,6.400000e-10,,most restrictive of 2 absorption types (type S)
+Sr-85m,7.400000e-12,,most restrictive of 2 absorption types (type S)
+Sr-87m,3.500000e-11,,most restrictive of 2 absorption types (type S)
+Sr-89,5.600000e-09,,most restrictive of 2 absorption types (type S)
+Sr-90,7.700000e-08,,most restrictive of 2 absorption types (type S)
+Sr-91,5.700000e-10,,most restrictive of 2 absorption types (type S)
+Sr-92,3.400000e-10,,most restrictive of 2 absorption types (type S)
+Ta-172,5.700000e-11,,most restrictive of 2 absorption types (type S)
+Ta-173,1.600000e-10,,most restrictive of 2 absorption types (type S)
+Ta-174,6.600000e-11,,most restrictive of 2 absorption types (type S)
+Ta-175,2.000000e-10,,most restrictive of 2 absorption types (type S)
+Ta-176,3.300000e-10,,most restrictive of 2 absorption types (type S)
+Ta-177,1.300000e-10,,most restrictive of 2 absorption types (type S)
+Ta-178m,1.100000e-10,,most restrictive of 2 absorption types (type S)
+Ta-179,2.900000e-10,,most restrictive of 2 absorption types (type S)
+Ta-180,6.200000e-11,,most restrictive of 2 absorption types (type S)
+Ta-182,7.400000e-09,,most restrictive of 2 absorption types (type S)
+Ta-182m,3.600000e-11,,most restrictive of 2 absorption types (type S)
+Ta-183,2.000000e-09,,most restrictive of 2 absorption types (type S)
+Ta-184,6.300000e-10,,most restrictive of 2 absorption types (type S)
+Ta-185,7.200000e-11,,most restrictive of 2 absorption types (type S)
+Ta-186,3.100000e-11,,most restrictive of 2 absorption types (type S)
+Tb-147,1.200000e-10,,type M
+Tb-149,3.100000e-09,,type M
+Tb-150,1.800000e-10,,type M
+Tb-151,3.300000e-10,,type M
+Tb-153,2.400000e-10,,type M
+Tb-154,6.000000e-10,,type M
+Tb-155,2.500000e-10,,type M
+Tb-156,1.400000e-09,,type M
+Tb-156m,2.300000e-10,,type M
+Tb-157,7.900000e-10,,type M
+Tb-158,3.000000e-08,,type M
+Tb-160,5.400000e-09,,type M
+Tb-161,1.200000e-09,,type M
+Tc-93,6.500000e-11,,most restrictive of 2 absorption types (type M)
+Tc-93m,3.100000e-11,,most restrictive of 2 absorption types (type M)
+Tc-94,2.200000e-10,,most restrictive of 2 absorption types (type M)
+Tc-94m,8.000000e-11,,most restrictive of 2 absorption types (type M)
+Tc-95,1.800000e-10,,most restrictive of 2 absorption types (type M)
+Tc-95m,8.600000e-10,,most restrictive of 2 absorption types (type M)
+Tc-96,1.000000e-09,,most restrictive of 2 absorption types (type M)
+Tc-96m,1.100000e-11,,most restrictive of 2 absorption types (type M)
+Tc-97,1.600000e-10,,most restrictive of 2 absorption types (type M)
+Tc-97m,2.700000e-09,,most restrictive of 2 absorption types (type M)
+Tc-98,6.100000e-09,,most restrictive of 2 absorption types (type M)
+Tc-99,3.200000e-09,,most restrictive of 2 absorption types (type M)
+Tc-99m,2.900000e-11,,most restrictive of 2 absorption types (type M)
+Tc-101,2.100000e-11,,most restrictive of 2 absorption types (type M)
+Tc-104,4.800000e-11,,most restrictive of 2 absorption types (type M)
+Te-116,1.700000e-10,,most restrictive of 2 absorption types (type M)
+Te-121,4.400000e-10,,most restrictive of 2 absorption types (type M)
+Te-121m,3.600000e-09,,most restrictive of 2 absorption types (type M)
+Te-123,5.000000e-09,,most restrictive of 2 absorption types (type F)
+Te-123m,3.400000e-09,,most restrictive of 2 absorption types (type M)
+Te-125m,2.900000e-09,,most restrictive of 2 absorption types (type M)
+Te-127,1.800000e-10,,most restrictive of 2 absorption types (type M)
+Te-127m,6.200000e-09,,most restrictive of 2 absorption types (type M)
+Te-129,5.700000e-11,,most restrictive of 2 absorption types (type M)
+Te-129m,5.400000e-09,,most restrictive of 2 absorption types (type M)
+Te-131,6.100000e-11,,most restrictive of 2 absorption types (type M)
+Te-131m,1.600000e-09,,most restrictive of 2 absorption types (type M)
+Te-132,3.000000e-09,,most restrictive of 2 absorption types (type M)
+Te-133,4.400000e-11,,most restrictive of 2 absorption types (type M)
+Te-133m,1.900000e-10,,most restrictive of 2 absorption types (type M)
+Te-134,1.100000e-10,,most restrictive of 2 absorption types (type M)
+Th-226,7.800000e-08,,most restrictive of 2 absorption types (type S)
+Th-227,7.600000e-06,,most restrictive of 2 absorption types (type S)
+Th-228,2.500000e-05,,most restrictive of 2 absorption types (type S)
+Th-229,6.900000e-05,,most restrictive of 2 absorption types (type M)
+Th-230,2.800000e-05,,most restrictive of 2 absorption types (type M)
+Th-231,4.000000e-10,,most restrictive of 2 absorption types (type S)
+Th-232,2.900000e-05,,most restrictive of 2 absorption types (type M)
+Th-234,5.800000e-09,,most restrictive of 2 absorption types (type S)
+Ti-44,7.200000e-08,,most restrictive of 3 absorption types (type F)
+Ti-45,1.500000e-10,,most restrictive of 3 absorption types (type S)
+Tl-194,8.900000e-12,,type F
+Tl-194m,3.600000e-11,,type F
+Tl-195,3.000000e-11,,type F
+Tl-197,2.700000e-11,,type F
+Tl-198,1.200000e-10,,type F
+Tl-198m,7.300000e-11,,type F
+Tl-199,3.700000e-11,,type F
+Tl-200,2.500000e-10,,type F
+Tl-201,7.600000e-11,,type F
+Tl-202,3.100000e-10,,type F
+Tl-204,6.200000e-10,,type F
+Tm-162,2.700000e-11,,type M
+Tm-166,2.800000e-10,,type M
+Tm-167,1.000000e-09,,type M
+Tm-170,5.200000e-09,,type M
+Tm-171,9.100000e-10,,type M
+Tm-172,1.400000e-09,,type M
+Tm-173,2.600000e-10,,type M
+Tm-175,3.100000e-11,,type M
+U-230,1.200000e-05,,most restrictive of 3 absorption types (type S)
+U-231,4.900000e-10,,most restrictive of 3 absorption types (type S)
+U-232,2.600000e-05,,most restrictive of 3 absorption types (type S)
+U-233,6.900000e-06,,most restrictive of 3 absorption types (type S)
+U-234,6.800000e-06,,most restrictive of 3 absorption types (type S)
+U-235,6.100000e-06,,most restrictive of 3 absorption types (type S)
+U-236,6.300000e-06,,most restrictive of 3 absorption types (type S)
+U-237,1.700000e-09,,most restrictive of 3 absorption types (type S)
+U-238,5.700000e-06,,most restrictive of 3 absorption types (type S)
+U-239,3.500000e-11,,most restrictive of 3 absorption types (type S)
+U-240,8.400000e-10,,most restrictive of 3 absorption types (type S)
+V-47,5.000000e-11,,most restrictive of 2 absorption types (type M)
+V-48,2.700000e-09,,most restrictive of 2 absorption types (type M)
+V-49,2.600000e-11,,most restrictive of 2 absorption types (type F)
+W-176,7.600000e-11,,type F
+W-177,4.600000e-11,,type F
+W-178,1.200000e-10,,type F
+W-179,1.800000e-12,,type F
+W-181,4.300000e-11,,type F
+W-185,2.200000e-10,,type F
+W-187,3.300000e-10,,type F
+W-188,8.400000e-10,,type F
+Y-86,8.100000e-10,,most restrictive of 2 absorption types (type S)
+Y-86m,4.900000e-11,,most restrictive of 2 absorption types (type S)
+Y-87,5.300000e-10,,most restrictive of 2 absorption types (type S)
+Y-88,3.300000e-09,,most restrictive of 2 absorption types (type M)
+Y-90,1.700000e-09,,most restrictive of 2 absorption types (type S)
+Y-90m,1.300000e-10,,most restrictive of 2 absorption types (type S)
+Y-91,6.100000e-09,,most restrictive of 2 absorption types (type S)
+Y-91m,1.500000e-11,,most restrictive of 2 absorption types (type S)
+Y-92,2.800000e-10,,most restrictive of 2 absorption types (type S)
+Y-93,6.000000e-10,,most restrictive of 2 absorption types (type S)
+Y-94,4.600000e-11,,most restrictive of 2 absorption types (type S)
+Y-95,2.600000e-11,,most restrictive of 2 absorption types (type S)
+Yb-162,2.300000e-11,,most restrictive of 2 absorption types (type S)
+Yb-166,9.500000e-10,,most restrictive of 2 absorption types (type S)
+Yb-167,9.500000e-12,,most restrictive of 2 absorption types (type S)
+Yb-169,2.400000e-09,,most restrictive of 2 absorption types (type S)
+Yb-175,7.000000e-10,,most restrictive of 2 absorption types (type S)
+Yb-177,9.400000e-11,,most restrictive of 2 absorption types (type S)
+Yb-178,1.100000e-10,,most restrictive of 2 absorption types (type S)
+Zn-62,6.600000e-10,,type S
+Zn-63,6.100000e-11,,type S
+Zn-65,2.800000e-09,,type S
+Zn-69,4.300000e-11,,type S
+Zn-69m,3.300000e-10,,type S
+Zn-71m,2.400000e-10,,type S
+Zn-72,1.500000e-09,,type S
+Zr-86,7.000000e-10,,most restrictive of 3 absorption types (type S)
+Zr-88,4.100000e-09,,most restrictive of 3 absorption types (type F)
+Zr-89,7.500000e-10,,most restrictive of 3 absorption types (type S)
+Zr-93,2.900000e-08,,most restrictive of 3 absorption types (type F)
+Zr-95,4.200000e-09,,most restrictive of 3 absorption types (type S)
+Zr-97,1.400000e-09,,most restrictive of 3 absorption types (type S)
