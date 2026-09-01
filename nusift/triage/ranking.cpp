@@ -26,6 +26,10 @@ Ranking rank(const ResponseTable& table, int timeIndex, const RankRequest& reque
   ranking.aggregate = table.aggregate;
   ranking.domain = table.domain;
   ranking.unit = table.unit;
+  ranking.unitLabel = table.unitLabel;
+  if (!table.packCoverage.empty()) {
+    ranking.packCoverage = table.packCoverage[static_cast<std::size_t>(timeIndex)];
+  }
   ranking.time = table.times[static_cast<std::size_t>(timeIndex)];
   if (!table.timeEnds.empty()) {
     ranking.timeEnd = table.timeEnds[static_cast<std::size_t>(timeIndex)];

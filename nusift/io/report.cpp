@@ -149,11 +149,35 @@ std::string whenOf(const Ranking& ranking) {
   return formatDuration(ranking.time);
 }
 
+// The unit as it should be printed: a pack's own spelling when it has one, and the enum's name
+// otherwise. Written once because a report that spelled the unit differently in the header and
+// in the column would be describing two quantities.
+std::string unitOf(const Ranking& ranking) {
+  return ranking.unitLabel.empty() ? std::string(unitName(ranking.unit)) : ranking.unitLabel;
+}
+
+// The same question asked of a spec rather than of a ranking, for the writers that carry
+// criteria instead of tables. Unit::PackDefined has no spelling of its own, so printing the
+// enum's name here would put "pack-defined" in a column beside a real number.
+std::string unitOf(const InterventionStudy& study) {
+  return study.unitLabel.empty() ? std::string(unitName(study.unit)) : study.unitLabel;
+}
+
+std::string unitOf(const ResponseSpec& spec) {
+  if (spec.metric == Metric::Pack && spec.pack != nullptr && spec.pack->pack != nullptr) {
+    return spec.pack->pack->provenance().unit;
+  }
+  return std::string(unitName(spec.unit));
+}
+
 void writeTextHeader(std::ostream& out, const Ranking& ranking, const ReportContext& context) {
   out << "NuSIFT " << metricName(ranking.metric) << " ranking by "
       << aggregateName(ranking.aggregate) << '\n';
   out << "  t = " << whenOf(ranking) << "    total = " << sci(ranking.total) << ' '
-      << unitName(ranking.unit) << '\n';
+      << unitOf(ranking) << '\n';
+  if (!context.pack.empty()) {
+    out << "  pack:  " << context.pack << '\n';
+  }
   if (!context.geometry.empty()) {
     out << "  model: " << context.geometry << '\n';
   }
@@ -197,7 +221,7 @@ void writeTextRows(std::ostream& out, const Ranking& ranking) {
 
   out << std::right << std::setw(rankWidth) << "#" << "  " << std::left
       << std::setw(static_cast<int>(labelWidth)) << kLabelHeading << std::right << std::setw(13)
-      << unitName(ranking.unit) << std::setw(9) << "frac" << std::setw(9) << "cum" << '\n';
+      << unitOf(ranking) << std::setw(9) << "frac" << std::setw(9) << "cum" << '\n';
 
   bool separated = false;
   for (const Contributor& c : ranking.contributors) {
@@ -291,6 +315,24 @@ void writeUnmodeledEnergyNote(std::ostream& out, Metric metric, double unmodeled
   }
 }
 
+// What share of the inventory the pack could speak for. A sum of fractions over 97% of the
+// activity is a screening index; the same number over 23% of it is arithmetic on whichever
+// nuclides happened to be listed, and the two are indistinguishable without this line.
+//
+// Stated whenever it is not complete, and stated as a shortfall rather than as a coverage
+// figure alone: "covers 23.4%" invites being read as a quality score, while naming what is
+// missing says what the number is short by.
+void writePackCoverageNote(std::ostream& out, const Ranking& ranking) {
+  if (ranking.metric != Metric::Pack || ranking.packCoverage >= 0.9995) {
+    return;
+  }
+  out << "  ! this pack carries a coefficient for " << percent(ranking.packCoverage)
+      << " of the inventory, measured in\n"
+      << "    the quantity its coefficients multiply. The rest is in nuclides it does not\n"
+      << "    list, so the total above is a lower bound and the ranking is over what the\n"
+      << "    pack covers rather than over what is present\n";
+}
+
 void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportContext& context) {
   // The honesty line. Without it a top-10 worth 40% and one worth 99% look identical.
   if (ranking.omittedCount > 0) {
@@ -322,6 +364,8 @@ void writeTextFooter(std::ostream& out, const Ranking& ranking, const ReportCont
                            context.unmodeledContinuum);
 
   writeThickAirPathNote(out, ranking.metric, ranking.meanOpticalDepth, ranking.buildup);
+
+  writePackCoverageNote(out, ranking);
 }
 
 // The best place a contributor holds anywhere on the grid, or 0 if it never holds one at all.
@@ -479,7 +523,7 @@ void writeCsvRows(std::ostream& out, const Ranking& ranking, bool withHeader) {
     // placed from one that was fetched from below the cut -- which is the difference between a
     // top-N and a top-N plus an aside.
     out << ',' << c.rank << ',' << csvField(c.label) << ',' << c.id.key << ','
-        << shortestRoundTrip(c.value) << ',' << unitName(ranking.unit) << ','
+        << shortestRoundTrip(c.value) << ',' << csvField(unitOf(ranking)) << ','
         << shortestRoundTrip(c.fraction) << ',' << shortestRoundTrip(c.cumulativeFraction) << ','
         << c.flags << ',' << (c.pinned ? 1 : 0) << '\n';
   }
@@ -491,7 +535,7 @@ void writeJsonRanking(std::ostream& out, const Ranking& ranking, const ReportCon
   out << pad << "{\n";
   out << pad << "  \"metric\": \"" << metricName(ranking.metric) << "\",\n";
   out << pad << "  \"aggregate\": \"" << aggregateName(ranking.aggregate) << "\",\n";
-  out << pad << "  \"unit\": \"" << unitName(ranking.unit) << "\",\n";
+  out << pad << "  \"unit\": \"" << escapeJson(unitOf(ranking)) << "\",\n";
   out << pad << "  \"time_s\": " << jsonNumber(ranking.time) << ",\n";
   if (ranking.domain == Domain::Interval) {
     out << pad << "  \"time_end_s\": " << jsonNumber(ranking.timeEnd) << ",\n";
@@ -508,6 +552,14 @@ void writeJsonRanking(std::ostream& out, const Ranking& ranking, const ReportCon
         << ",\n";
     out << pad << "  \"mean_optical_depth\": " << jsonNumber(ranking.meanOpticalDepth) << ",\n";
     out << pad << "  \"buildup\": " << jsonNumber(ranking.buildup) << ",\n";
+  }
+  // The pack's caveat in the same form: a consumer that reads the total without this cannot
+  // tell an index over the whole inventory from one over a quarter of it.
+  if (ranking.metric == Metric::Pack) {
+    out << pad << "  \"pack_coverage\": " << jsonNumber(ranking.packCoverage) << ",\n";
+    if (!context.pack.empty()) {
+      out << pad << "  \"pack\": \"" << escapeJson(context.pack) << "\",\n";
+    }
   }
   if (!context.seedProvenance.empty()) {
     out << pad << "  \"seed\": \"" << escapeJson(context.seedProvenance) << "\",\n";
@@ -735,8 +787,7 @@ void writeAllowableText(std::ostream& out, const std::vector<AllowableScale>& sc
   out << "\n  criteria:\n";
   for (const Criterion& criterion : criteria) {
     out << "    " << std::left << std::setw(static_cast<int>(nameWidth)) << criterion.name
-        << std::right << "  " << sci(criterion.limit) << ' ' << unitName(criterion.spec.unit)
-        << '\n';
+        << std::right << "  " << sci(criterion.limit) << ' ' << unitOf(criterion.spec) << '\n';
   }
 
   out << "\n  " << std::setw(12) << "time" << "  " << std::setw(11) << "scale" << "  " << std::left
@@ -775,9 +826,8 @@ void writeAllowableCsv(std::ostream& out, const std::vector<AllowableScale>& sca
     for (std::size_t q = 0; q < at.criteria.size(); ++q) {
       const CriterionHeadroom& headroom = at.criteria[q];
       out << shortestRoundTrip(at.timeSeconds) << ',' << csvField(headroom.name) << ','
-          << csvField(unitName(criteria[q].spec.unit)) << ','
-          << shortestRoundTrip(headroom.response) << ',' << shortestRoundTrip(headroom.limit)
-          << ',';
+          << csvField(unitOf(criteria[q].spec)) << ',' << shortestRoundTrip(headroom.response)
+          << ',' << shortestRoundTrip(headroom.limit) << ',';
       if (headroom.unbounded) {
         out << ",,";
       } else {
@@ -799,8 +849,9 @@ void writeAllowableJson(std::ostream& out, const std::vector<AllowableScale>& sc
   out << "{\n  \"criteria\": [\n";
   for (std::size_t q = 0; q < criteria.size(); ++q) {
     out << "    {\"name\": \"" << escapeJson(criteria[q].name) << "\", \"unit\": \""
-        << unitName(criteria[q].spec.unit) << "\", \"limit\": " << jsonNumber(criteria[q].limit)
-        << "}" << (q + 1 < criteria.size() ? ",\n" : "\n");
+        << escapeJson(unitOf(criteria[q].spec))
+        << "\", \"limit\": " << jsonNumber(criteria[q].limit) << "}"
+        << (q + 1 < criteria.size() ? ",\n" : "\n");
   }
   out << "  ],\n  \"times\": [\n";
   for (std::size_t k = 0; k < scaled.size(); ++k) {
@@ -858,7 +909,7 @@ void writeInterventionsText(std::ostream& out, const InterventionStudy& study,
   if (!study.seedProvenance.empty()) {
     out << "  seed:  " << study.seedProvenance << '\n';
   }
-  out << "\n  baseline: " << sci(study.baseline) << ' ' << unitName(study.unit)
+  out << "\n  baseline: " << sci(study.baseline) << ' ' << unitOf(study)
       << " with nothing removed\n\n";
 
   std::size_t nameWidth = 12;
@@ -892,14 +943,14 @@ void writeInterventionsCsv(std::ostream& out, const InterventionStudy& study) {
     if (effect.contributors.empty()) {
       out << csvField(effect.name) << ',' << shortestRoundTrip(effect.response) << ','
           << shortestRoundTrip(effect.removed) << ',' << shortestRoundTrip(effect.removedFraction)
-          << ',' << unitName(study.unit) << ",,,,,\n";
+          << ',' << unitOf(study) << ",,,,,\n";
       continue;
     }
     for (const RemovedContributor& contributor : effect.contributors) {
       out << csvField(effect.name) << ',' << shortestRoundTrip(effect.response) << ','
           << shortestRoundTrip(effect.removed) << ',' << shortestRoundTrip(effect.removedFraction)
-          << ',' << unitName(study.unit) << ',' << csvField(contributor.label) << ','
-          << contributor.key << ',' << shortestRoundTrip(contributor.atomsRemoved) << ','
+          << ',' << unitOf(study) << ',' << csvField(contributor.label) << ',' << contributor.key
+          << ',' << shortestRoundTrip(contributor.atomsRemoved) << ','
           << shortestRoundTrip(contributor.value) << ',' << shortestRoundTrip(contributor.fraction)
           << '\n';
     }
@@ -909,7 +960,7 @@ void writeInterventionsCsv(std::ostream& out, const InterventionStudy& study) {
 void writeInterventionsJson(std::ostream& out, const InterventionStudy& study) {
   out << "{\n";
   out << "  \"metric\": \"" << metricName(study.metric) << "\",\n";
-  out << "  \"unit\": \"" << unitName(study.unit) << "\",\n";
+  out << "  \"unit\": \"" << unitOf(study) << "\",\n";
   out << "  \"intervention_time_s\": " << jsonNumber(study.interventionTimeSeconds) << ",\n";
   out << "  \"response_time_s\": " << jsonNumber(study.responseTimeSeconds) << ",\n";
   out << "  \"baseline\": " << jsonNumber(study.baseline) << ",\n";

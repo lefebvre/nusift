@@ -70,6 +70,10 @@ nusift allowable -i inventory.csv --times 1h:300y:log:60 --limit 3.7e13 \
 nusift intervene -i inventory.csv --remove-at 30d --at 30y --remove Cs --remove Sr \
         --metric exposure --units Sv/h
 
+# Rank by a published coefficient table instead -- here the IAEA transport A2 values,
+# so the total IS the sum of fractions and 1.0 is where a Type A package binds
+nusift rank -i inventory.csv --pack data/packs/iaea-ssr6-a2.csv --at 30d
+
 # What does the data store actually cover?
 nusift data info
 
@@ -260,6 +264,8 @@ Implemented:
 - Ranking by nuclide, mass chain, element, or gamma line, with any of them pinnable
 - Point-source gamma exposure and air kerma in R/h or Gy/h, at any distance
 - ICRP 116 effective dose in Sv/h, in any of the six irradiation geometries
+- Coefficient packs: a published per-nuclide table as a metric, with its version, scenario and
+  coverage carried into the answer
 - Staging a data store from ENDF decay and fission-yield tapes
 - Seeding an inventory from fission, by fission count, kilotons, or joules
 - Dominance forecasting: who leads, and when that changes

@@ -50,6 +50,11 @@ struct ReportContext {
   // in a footnote so an understated row is visible rather than merely flagged in a column
   // nobody reads.
   std::vector<std::string> unmodeledContinuum;
+  // Which coefficient pack produced the numbers, at what version and under what scenario. The
+  // version is part of the answer -- A2 values change between editions of SSR-6, and intake
+  // coefficients depend on absorption type -- so a pack answer that did not carry it would be a
+  // number nobody could reproduce. Empty for the built-in metrics.
+  std::string pack;
 };
 
 // Render one ranking.

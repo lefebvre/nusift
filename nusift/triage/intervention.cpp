@@ -224,6 +224,9 @@ InterventionStudy compareInterventions(const NuclearData& data, const Inventory&
   InterventionStudy study;
   study.metric = spec.metric;
   study.unit = spec.unit;
+  if (spec.metric == Metric::Pack && spec.pack != nullptr && spec.pack->pack != nullptr) {
+    study.unitLabel = spec.pack->pack->provenance().unit;
+  }
   study.interventionTimeSeconds = interventionTime;
   study.responseTimeSeconds = responseTime;
   study.baseline = importance.response;

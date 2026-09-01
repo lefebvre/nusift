@@ -31,6 +31,7 @@ constexpr double kUnmodeledContinuumFlag = 0.05;
 // Every unit, in the order the help text lists them. The one place the set is enumerated, so
 // parseUnit and the error message it raises cannot come to disagree about what exists.
 constexpr Unit kAllUnits[] = {
+    Unit::PackDefined,
     Unit::Becquerel,
     Unit::Curie,
     Unit::Decays,
@@ -83,6 +84,10 @@ std::string spellingsFor(Metric metric) {
 // at the very end, so the conversion cannot creep into the physics.
 double unitScale(Unit unit) {
   switch (unit) {
+    // A pack's coefficients are already in the pack's unit. There is nothing to convert to and
+    // nothing this file could convert with.
+    case Unit::PackDefined:
+      return 1.0;
     case Unit::Curie:
       return 1.0 / units::kBqPerCi;
     case Unit::GrayPerHour:
@@ -133,6 +138,11 @@ double domainScale(Metric metric, Domain domain) {
 double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
   const double lambda = data.decayConstant(index);
   switch (spec.metric) {
+    case Metric::Pack:
+      // Already resolved, basis and folds included, over this store's index space. The spec
+      // carries the vector rather than the pack because which coefficient applies to a folded
+      // daughter is a question about the seed, and the seed is not visible from here.
+      return spec.pack->weights[static_cast<std::size_t>(index)];
     case Metric::Activity:
       // Against atoms this is a rate in Bq; against atom-seconds it is a count of decays.
       // Same weight, different domain -- which is why Domain is a separate axis from Metric
@@ -283,6 +293,22 @@ ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> ke
     if ((spec.metric == Metric::Exposure || spec.metric == Metric::Photon) && dataIndex >= 0 &&
         data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag) {
       it->second.flags |= kFlagUnmodeledContinuum;
+    }
+
+    // What the pack has to say about this nuclide. A bucket carries the flag if ANY of its
+    // members does, which is the honest direction for an aggregate: a mass chain half of which
+    // the pack does not cover is a mass chain whose number is incomplete.
+    if (spec.metric == Metric::Pack && dataIndex >= 0) {
+      switch (spec.pack->coverage[static_cast<std::size_t>(dataIndex)]) {
+        case PackCoverage::None:
+          it->second.flags |= kFlagNotInPack;
+          break;
+        case PackCoverage::Folded:
+          it->second.flags |= kFlagFoldedInPack;
+          break;
+        case PackCoverage::Own:
+          break;
+      }
     }
   }
 
@@ -541,6 +567,61 @@ void fillPhotonCaveats(ResponseTable& table, const NuclearData& data,
 
 // --- naming a contributor to pin ---------------------------------------------
 
+// What fraction of the quantity the pack's basis measures is actually carried by the pack, at
+// each time. Measured in the BASIS rather than in the response's own unit, because the response
+// is zero for exactly the nuclides in question: weighting the missing ones by the coefficient
+// they do not have would make coverage 100% by construction.
+std::vector<double> packCoverageByTime(const NuclearData& data, std::span<const std::int64_t> keys,
+                                       const std::vector<std::vector<double>>& atomsByTime,
+                                       const ResponseSpec& spec) {
+  const int nNuc = static_cast<int>(keys.size());
+  const int nT = static_cast<int>(atomsByTime.size());
+
+  // The basis quantity per atom, which is what a coefficient would have multiplied.
+  std::vector<double> perAtom(static_cast<std::size_t>(nNuc), 0.0);
+  std::vector<char> counted(static_cast<std::size_t>(nNuc), 0);
+  for (int i = 0; i < nNuc; ++i) {
+    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+    if (index < 0) {
+      continue;
+    }
+    switch (spec.pack->pack->provenance().basis) {
+      case PackBasis::Activity:
+        perAtom[static_cast<std::size_t>(i)] = data.decayConstant(index);
+        break;
+      case PackBasis::Atoms:
+        perAtom[static_cast<std::size_t>(i)] = 1.0;
+        break;
+      case PackBasis::Mass:
+        perAtom[static_cast<std::size_t>(i)] = data.molarMassGPerMol(index) / units::kAvogadro;
+        break;
+    }
+    // Folded counts as covered: the daughter's contribution is inside a parent's coefficient,
+    // so it is accounted for even though it carries no weight of its own. Reporting it as
+    // missing is how a coverage figure lies about the nuclides that usually dominate.
+    counted[static_cast<std::size_t>(i)] = static_cast<char>(
+        spec.pack->coverage[static_cast<std::size_t>(index)] != PackCoverage::None);
+  }
+
+  std::vector<double> coverage(static_cast<std::size_t>(nT), 0.0);
+  for (int k = 0; k < nT; ++k) {
+    double total = 0.0;
+    double carried = 0.0;
+    for (int i = 0; i < nNuc; ++i) {
+      const double quantity = perAtom[static_cast<std::size_t>(i)] *
+                              atomsByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(i)];
+      total += quantity;
+      if (counted[static_cast<std::size_t>(i)] != 0) {
+        carried += quantity;
+      }
+    }
+    // An empty inventory covers nothing and misses nothing; reporting 0% would read as a
+    // warning about a pack that has not been asked anything yet.
+    coverage[static_cast<std::size_t>(k)] = total > 0.0 ? carried / total : 1.0;
+  }
+  return coverage;
+}
+
 std::string_view trimmed(std::string_view text) {
   const auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
   while (!text.empty() && space(text.front())) {
@@ -642,6 +723,31 @@ std::int64_t pinKey(Aggregate aggregate, std::string_view text) {
 }
 
 void requireUsableSpec(const NuclearData& data, const ResponseSpec& spec, Domain domain) {
+  if (spec.metric == Metric::Pack) {
+    if (spec.pack == nullptr || spec.pack->pack == nullptr) {
+      throw InputError(tagged(kModule, "this metric is a coefficient pack, and no pack was given"));
+    }
+    if (spec.pack->weights.size() != static_cast<std::size_t>(data.size())) {
+      throw InputError(tagged(kModule,
+                              "this pack was resolved against a different data store than the "
+                              "one being solved, so its weights do not line up with the "
+                              "nuclides they would weight"));
+    }
+    // The pack states which domains its quantity is meaningful in, and a rate-like coefficient
+    // against an interval integral is a different quantity rather than the same one summed.
+    const PackDomains domains = spec.pack->pack->provenance().domains;
+    const bool instantOk = domains != PackDomains::IntervalOnly;
+    const bool intervalOk = domains != PackDomains::InstantOnly;
+    if ((domain == Domain::Instant && !instantOk) || (domain == Domain::Interval && !intervalOk)) {
+      throw InputError(tagged(kModule, "pack \"" + spec.pack->pack->provenance().name +
+                                           "\" declares itself " +
+                                           (domains == PackDomains::InstantOnly ? "instantaneous"
+                                                                                : "an "
+                                                                                  "interval "
+                                                                                  "quantity") +
+                                           ", so it cannot answer the other"));
+    }
+  }
   if (!unitSuitsMetric(spec.unit, spec.metric)) {
     throw InputError(tagged(kModule, std::string("unit ") + unitName(spec.unit) +
                                          " does not measure " + metricName(spec.metric)));
@@ -684,6 +790,11 @@ bool isFluenceUnit(Unit unit) {
 
 bool unitSuitsDomain(Unit unit, Domain domain) {
   switch (unit) {
+    // The pack decides, not the unit: `# domain:` in its header says whether its quantity is
+    // instantaneous, integrated or both, and requireUsableSpec() enforces that against the
+    // pack in hand. There is nothing for a unit with no fixed meaning to rule on here.
+    case Unit::PackDefined:
+      return true;
     case Unit::Becquerel:
     case Unit::Curie:
     case Unit::RoentgenPerHour:
@@ -705,6 +816,8 @@ bool unitSuitsDomain(Unit unit, Domain domain) {
 
 bool unitSuitsMetric(Unit unit, Metric metric) {
   switch (unit) {
+    case Unit::PackDefined:
+      return metric == Metric::Pack;
     case Unit::Becquerel:
     case Unit::Curie:
     case Unit::Decays:
@@ -727,6 +840,10 @@ bool unitSuitsMetric(Unit unit, Metric metric) {
 
 const char* unitName(Unit unit) {
   switch (unit) {
+    // A placeholder, and one a report should not print: ResponseTable::unitLabel carries the
+    // spelling the pack declared, and every writer prefers it when it is set.
+    case Unit::PackDefined:
+      return "pack-defined";
     case Unit::Becquerel:
       return "Bq";
     case Unit::Curie:
@@ -770,6 +887,9 @@ bool parseUnit(std::string_view text, Unit& out) {
 }
 
 Unit defaultUnit(Metric metric, Domain domain) {
+  if (metric == Metric::Pack) {
+    return Unit::PackDefined;
+  }
   if (metric == Metric::Exposure) {
     return domain == Domain::Interval ? Unit::Roentgen : Unit::RoentgenPerHour;
   }
@@ -803,6 +923,10 @@ const char* metricName(Metric metric) {
       return "exposure";
     case Metric::Photon:
       return "photon";
+    // Deliberately generic. What this metric IS lives in the pack's own header -- its quantity,
+    // its version, its scenario -- and a report prints those rather than this word.
+    case Metric::Pack:
+      return "pack";
   }
   return "?";
 }
@@ -839,6 +963,15 @@ std::int64_t requirePin(const ResponseTable& table, std::string_view text) {
                                           ", which this table does not carry -- it is ranked by " +
                                           aggregateName(table.aggregate) +
                                           " and nothing in the inventory's chain reaches it"));
+}
+
+ResolvedPack resolvePack(const CoefficientPack& pack, const NuclearData& data,
+                         const Inventory& seed) {
+  ResolvedPack resolved;
+  resolved.pack = &pack;
+  resolved.weights = pack.weights(data, seed);
+  resolved.coverage = pack.covered(data, seed);
+  return resolved;
 }
 
 std::vector<double> responseWeights(const NuclearData& data, const ResponseSpec& spec) {
@@ -932,6 +1065,10 @@ ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,
   table.times = result.times;
   table.geometry = spec.geometry;
   fillPhotonCaveats(table, data, result.nuclideKeys, rawAtoms, weighted, spec);
+  if (spec.metric == Metric::Pack) {
+    table.unitLabel = spec.pack->pack->provenance().unit;
+    table.packCoverage = packCoverageByTime(data, result.nuclideKeys, rawAtoms, spec);
+  }
   return table;
 }
 
@@ -968,6 +1105,13 @@ ResponseTable buildIntervalResponse(const NuclearData& data, std::span<const std
   table.times = {t1};
   table.timeEnds = {t2};
   table.geometry = spec.geometry;
+  if (spec.metric == Metric::Pack) {
+    table.unitLabel = spec.pack->pack->provenance().unit;
+    // Over the integral rather than over an instant: the coverage of an accrued answer is the
+    // coverage of what accrued it.
+    table.packCoverage =
+        packCoverageByTime(data, keys, std::vector<std::vector<double>>{integratedAtoms}, spec);
+  }
   fillPhotonCaveats(table, data, keys, std::vector<std::vector<double>>{integratedAtoms}, weighted,
                     spec);
   return table;

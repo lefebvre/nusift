@@ -28,6 +28,7 @@
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/report.hpp"
 #include "nusift/io/time_spec.hpp"
+#include "nusift/nucdata/coefficient_pack.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
 #include "nusift/seed/seed_fission.hpp"
@@ -62,6 +63,11 @@ struct CommonOptions {
   std::vector<std::string> atTimes;  // repeatable --at
   std::string gridSpec;              // --times
   std::vector<std::string> intervals;
+
+  // A coefficient pack, which becomes the metric when given. Named by path rather than by a
+  // registry name: a pack is a file someone chose, and resolving a name would need a search
+  // order that could quietly pick a different edition than the one intended.
+  std::string packPath;
 
   std::string metric = "activity";
   std::string aggregate = "nuclide";
@@ -122,6 +128,9 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
 
   app->add_option("--metric", options.metric, "activity, exposure, or photon")
       ->check(CLI::IsMember({"activity", "exposure", "photon"}));
+  app->add_option("--pack", options.packPath,
+                  "Rank by a coefficient pack instead: a CSV of per-nuclide coefficients with "
+                  "its quantity, units, basis and version in its header");
   app->add_option("--by", options.aggregate,
                   "Aggregate: nuclide, mass-chain, element, line (line is exposure or photon "
                   "only)")
@@ -172,6 +181,11 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
       ->check(CLI::NonNegativeNumber);
 }
 
+// The metric a command is actually computing. --pack wins over --metric, and says so rather
+// than silently ignoring the other: two ways to name one thing is how a report ends up
+// describing a quantity it did not compute.
+Metric metricFrom(const CommonOptions& options);
+
 Metric metricFrom(const std::string& text) {
   if (text == "exposure") {
     return Metric::Exposure;
@@ -180,6 +194,53 @@ Metric metricFrom(const std::string& text) {
     return Metric::Photon;
   }
   return Metric::Activity;
+}
+
+// Owns a pack and its resolution against the seed for as long as a spec points at them. The
+// spec holds a pointer rather than a copy because the resolved weight vector is the length of
+// the store, and because there is exactly one right answer per (pack, seed) pair -- resolving
+// it twice in one command would be two chances to resolve it differently.
+class PackHolder {
+public:
+  PackHolder(const CommonOptions& options, const NuclearData& data, const Inventory& seed) {
+    if (options.packPath.empty()) {
+      return;
+    }
+    pack_ = CoefficientPack::open(options.packPath);
+    resolved_ = resolvePack(*pack_, data, seed);
+  }
+
+  const ResolvedPack* resolved() const { return resolved_ ? &*resolved_ : nullptr; }
+
+  // What the report prints in its header: the pack, the edition its numbers are from, and the
+  // scenario they were tabulated under. All three, because any of them alone would leave a
+  // number nobody could reproduce.
+  std::string describe() const {
+    if (!pack_) {
+      return {};
+    }
+    const PackProvenance& p = pack_->provenance();
+    std::string text = p.name + " " + p.version + ", " + p.quantity;
+    if (!p.scenario.empty()) {
+      text += " (" + p.scenario + ")";
+    }
+    return text;
+  }
+
+private:
+  std::optional<CoefficientPack> pack_;
+  std::optional<ResolvedPack> resolved_;
+};
+
+Metric metricFrom(const CommonOptions& options) {
+  if (options.packPath.empty()) {
+    return metricFrom(options.metric);
+  }
+  if (options.metric != "activity") {
+    throw InputError("metric: --pack IS the metric, so --metric " + options.metric +
+                     " cannot also apply. Drop one of them");
+  }
+  return Metric::Pack;
 }
 
 exposure::PointSourceGeometry geometryFrom(const CommonOptions& options) {
@@ -290,7 +351,8 @@ std::string describeGeometry(const CommonOptions& options, Metric metric, Unit u
 }
 
 ReportContext contextFor(const NuclearData& data, const std::string& storePath,
-                         const Inventory& inventory, const ResponseTable& table) {
+                         const Inventory& inventory, const ResponseTable& table,
+                         const PackHolder& packs) {
   ReportContext context;
   context.storePath = storePath;
   context.storeLibrary = data.provenance().library;
@@ -322,6 +384,7 @@ ReportContext contextFor(const NuclearData& data, const std::string& storePath,
                         : table.labels[static_cast<std::size_t>(c)]);
   }
   context.unmodeledContinuum.assign(emitters.begin(), emitters.end());
+  context.pack = packs.describe();
   return context;
 }
 
@@ -426,6 +489,7 @@ int runAttribute(const CommonOptions& options, const char* argv0) {
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   if (times.size() != 1) {
@@ -435,13 +499,14 @@ int runAttribute(const CommonOptions& options, const char* argv0) {
   }
 
   ResponseSpec spec;
-  spec.metric = metricFrom(options.metric);
+  spec.metric = metricFrom(options);
   // Passed through rather than forced to Nuclide. attributeToSeed() refuses every other
   // aggregate with a message saying why -- an inventory row names a nuclide, so that is what a
   // share can name -- and pinning it here instead answered `--by element` with a nuclide
   // attribution, which is a different table than the one that was asked for.
   spec.aggregate = aggregateFrom(options.aggregate);
   spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = packs.resolved();
   spec.geometry = geometryFrom(options);
 
   RankRequest request;
@@ -475,14 +540,16 @@ int runRank(const CommonOptions& options, const char* argv0) {
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
 
   ResponseSpec spec;
-  spec.metric = metricFrom(options.metric);
+  spec.metric = metricFrom(options);
   spec.aggregate = aggregateFrom(options.aggregate);
   spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = packs.resolved();
   spec.geometry = geometryFrom(options);
   const ResponseTable table = buildResponse(data, result, spec);
 
@@ -491,7 +558,7 @@ int runRank(const CommonOptions& options, const char* argv0) {
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
   OutputStream out(options.output);
-  ReportContext context = contextFor(data, storePath, inventory, table);
+  ReportContext context = contextFor(data, storePath, inventory, table, packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
   writeRankings(out.get(), rankings, context, format);
   return 0;
@@ -505,11 +572,13 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   ResponseSpec spec;
-  spec.metric = metricFrom(options.metric);
+  spec.metric = metricFrom(options);
   spec.aggregate = aggregateFrom(options.aggregate);
   spec.unit = requireUnit(options.unit, spec.metric, Domain::Interval);
+  spec.pack = packs.resolved();
   spec.geometry = geometryFrom(options);
 
   // A context per interval. Each interval is solved separately over its own index space, so
@@ -529,7 +598,7 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
     // table -- a pin naming something this interval's chain does not reach is refused for that
     // interval rather than silently dropped from one report out of several.
     rankings.push_back(rank(table, 0, rankRequestFrom(options, table)));
-    contexts.push_back(contextFor(data, storePath, inventory, table));
+    contexts.push_back(contextFor(data, storePath, inventory, table, packs));
     contexts.back().geometry = geometry;
   }
 
@@ -556,6 +625,7 @@ int runForecast(const CommonOptions& options, const ForecastOptions& forecast, c
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   if (times.size() < 2) {
@@ -564,9 +634,10 @@ int runForecast(const CommonOptions& options, const ForecastOptions& forecast, c
   const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
 
   ResponseSpec spec;
-  spec.metric = metricFrom(options.metric);
+  spec.metric = metricFrom(options);
   spec.aggregate = aggregateFrom(options.aggregate);
   spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = packs.resolved();
   spec.geometry = geometryFrom(options);
   const ResponseTable table = buildResponse(data, result, spec);
 
@@ -589,7 +660,7 @@ int runForecast(const CommonOptions& options, const ForecastOptions& forecast, c
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
-  ReportContext context = contextFor(data, storePath, inventory, table);
+  ReportContext context = contextFor(data, storePath, inventory, table, packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
   OutputStream out(options.output);
@@ -601,6 +672,7 @@ int runDecay(const CommonOptions& options, const char* argv0) {
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
@@ -930,6 +1002,7 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   if (times.size() < 2) {
@@ -944,9 +1017,10 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   const Domain domain = isTask ? Domain::Interval : Domain::Instant;
 
   ResponseSpec spec;
-  spec.metric = metricFrom(options.metric);
+  spec.metric = metricFrom(options);
   spec.aggregate = aggregateFrom(options.aggregate);
   spec.unit = requireUnit(options.unit, spec.metric, domain);
+  spec.pack = packs.resolved();
   spec.geometry = geometryFrom(options);
 
   const DecayOptions decayOptions = decayOptionsFrom(options);
@@ -1054,7 +1128,7 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
-  ReportContext context = contextFor(data, storePath, inventory, contextTable);
+  ReportContext context = contextFor(data, storePath, inventory, contextTable, packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
   OutputStream out(options.output);
@@ -1074,6 +1148,7 @@ int runAllowable(const CommonOptions& options, const AllowableOptions& allow, co
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
@@ -1083,9 +1158,10 @@ int runAllowable(const CommonOptions& options, const AllowableOptions& allow, co
   // one can change over time -- but expressing that needs a limits file this front end does not
   // have yet, so the library and the Python binding take a list and the CLI takes one.
   Criterion criterion;
-  criterion.spec.metric = metricFrom(options.metric);
+  criterion.spec.metric = metricFrom(options);
   criterion.spec.aggregate = aggregateFrom(options.aggregate);
   criterion.spec.unit = requireUnit(options.unit, criterion.spec.metric, Domain::Instant);
+  criterion.spec.pack = packs.resolved();
   criterion.spec.geometry = geometryFrom(options);
   criterion.limit = allow.limit;
   criterion.name = allow.limitName.empty()
@@ -1099,7 +1175,7 @@ int runAllowable(const CommonOptions& options, const AllowableOptions& allow, co
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
   const ResponseTable table = buildResponse(data, result, criterion.spec);
-  ReportContext context = contextFor(data, storePath, inventory, table);
+  ReportContext context = contextFor(data, storePath, inventory, table, packs);
   context.geometry = describeGeometry(options, criterion.spec.metric, criterion.spec.unit);
 
   OutputStream out(options.output);
@@ -1165,6 +1241,7 @@ int runIntervene(const CommonOptions& options, const IntervenOptions& intervene,
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   if (times.size() != 1) {
@@ -1175,9 +1252,10 @@ int runIntervene(const CommonOptions& options, const IntervenOptions& intervene,
   const double removeAt = parseDuration(intervene.removeAt);
 
   ResponseSpec spec;
-  spec.metric = metricFrom(options.metric);
+  spec.metric = metricFrom(options);
   spec.aggregate = aggregateFrom(options.aggregate);
   spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = packs.resolved();
   spec.geometry = geometryFrom(options);
 
   std::vector<Intervention> interventions;
