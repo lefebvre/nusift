@@ -189,6 +189,67 @@ TEST(CoefficientPack, AFoldIntoAParentThePackLacksDoesNotCover) {
   EXPECT_EQ(orphan.coverageOf(requireNuclideName("Sb-100").key(), other), PackCoverage::None);
 }
 
+// --- concentration ------------------------------------------------------------
+
+std::string concentrationHeader(const char* per = "m3") {
+  std::string header = headerWith();
+  const std::size_t at = header.find("# basis: activity\n");
+  header.replace(at, std::string("# basis: activity\n").size(),
+                 std::string("# basis: concentration\n# per: ") + per + "\n");
+  return header;
+}
+
+// An inventory is atoms; a concentration is atoms over an extent, and nothing in the material
+// says what that extent is. So a concentration pack requires it, and every other basis refuses
+// it -- a number per becquerel does not become a different number when told how much space the
+// becquerels occupy.
+TEST(CoefficientPack, AConcentrationPackNeedsTheExtentAndTheRestRefuseIt) {
+  const CoefficientPack cloud =
+      packFrom(concentrationHeader() + "nuclide,coefficient\nSn-100,2e-14\n");
+  EXPECT_EQ(cloud.provenance().basis, PackBasis::Concentration);
+  EXPECT_EQ(cloud.provenance().per, "m3");
+
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  const Inventory empty;
+  const int index = data.indexOfKey(requireNuclideName("Sn-100").key());
+  ASSERT_GE(index, 0);
+
+  EXPECT_THROW(cloud.weights(data, empty), InputError) << "no extent given";
+  EXPECT_THROW(cloud.weights(data, empty, PackExtent{1.0e6, "m2"}), InputError)
+      << "a volume pack given an area";
+
+  // The extent divides: the same inventory in twice the volume is half the concentration.
+  const double small =
+      cloud.weights(data, empty, PackExtent{1.0e6, "m3"})[static_cast<std::size_t>(index)];
+  const double large =
+      cloud.weights(data, empty, PackExtent{2.0e6, "m3"})[static_cast<std::size_t>(index)];
+  EXPECT_DOUBLE_EQ(small, 2.0e-14 * data.decayConstant(index) / 1.0e6);
+  EXPECT_DOUBLE_EQ(large, small / 2.0);
+
+  const CoefficientPack perBq = packFrom(headerWith() + "nuclide,coefficient\nSn-100,1\n");
+  EXPECT_THROW(perBq.weights(data, empty, PackExtent{1.0e6, "m3"}), InputError);
+}
+
+TEST(CoefficientPack, TheConcentrationDenominatorIsDeclaredAndChecked) {
+  // Deposition per square metre and a cloud per cubic metre are different questions whose
+  // coefficients look alike, so `per` is required and is not free text.
+  EXPECT_THROW(
+      packFrom(headerWith("# basis: concentration\n") + "nuclide,coefficient\nSn-100,1e-14\n"),
+      InputError)
+      << "concentration with no per";
+  EXPECT_THROW(packFrom(concentrationHeader("furlong") + "nuclide,coefficient\nSn-100,1e-14\n"),
+               InputError);
+  EXPECT_THROW(packFrom(headerWith("# per: m3\n") + "nuclide,coefficient\nSn-100,1\n"), InputError)
+      << "per given for an activity-basis pack";
+
+  for (const char* per : {"m2", "m3", "kg"}) {
+    const CoefficientPack pack =
+        packFrom(concentrationHeader(per) + "nuclide,coefficient\nSn-100,1e-14\n");
+    EXPECT_EQ(pack.provenance().per, per);
+  }
+}
+
 // --- the basis ---------------------------------------------------------------
 
 // What the coefficient multiplies is declared rather than inferred, and getting it wrong scales

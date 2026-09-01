@@ -262,11 +262,16 @@ struct ResolvedPack {
   const CoefficientPack* pack = nullptr;
   std::vector<double> weights;         // [data.size()], already carrying the pack's basis
   std::vector<PackCoverage> coverage;  // [data.size()], parallel
+  // Concentration packs only, and part of what the answer means: the extent the inventory was
+  // taken to be spread through. A report states it, because the same inventory in a cloud ten
+  // times the size gives a tenth the dose rate.
+  PackExtent extent;
 };
 
-// Resolve `pack` against `seed` over `data`'s index space.
+// Resolve `pack` against `seed` over `data`'s index space. `extent` is required by a
+// concentration pack and refused by every other.
 ResolvedPack resolvePack(const CoefficientPack& pack, const NuclearData& data,
-                         const Inventory& seed);
+                         const Inventory& seed, const PackExtent& extent = {});
 
 struct ResponseSpec {
   Metric metric = Metric::Activity;

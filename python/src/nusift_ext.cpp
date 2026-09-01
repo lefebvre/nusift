@@ -1017,6 +1017,10 @@ NB_MODULE(_core, m) {
           [](const CoefficientPack& p) { return std::string(packBasisName(p.provenance().basis)); })
       .def_prop_ro("folds_progeny",
                    [](const CoefficientPack& p) { return p.provenance().foldsProgeny; })
+      .def_prop_ro(
+          "per", [](const CoefficientPack& p) { return p.provenance().per; },
+          "Concentration packs only: the denominator its coefficients are per -- m2, "
+          "m3 or kg. Empty for every other basis.")
       .def_prop_ro("size", &CoefficientPack::size)
       .def(
           "covers",
@@ -1063,12 +1067,22 @@ NB_MODULE(_core, m) {
 
   m.def(
       "resolve_pack",
-      [](const CoefficientPack& pack, const NuclearData& data, const Inventory& seed) {
-        return resolvePack(pack, data, seed);
+      [](const CoefficientPack& pack, const NuclearData& data, const Inventory& seed,
+         double extent) {
+        PackExtent spread;
+        if (extent > 0.0) {
+          spread.value = extent;
+          // The unit is the pack's own, so a caller cannot disagree with it about whether the
+          // number is an area or a volume.
+          spread.unit = pack.provenance().per;
+        }
+        return resolvePack(pack, data, seed, spread);
       },
-      "pack"_a, "data"_a, "seed"_a, nb::keep_alive<0, 1>(),
+      "pack"_a, "data"_a, "seed"_a, "extent"_a = 0.0, nb::keep_alive<0, 1>(),
       "Resolve a pack against the inventory it will be used with, which is what decides whether "
-      "a folded daughter takes its parent's coefficient or its own.");
+      "a folded daughter takes its parent's coefficient or its own. `extent` is the volume, "
+      "area or mass the inventory is spread through, required by a concentration pack and "
+      "refused by every other.");
 
   m.def(
       "response",

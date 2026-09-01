@@ -755,6 +755,36 @@ def test_the_intake_packs_carry_the_published_coefficients(data):
 
 @needs_store
 @needs_pack
+def test_a_concentration_pack_needs_the_extent_it_is_spread_through(data):
+    """An inventory is atoms and a concentration is atoms over an extent, so the extent is an
+    input rather than a property of the material -- and it is half of what the answer means."""
+    pack = nusift.load_pack(str(PACKS / "fgr15-air-submersion-adult.csv"))
+    assert pack.basis == "concentration"
+    assert pack.per == "m3"
+    assert pack.unit == "Sv/s"
+    assert pack.folds_progeny is False
+
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e14)
+    res = nusift.decay(data, inv, [0.0, 86400.0])
+
+    with pytest.raises(nusift.InputError):
+        nusift.resolve_pack(pack, data, inv)
+
+    small = nusift.response(data, res, pack=nusift.resolve_pack(pack, data, inv, extent=1.0e6))
+    large = nusift.response(data, res, pack=nusift.resolve_pack(pack, data, inv, extent=2.0e6))
+    # Twice the volume is half the concentration and half the dose rate.
+    assert float(large.totals[1]) == pytest.approx(float(small.totals[1]) / 2.0)
+
+    # Caesium's own coefficient is negligible; the dose comes from the barium the chain grows in,
+    # which is exactly the combination FGR-15 tells its readers to make for themselves.
+    labels = list(small.labels)
+    assert small.rank(at=86400.0, top=1).contributors[0].label == "Ba-137m"
+    assert "Cs-137" in labels
+
+
+@needs_store
+@needs_pack
 def test_intake_and_external_hazard_rank_differently(data):
     """The whole argument for ranking by the metric you care about, a fourth time. Caesium leads
     the ingestion hazard and strontium the inhalation hazard, on one inventory at one instant."""

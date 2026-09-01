@@ -45,10 +45,14 @@ PackBasis basisFrom(const std::string& text, const std::string& where) {
   if (value == "mass") {
     return PackBasis::Mass;
   }
-  throw InputError(tagged(kModule, where + ": basis \"" + text +
-                                       "\" is not one of activity, atoms, mass. It says what "
-                                       "the coefficient multiplies, and guessing it would "
-                                       "scale every answer by a decay constant"));
+  if (value == "concentration") {
+    return PackBasis::Concentration;
+  }
+  throw InputError(
+      tagged(kModule, where + ": basis \"" + text +
+                          "\" is not one of activity, atoms, mass, concentration. It says "
+                          "what the coefficient multiplies, and guessing it would scale "
+                          "every answer by a decay constant"));
 }
 
 PackDomains domainsFrom(const std::string& text, const std::string& where) {
@@ -91,6 +95,8 @@ const char* packBasisName(PackBasis basis) {
       return "atoms";
     case PackBasis::Mass:
       return "mass";
+    case PackBasis::Concentration:
+      return "concentration";
   }
   return "?";
 }
@@ -265,6 +271,27 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
                             "whether a chain that tracks them double-counts"));
   }
 
+  const auto per = fields.find("per");
+  if (pack.provenance_.basis == PackBasis::Concentration) {
+    if (per == fields.end() || per->second.empty()) {
+      throw InputError(tagged(
+          kModule, sourceName + ": a concentration pack has to say `per` what -- m2, m3 or kg. "
+                                "Deposition per square metre and a cloud per cubic metre are "
+                                "different questions with the same-looking coefficients"));
+    }
+    const std::string unit = lowered(per->second);
+    if (unit != "m2" && unit != "m3" && unit != "kg") {
+      throw InputError(tagged(kModule, sourceName + ": `per` is \"" + per->second +
+                                           "\", and only m2, m3 or kg can be used"));
+    }
+    pack.provenance_.per = unit;
+  } else if (per != fields.end()) {
+    throw InputError(tagged(kModule, sourceName +
+                                         ": `per` applies only to a concentration pack, and this "
+                                         "one multiplies " +
+                                         packBasisName(pack.provenance_.basis)));
+  }
+
   const auto scenario = fields.find("scenario");
   if (scenario != fields.end()) {
     pack.provenance_.scenario = scenario->second;
@@ -320,7 +347,31 @@ bool parentIsSeeded(const std::unordered_map<std::int64_t, std::vector<std::int6
 
 }  // namespace
 
-std::vector<double> CoefficientPack::weights(const NuclearData& data, const Inventory& seed) const {
+std::vector<double> CoefficientPack::weights(const NuclearData& data, const Inventory& seed,
+                                             const PackExtent& extent) const {
+  // The extent is required by exactly one basis and meaningless to the rest, so both mistakes
+  // are refused rather than one being quietly ignored.
+  if (provenance_.basis == PackBasis::Concentration) {
+    if (!(extent.value > 0.0)) {
+      throw InputError(
+          tagged(kModule, "pack \"" + provenance_.name +
+                              "\" is per unit concentration, so it needs the " + provenance_.per +
+                              " the inventory is spread through. An inventory is atoms; a "
+                              "concentration is atoms over an extent"));
+    }
+    if (lowered(extent.unit) != provenance_.per) {
+      throw InputError(tagged(kModule, "pack \"" + provenance_.name + "\" is per " +
+                                           provenance_.per + ", and the extent given is in " +
+                                           extent.unit));
+    }
+  } else if (extent.value > 0.0) {
+    throw InputError(
+        tagged(kModule, "pack \"" + provenance_.name + "\" multiplies " +
+                            packBasisName(provenance_.basis) +
+                            ", which does not become a different number when told how much "
+                            "space the material occupies"));
+  }
+
   std::vector<double> weights(static_cast<std::size_t>(data.size()), 0.0);
   for (int i = 0; i < data.size(); ++i) {
     const std::int64_t key = data.zaiAt(i).key();
@@ -340,6 +391,11 @@ std::vector<double> CoefficientPack::weights(const NuclearData& data, const Inve
         break;
       case PackBasis::Atoms:
         weights[static_cast<std::size_t>(i)] = it->second;
+        break;
+      case PackBasis::Concentration:
+        // Per becquerel of concentration: lambda gives the becquerel, and the extent turns them
+        // into becquerel per square metre, cubic metre or kilogram.
+        weights[static_cast<std::size_t>(i)] = it->second * data.decayConstant(i) / extent.value;
         break;
       case PackBasis::Mass: {
         const double molarMass = data.molarMassGPerMol(i);

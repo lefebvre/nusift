@@ -88,6 +88,13 @@ enum class PackBasis {
   Activity,  // coefficient x activity   [per Bq]
   Atoms,     // coefficient x atoms      [per atom]
   Mass,      // coefficient x mass       [per gram]
+  // coefficient x activity CONCENTRATION [per Bq/m2, Bq/m3 or Bq/kg]
+  //
+  // The basis a distributed source needs, and the one an Inventory cannot supply on its own: it
+  // carries atoms, and a concentration is atoms divided by the extent they are spread through.
+  // That extent is a fact about the situation rather than about the material, so the caller
+  // states it at resolution and `per` says which unit it must be in.
+  Concentration,
 };
 
 const char* packBasisName(PackBasis basis);
@@ -117,11 +124,22 @@ struct PackProvenance {
   std::string scenario;  // may be empty; part of the metric's identity when it is not
   std::string source;
   std::string path;  // where it was read from, for a report that has to say
+  // Concentration packs only: the denominator of the concentration, "m2", "m3" or "kg". Ground
+  // deposition is per square metre and a cloud is per cubic metre, and confusing the two is not
+  // a units slip but a different question answered.
+  std::string per;
   PackBasis basis = PackBasis::Activity;
   PackDomains domains = PackDomains::Both;
   // True when coefficients absorb their progeny, in which case foldedInto() answers for the
   // daughters. Reported alongside the version, because it changes what the number means.
   bool foldsProgeny = false;
+};
+
+// The extent an inventory is spread through, for a concentration pack. Zero means none was
+// given, which is what every other basis requires.
+struct PackExtent {
+  double value = 0.0;
+  std::string unit;  // must match the pack's `per`
 };
 
 class CoefficientPack {
@@ -165,7 +183,13 @@ public:
   // parent's row and is weighted zero here, while one seeded alone keeps its own coefficient.
   // An empty inventory weights every row on its own terms, which is what a pack with no folds
   // does in any case.
-  std::vector<double> weights(const NuclearData& data, const Inventory& seed) const;
+  //
+  // `extent` divides, for a concentration pack: the coefficient is per unit concentration, so
+  // the weight is the coefficient over the area, volume or mass the inventory occupies. It is
+  // required for such a pack and refused for every other, because a number per becquerel does
+  // not become a different number when told how much space the becquerels are in.
+  std::vector<double> weights(const NuclearData& data, const Inventory& seed,
+                              const PackExtent& extent = {}) const;
 
   // How each of `data`'s nuclides is accounted for, parallel to weights(). A response uses this
   // to report coverage and to flag the contributors that fall outside the pack.
