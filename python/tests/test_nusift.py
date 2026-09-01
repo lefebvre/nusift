@@ -1203,3 +1203,91 @@ def test_an_intervention_that_cannot_mean_anything_is_refused(data):
                                               nusift.Removal("Cs-137", 0.5)])
             ],
         )
+
+
+# --- the binned source term --------------------------------------------------
+
+
+@needs_store
+def test_binned_spectrum_arrays_are_views_and_edges_bound_the_bins(data, result):
+    _, res = result
+    spectrum = nusift.binned_spectrum(data, res, time_index=0, bins=32)
+
+    assert spectrum.edges_ev.base is not None
+    assert spectrum.emission.base is not None
+    # One more boundary than bin, in every direction the binding is read from. A snippet built
+    # on the other convention is accepted by OpenMC and silently one bin wrong.
+    assert len(spectrum.edges_ev) == len(spectrum.emission) + 1
+    assert np.all(np.diff(spectrum.edges_ev) > 0)
+    assert spectrum.unit == "photons/s"
+    assert spectrum.domain == "instant"
+
+
+@needs_store
+def test_binned_spectrum_conserves_every_photon(data, result):
+    _, res = result
+    # A grid narrow enough that emission falls off both ends, which is the case the identity
+    # exists to make visible.
+    spectrum = nusift.binned_spectrum(data, res, bins=16, min_ev=1.0e5, max_ev=4.0e5)
+    accounted = spectrum.emission.sum() + spectrum.below_range + spectrum.above_range
+    assert accounted == pytest.approx(spectrum.total, rel=1e-12)
+    assert spectrum.above_range > 0.0
+
+
+@needs_store
+def test_the_source_total_is_the_photon_metric_total(data, result):
+    _, res = result
+    spectrum = nusift.binned_spectrum(data, res, time_index=3)
+    table = nusift.response(data, res, metric="photon", units="photons/s")
+    # Two front doors onto one quantity. If these ever diverge, the number that leaves in a
+    # deck is the one nobody re-derives.
+    assert spectrum.total == pytest.approx(table.totals[3], rel=1e-12)
+
+
+@needs_store
+def test_an_interval_source_is_a_count_of_photons(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    window = nusift.integrate(data, inv, "1h", "30d")
+    spectrum = nusift.binned_spectrum(data, window, bins=8)
+
+    assert spectrum.unit == "photons"
+    assert spectrum.domain == "interval"
+    assert spectrum.t1 == nusift.parse_duration("1h")
+    assert spectrum.t2 == nusift.parse_duration("30d")
+
+
+@needs_store
+def test_explicit_edges_win_and_cannot_be_combined_with_a_range(data, result):
+    _, res = result
+    edges = [1.0e4, 1.0e5, 1.0e6, 3.0e6]
+    spectrum = nusift.binned_spectrum(data, res, edges_ev=edges)
+    assert list(spectrum.edges_ev) == edges
+
+    with pytest.raises(nusift.InputError):
+        nusift.binned_spectrum(data, res, edges_ev=edges, min_ev=500.0)
+    with pytest.raises(nusift.InputError):
+        nusift.binned_spectrum(data, res, edges_ev=[1.0e5])
+    with pytest.raises(nusift.InputError):
+        nusift.binned_spectrum(data, res, scale="quadratic")
+
+
+@needs_store
+def test_source_decks_carry_the_caveats_a_transport_code_cannot_infer(data, result):
+    inv, res = result
+    spectrum = nusift.binned_spectrum(data, res, bins=12)
+
+    sdef = nusift.source_deck(data, inv, spectrum, format="mcnp")
+    assert "SDEF PAR=P ERG=D1" in sdef
+    assert "SHAPE, NOT A STRENGTH" in sdef
+    assert sdef.count("\nSI1 H") == 1
+
+    snippet = nusift.source_deck(data, inv, spectrum, format="openmc")
+    assert 'interpolation="histogram"' in snippet
+    assert "strength=" in snippet
+    # The snippet has to be Python, not merely Python-shaped: a deck that does not compile is
+    # found by whoever pastes it, at the worst moment.
+    compile(snippet, "<openmc deck>", "exec")
+
+    with pytest.raises(nusift.InputError):
+        nusift.source_deck(data, inv, spectrum, format="serpent")

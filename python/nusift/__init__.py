@@ -59,6 +59,7 @@ outlive the object they came from. NumPy's own base-object tracking enforces tha
 
 from ._core import (  # noqa: F401
     AllowableScale,
+    BinnedSpectrum,
     CoefficientPack,
     Contributor,
     Criterion,
@@ -89,6 +90,7 @@ from ._core import (  # noqa: F401
     __version__,
     allowable_scale,
     attribute,
+    binned_spectrum,
     compare_interventions,
     decay,
     evaluator,
@@ -104,12 +106,14 @@ from ._core import (  # noqa: F401
     resolve_pack,
     response,
     seed_fission,
+    source_deck,
     task_series,
 )
 from ._data import default_store_path  # noqa: F401
 
 __all__ = [
     "AllowableScale",
+    "BinnedSpectrum",
     "CoefficientPack",
     "Contributor",
     "Criterion",
@@ -140,6 +144,7 @@ __all__ = [
     "__version__",
     "allowable_scale",
     "attribute",
+    "binned_spectrum",
     "compare_interventions",
     "decay",
     "default_store_path",
@@ -156,5 +161,6 @@ __all__ = [
     "resolve_pack",
     "response",
     "seed_fission",
+    "source_deck",
     "task_series",
 ]

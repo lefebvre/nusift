@@ -48,6 +48,11 @@ nusift forecast -i inventory.csv --times 1d:300y:log:70 --metric exposure
 # Which individual photon lines drive the dose?
 nusift spectrum --seed-fission U-235 --yield-kt 20 --at 1h --top 10
 
+# Hand the same photons to a transport code, binned, with the caveats it cannot
+# infer written into the deck: what to multiply the tally by, and what is missing
+nusift source -i inventory.csv --at 30d --bins 100 --format mcnp > source.i
+nusift source -i inventory.csv --interval 0,8h --format openmc > source.py
+
 # When does the total fall below a level? Every answer carries the grid bracket
 # that found it -- an event between two samples is not found, and it says so.
 nusift when -i inventory.csv --times 1h:300y:log:80 --level 5e13
@@ -271,11 +276,11 @@ Implemented:
 - Dominance forecasting: who leads, and when that changes
 - Located events: crossings, turns, level windows, and when a fixed-length task fits a budget
 - Seed attribution: which seeded nuclide a response is riding on, as an exact partition
+- A binned photon emission spectrum, written as an MCNP `SDEF` card or an OpenMC source
 - Python bindings, with zero-copy NumPy views
 
 Planned:
 
-- A binned photon spectrum for detector-response work
 - Seeding an inventory from neutron activation
 - Shielding, and decay heat
 - Wheels for the three platforms

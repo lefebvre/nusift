@@ -31,6 +31,7 @@
 #include "nusift/exposure/dose_coefficients.hpp"
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/number_format.hpp"
+#include "nusift/io/source_report.hpp"
 #include "nusift/io/time_spec.hpp"
 #include "nusift/nucdata/coefficient_pack.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
@@ -43,6 +44,7 @@
 #include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
+#include "nusift/triage/spectrum.hpp"
 #include "nusift/version.hpp"
 
 namespace nb = nanobind;
@@ -213,6 +215,24 @@ struct IntervalResult {
 
 const char* domainName(Domain domain) {
   return domain == Domain::Interval ? "interval" : "instant";
+}
+
+// A binning described the way a keyword call describes one. Energies are eV here rather than
+// the CLI's keV: the library speaks eV, and a binding whose numbers needed a different scale
+// from the API it wraps would be a conversion waiting to be forgotten.
+BinningSpec binningFrom(int bins, const std::string& scale, double minEv, double maxEv,
+                        const nb::object& edges) {
+  BinningSpec binning;
+  binning.count = bins;
+  binning.minEv = minEv;
+  binning.maxEv = maxEv;
+  if (!edges.is_none()) {
+    binning.edgesEv = nb::cast<std::vector<double>>(edges);
+  }
+  if (!parseBinScale(scale, binning.scale)) {
+    throw InputError("spectrum: \"" + scale + "\" is not a bin scale (linear or log)");
+  }
+  return binning;
 }
 
 }  // namespace
@@ -1123,6 +1143,104 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
+
+  // --- the source term -------------------------------------------------------
+  //
+  // The photon metric collapsed onto energy instead of onto nuclides. `response(..., by="line")`
+  // ranks the discrete lines, which is what a person reads; this is what another code reads,
+  // and the difference is not resolution but audience -- see triage/spectrum.hpp.
+  nb::class_<BinnedSpectrum>(m, "BinnedSpectrum",
+                             "Photon emission binned onto an energy grid: a source term.")
+      .def_prop_ro("unit", [](const BinnedSpectrum& s) { return std::string(unitName(s.unit)); })
+      .def_prop_ro("domain", [](const BinnedSpectrum& s) { return domainName(s.domain); })
+      .def_ro("t1", &BinnedSpectrum::timeSeconds, "The instant, or the window's start.")
+      .def_ro("t2", &BinnedSpectrum::timeEndSeconds,
+              "The window's end; equal to t1 for an instantaneous spectrum.")
+      .def_prop_ro(
+          "edges_ev",
+          [](nb::handle self) {
+            const BinnedSpectrum& s = nb::cast<const BinnedSpectrum&>(self);
+            return view1d(s.edgesEv.data(), s.edgesEv.size(), self);
+          },
+          "Bin boundaries in eV, ascending. One longer than `emission`.")
+      .def_prop_ro(
+          "emission",
+          [](nb::handle self) {
+            const BinnedSpectrum& s = nb::cast<const BinnedSpectrum&>(self);
+            return view1d(s.values.data(), s.values.size(), self);
+          },
+          "Emission in each bin, in `unit`. A zero-copy view, not a copy.")
+      .def_ro("total", &BinnedSpectrum::total,
+              "Every evaluated line, binned or not. Equals emission.sum() + below_range + "
+              "above_range, which is the identity that makes a truncated grid visible.")
+      .def_ro("below_range", &BinnedSpectrum::belowRange,
+              "Emission softer than the first edge, and so absent from a deck built on it.")
+      .def_ro("above_range", &BinnedSpectrum::aboveRange, "Emission harder than the last edge.")
+      .def_ro("line_count", &BinnedSpectrum::lineCount)
+      .def_ro("emitter_count", &BinnedSpectrum::emitterCount)
+      .def_ro("unmodeled_energy_fraction", &BinnedSpectrum::unmodeledEnergyFraction,
+              "Share of emitted photon ENERGY in continua NuSIFT does not model. A source "
+              "understated by this much understates whatever is run against it.")
+      .def_ro("unmodeled_continuum", &BinnedSpectrum::unmodeledContinuum,
+              "The emitters carrying that continuum, by name.")
+      .def("__repr__", [](const BinnedSpectrum& s) {
+        return "<BinnedSpectrum " + std::to_string(s.binCount()) + " bins, " +
+               shortestRoundTrip(s.total) + " " + unitName(s.unit) + ">";
+      });
+
+  m.def(
+      "binned_spectrum",
+      [](const NuclearData& data, const DecayResult& result, int time_index, int bins,
+         const std::string& scale, double min_ev, double max_ev, const nb::object& edges_ev) {
+        return binnedSpectrum(data, result, time_index,
+                              binningFrom(bins, scale, min_ev, max_ev, edges_ev));
+      },
+      "data"_a, "result"_a, "time_index"_a = 0, "bins"_a = 100, "scale"_a = "linear",
+      "min_ev"_a = 0.0, "max_ev"_a = 0.0, "edges_ev"_a = nb::none(),
+      "The photon emission spectrum at one time of a solve, in photons/s. An INDEX into the "
+      "solve rather than a time, because a spectrum is built per instant and a grid point is "
+      "what a caller iterating one already holds. A range of zero is taken from the lines "
+      "present, which is the only default that cannot silently drop photons.");
+
+  m.def(
+      "binned_spectrum",
+      [](const NuclearData& data, const IntervalResult& result, int bins, const std::string& scale,
+         double min_ev, double max_ev, const nb::object& edges_ev) {
+        return binnedIntervalSpectrum(data, result.nuclideKeys, result.integratedAtoms, result.t1,
+                                      result.t2,
+                                      binningFrom(bins, scale, min_ev, max_ev, edges_ev));
+      },
+      "data"_a, "result"_a, "bins"_a = 100, "scale"_a = "linear", "min_ev"_a = 0.0,
+      "max_ev"_a = 0.0, "edges_ev"_a = nb::none(),
+      "The same over an interval: a COUNT of photons emitted across the window, integrated "
+      "exactly, which is the source term for a job that runs while the inventory decays.");
+
+  // Renders the deck rather than handing back the pieces, because the pieces are not the
+  // deliverable: the comment cards saying what has to be multiplied by what, and what the
+  // source is missing, are the part a transport code will not supply for itself. A notebook
+  // that assembled its own SDEF from `edges_ev` and `emission` would lose exactly those.
+  m.def(
+      "source_deck",
+      [](const NuclearData& data, const Inventory& inventory, const BinnedSpectrum& spectrum,
+         const std::string& format) {
+        SourceFormat chosen = SourceFormat::McnpSdef;
+        if (!parseSourceFormat(format, chosen)) {
+          throw InputError("source: \"" + format +
+                           "\" is not a format (text, csv, json, mcnp, openmc)");
+        }
+        ReportContext context;
+        context.storeLibrary = data.provenance().library;
+        context.storeCreatedUtc = data.provenance().createdUtc;
+        context.storeNuclideCount = data.stagedCount();
+        context.seedProvenance = inventory.provenance();
+        std::ostringstream out;
+        writeSourceSpectrum(out, spectrum, context, chosen);
+        return out.str();
+      },
+      "data"_a, "inventory"_a, "spectrum"_a, "format"_a = "mcnp",
+      "The spectrum as a transport code's source definition: 'mcnp' for an SDEF card, 'openmc' "
+      "for a Python snippet, or 'text', 'csv', 'json'. Returns the deck as a string, caveats "
+      "included -- they are the half a transport code cannot infer.");
 
   // The other attribution of the same number. `rank` says what is producing the response now;
   // this says which seeded nuclide it came from, and the two totals agree because they are

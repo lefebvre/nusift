@@ -8,6 +8,7 @@
 #include <CLI/CLI.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -16,6 +17,8 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -27,6 +30,7 @@
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/report.hpp"
+#include "nusift/io/source_report.hpp"
 #include "nusift/io/time_spec.hpp"
 #include "nusift/nucdata/coefficient_pack.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
@@ -39,6 +43,7 @@
 #include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
+#include "nusift/triage/spectrum.hpp"
 #include "nusift/version.hpp"
 
 namespace {
@@ -93,7 +98,12 @@ struct CommonOptions {
   int threads = 0;
 };
 
-void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bool wantsIntervals) {
+// Where the inventory comes from, and nothing else. Split out of addCommonOptions because
+// `source` needs exactly this much of it: an inventory has to be named the same way on every
+// command, but a command that computes an emission spectrum has no use for a distance, a
+// metric or a ranking depth, and offering flags it then ignores is how a user comes to believe
+// a number was computed with a geometry it never saw.
+void addInventoryOptions(CLI::App* app, CommonOptions& options) {
   app->add_option("--store", options.storePath, "Nuclear-data store (.h5)");
   app->add_flag("--ignore-unknown", options.ignoreUnknown,
                 "Skip inventory rows naming a nuclide the store does not carry");
@@ -119,6 +129,22 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
       ->check(CLI::PositiveNumber);
   app->add_option("--mev-per-fission", options.seedMeVPerFission,
                   "explosive (180), recoverable (200), or a value in MeV");
+}
+
+// How the solve is run, as opposed to what is asked of it. Shared for the same reason: the
+// cost and accuracy knobs mean the same thing on every command that decays anything.
+void addSolverOptions(CLI::App* app, CommonOptions& options) {
+  app->add_option("--cram-order", options.cramOrder, "CRAM order: 16 for screening, 48 default")
+      ->check(CLI::IsMember({16, 48}));
+  app->add_flag("--no-prune", options.noPrune,
+                "Solve the whole chain instead of the seed's forward closure");
+  app->add_option("--threads", options.threads,
+                  "Worker threads for the per-time solves; 0 uses every core")
+      ->check(CLI::NonNegativeNumber);
+}
+
+void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bool wantsIntervals) {
+  addInventoryOptions(app, options);
 
   if (wantsTimes) {
     app->add_option("--at", options.atTimes, "Cooling time, repeatable (e.g. 30d, 1.5y)");
@@ -180,13 +206,7 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
   app->add_option("-o,--output", options.output, "Write here instead of stdout");
   app->add_option("--format", options.format, "text, csv, or json")
       ->check(CLI::IsMember({"text", "csv", "json"}));
-  app->add_option("--cram-order", options.cramOrder, "CRAM order: 16 for screening, 48 default")
-      ->check(CLI::IsMember({16, 48}));
-  app->add_flag("--no-prune", options.noPrune,
-                "Solve the whole chain instead of the seed's forward closure");
-  app->add_option("--threads", options.threads,
-                  "Worker threads for the per-time solves; 0 uses every core")
-      ->check(CLI::NonNegativeNumber);
+  addSolverOptions(app, options);
 }
 
 // The metric a command is actually computing. --pack wins over --metric, and says so rather
@@ -631,6 +651,151 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
   parseReportFormat(options.format, format);
   OutputStream out(options.output);
   writeRankings(out.get(), rankings, contexts, format);
+  return 0;
+}
+
+// Options for `source`. All of them are about the ENERGY axis, which is the axis that
+// distinguishes this command from `spectrum`: one ranks the lines, the other resolves them onto
+// a grid a transport code can read.
+struct SourceOptions {
+  int bins = 100;
+  std::string scale = "linear";
+  // keV on the way in, because that is the unit a decay photon is spoken in and the one the
+  // line ranking already prints. Each deck converts on the way out to what its own code reads
+  // -- MeV for MCNP, eV for OpenMC -- which is exactly the sort of conversion a user should not
+  // be doing by hand at two in the morning.
+  double minKeV = 0.0;
+  double maxKeV = 0.0;
+  std::string edgesKeV;
+  std::string edgesFile;
+  std::string format = "text";
+};
+
+// Explicit edges, from a comma-separated list or from a file of them. Both are in keV and both
+// end up in the same place; the file exists because a real group structure has two hundred
+// boundaries and does not belong on a command line.
+std::vector<double> edgesFrom(const SourceOptions& source) {
+  std::vector<double> edges;
+  auto push = [&edges](const std::string& text) {
+    if (text.empty()) {
+      return;
+    }
+    try {
+      std::size_t used = 0;
+      const double value = std::stod(text, &used);
+      if (used != text.size()) {
+        throw std::invalid_argument("trailing");
+      }
+      edges.push_back(value * 1000.0);
+    } catch (const std::exception&) {
+      throw InputError("source: \"" + text + "\" is not an energy in keV");
+    }
+  };
+
+  if (!source.edgesKeV.empty()) {
+    std::string field;
+    for (const char c : source.edgesKeV) {
+      if (c == ',') {
+        push(field);
+        field.clear();
+      } else if (!std::isspace(static_cast<unsigned char>(c))) {
+        field += c;
+      }
+    }
+    push(field);
+  }
+  if (!source.edgesFile.empty()) {
+    std::ifstream file(source.edgesFile);
+    if (!file) {
+      throw InputError("source: cannot read edges from \"" + source.edgesFile + "\"");
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+      const std::size_t hash = line.find('#');
+      if (hash != std::string::npos) {
+        line.erase(hash);
+      }
+      std::istringstream fields(line);
+      std::string field;
+      while (fields >> field) {
+        push(field);
+      }
+    }
+  }
+  return edges;
+}
+
+BinningSpec binningFrom(const SourceOptions& source) {
+  BinningSpec binning;
+  binning.count = source.bins;
+  binning.minEv = source.minKeV * 1000.0;
+  binning.maxEv = source.maxKeV * 1000.0;
+  binning.edgesEv = edgesFrom(source);
+  if (!parseBinScale(source.scale, binning.scale)) {
+    throw InputError("source: \"" + source.scale + "\" is not a bin scale (linear or log)");
+  }
+  // The refusal of edges-plus-a-range lives in resolveBinEdges, so this front end and the
+  // binding cannot come to differ about which combination is meaningful.
+  return binning;
+}
+
+// The binned photon emission of an inventory, as a report or as a transport code's source card.
+//
+// Deliberately NOT a mode of `spectrum`. That command ranks discrete lines, and its answer is
+// read by a person deciding what to look at; this one hands a source term to another code,
+// which will use whatever it is given without noticing what is missing from it. The two want
+// different truncation, different formats and different warnings, and the one thing they must
+// not share is the impression that they are the same answer at different resolutions.
+int runSource(const CommonOptions& options, const SourceOptions& source, const char* argv0) {
+  const bool hasInterval = !options.intervals.empty();
+  if (hasInterval && !options.atTimes.empty()) {
+    throw InputError(
+        "time: a source is emitted either AT an instant or OVER an interval, and the two are "
+        "different quantities -- photons per second against a count of photons. Give one");
+  }
+  if (!hasInterval && options.atTimes.size() != 1) {
+    throw InputError("time: source takes exactly one --at, or one --interval T1,T2");
+  }
+  if (options.intervals.size() > 1) {
+    throw InputError("time: source takes one --interval; a deck describes one source");
+  }
+
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+  const BinningSpec binning = binningFrom(source);
+
+  BinnedSpectrum spectrum;
+  if (hasInterval) {
+    const auto [t1, t2] = parseInterval(options.intervals.front());
+    std::vector<std::int64_t> keys;
+    const std::vector<double> integral =
+        intervalIntegral(data, inventory, t1, t2, &keys, decayOptionsFrom(options));
+    spectrum = binnedIntervalSpectrum(data, keys, integral, t1, t2, binning);
+  } else {
+    const std::vector<double> times{parseDuration(options.atTimes.front())};
+    const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
+    spectrum = binnedSpectrum(data, result, 0, binning);
+  }
+
+  SourceFormat format = SourceFormat::Text;
+  if (!parseSourceFormat(source.format, format)) {
+    throw InputError("source: \"" + source.format +
+                     "\" is not a format (text, csv, json, mcnp, openmc)");
+  }
+
+  // Built here rather than through contextFor(), which reads its continuum footnote off a
+  // response table. There is no table: the spectrum carries its own flagged emitters, scanned
+  // over the whole inventory for the same reason and reported the same way.
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.stagedCount();
+  context.seedProvenance = inventory.provenance();
+
+  OutputStream out(options.output);
+  writeSourceSpectrum(out.get(), spectrum, context, format);
   return 0;
 }
 
@@ -1351,6 +1516,38 @@ int main(int argc, char** argv) {
       "spectrum", "Top contributing photon lines (by line; exposure by default)");
   addCommonOptions(spectrumCmd, spectrumOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
 
+  CommonOptions sourceOptions;
+  SourceOptions sourceExtra;
+  CLI::App* sourceCmd = app.add_subcommand(
+      "source", "The binned photon emission spectrum, as a transport code's source definition");
+  addInventoryOptions(sourceCmd, sourceOptions);
+  sourceCmd->add_option("--at", sourceOptions.atTimes, "Cooling time (e.g. 30d, 1.5y)");
+  sourceCmd->add_option("--interval", sourceOptions.intervals,
+                        "Emit over a window T1,T2 instead: a count of photons rather than a "
+                        "rate (e.g. 1h,30d)");
+  sourceCmd->add_option("--bins", sourceExtra.bins, "Number of energy bins (default 100)")
+      ->check(CLI::PositiveNumber);
+  sourceCmd->add_option("--bin-scale", sourceExtra.scale, "Bin spacing: linear or log")
+      ->check(CLI::IsMember({"linear", "lin", "log", "logarithmic"}));
+  sourceCmd
+      ->add_option("--min-kev", sourceExtra.minKeV,
+                   "Lowest energy to bin, in keV; default is the softest line present")
+      ->check(CLI::PositiveNumber);
+  sourceCmd
+      ->add_option("--max-kev", sourceExtra.maxKeV,
+                   "Highest energy to bin, in keV; default is the hardest line present")
+      ->check(CLI::PositiveNumber);
+  sourceCmd->add_option("--edges-kev", sourceExtra.edgesKeV,
+                        "Explicit bin boundaries in keV, comma separated");
+  sourceCmd->add_option("--edges-file", sourceExtra.edgesFile,
+                        "Explicit bin boundaries in keV, whitespace separated, # comments ok");
+  sourceCmd->add_option("-o,--output", sourceOptions.output, "Write here instead of stdout");
+  sourceCmd
+      ->add_option("--format", sourceExtra.format,
+                   "text, csv, json, mcnp (an SDEF card), or openmc (a Python snippet)")
+      ->check(CLI::IsMember({"text", "csv", "json", "mcnp", "sdef", "openmc"}));
+  addSolverOptions(sourceCmd, sourceOptions);
+
   CommonOptions attributeOptions;
   CLI::App* attributeCmd =
       app.add_subcommand("attribute", "Which SEEDED nuclides a response is riding on, at one time");
@@ -1480,6 +1677,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (sourceCmd->parsed()) {
+      return runSource(sourceOptions, sourceExtra, argv0);
     }
     if (spectrumCmd->parsed()) {
       // A thin front on `rank --metric exposure --by line`: same code path, defaults set to

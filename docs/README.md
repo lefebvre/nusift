@@ -13,7 +13,7 @@ that produced the number you are looking at.
 | 3 | [The decay solve](decay-solve.md) | The matrix, CRAM, the forward-closure pruning, time grids, threads, and determinism |
 | 4 | [Interval integration](interval-integration.md) | Time-integrated answers in closed form, and the cancellation guard |
 | 5 | [Exposure](exposure.md) | The photon transport model: lines, air attenuation, air kerma, ICRP 116 effective dose, and what it excludes |
-| 6 | [Ranking and forecasting](ranking.md) | Weights, aggregation, coverage, dominance windows, located events, maximum allowable scale, counterfactual interventions, and how a report states its own limits |
+| 6 | [Ranking and forecasting](ranking.md) | Weights, aggregation, the binned source term, coverage, dominance windows, located events, maximum allowable scale, counterfactual interventions, and how a report states its own limits |
 | 7 | [Seed attribution](attribution.md) | The other attribution of the same number: which seeded nuclide a response is riding on, from one adjoint solve |
 
 ## The one design decision everything follows from
@@ -88,12 +88,13 @@ header — because for a triage answer, what produced it is part of it.
 
 Implemented and exercised end to end: decay from an inventory or from fission, instantaneous
 and time-integrated activity, point-source photon exposure, ranking by four aggregates,
-dominance forecasting, and Python bindings for both the instantaneous and the interval path.
+dominance forecasting, a binned photon emission spectrum written as a transport code's source
+definition, and Python bindings for both the instantaneous and the interval path.
 
 Not modelled, each of which would *raise* a reported exposure: scattered photons beyond an
 explicit `--buildup` factor, source self-absorption, bremsstrahlung and any continuous photon
 spectrum, and beta, alpha, or neutron dose. Not yet implemented: neutron activation as a source
-term, shielding, decay heat, and a binned spectrum for detector response.
+term, shielding, and decay heat.
 
 The limits are quantified per store rather than asserted in general — run `nusift data info`
 and it will tell you how many nuclides in *this* evaluation emit photons it cannot model. See
