@@ -681,4 +681,63 @@ EventSeries taskSeries(const NuclearData& data, const Inventory& inventory,
   return series;
 }
 
+StayTime stayTime(const NuclearData& data, const Inventory& inventory, const ResponseSpec& spec,
+                  double startSeconds, double budget, double maxDurationSeconds,
+                  const DecayOptions& options, const EventTolerance& tolerance) {
+  if (!(startSeconds >= 0.0)) {
+    throw InputError(tagged(kModule, "a stay cannot begin before the inventory exists"));
+  }
+  if (!(budget > 0.0)) {
+    throw InputError(tagged(kModule,
+                            "a stay needs a positive budget: a budget of zero is spent before "
+                            "the door opens, which is not an answer about a duration"));
+  }
+  if (!(maxDurationSeconds > 0.0)) {
+    throw InputError(tagged(kModule,
+                            "a stay needs a positive ceiling to search inside; how long a stay "
+                            "would be considered at all is part of the question"));
+  }
+
+  const auto accrued = [&data, &inventory, &spec, &options, startSeconds](double duration) {
+    const double end = startSeconds + duration;
+    std::vector<std::int64_t> keys;
+    const std::vector<double> integral =
+        intervalIntegral(data, inventory, startSeconds, end, &keys, options);
+    return buildIntervalResponse(data, keys, integral, startSeconds, end, spec).totals.front();
+  };
+
+  StayTime stay;
+  stay.startSeconds = startSeconds;
+  stay.budget = budget;
+  stay.maxDurationSeconds = maxDurationSeconds;
+  stay.accruedAtMax = accrued(maxDurationSeconds);
+  stay.samples = 1;
+
+  // Not reached inside the window asked about. Reported as such rather than as a very large
+  // duration, for the reason allowableScale() reports an unbounded criterion rather than a huge
+  // scale: "the budget is not spent in a day" and "you may stay 8.6e17 seconds" are different
+  // statements, and only one of them is something this tool observed.
+  if (stay.accruedAtMax < budget) {
+    return stay;
+  }
+  // Spent exactly at the ceiling. Located to nothing because no search happened, which is the
+  // truthful width rather than a tolerance nobody used.
+  if (stay.accruedAtMax == budget) {
+    stay.bounded = true;
+    stay.durationSeconds = maxDurationSeconds;
+    return stay;
+  }
+
+  // A(0) = 0 exactly and needs no solve, so the bracket is free at one end. Illinois takes it
+  // from there -- the same refinement every located event in this file is narrowed by, on a
+  // curve that happens to guarantee the root inside it is the only one.
+  int evaluations = 0;
+  stay.durationSeconds =
+      refineCrossing(accrued, 0.0, maxDurationSeconds, 0.0, stay.accruedAtMax, budget, tolerance,
+                     stay.locatedToSeconds, stay.converged, evaluations);
+  stay.samples += evaluations;
+  stay.bounded = true;
+  return stay;
+}
+
 }  // namespace nusift

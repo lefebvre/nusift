@@ -1019,6 +1019,68 @@ NB_MODULE(_core, m) {
       "What a task of `duration` accrues, sampled at each start in `starts`. The units are "
       "interval units -- roentgen, decays -- because the values are accrued totals.");
 
+  // The converse inversion. task_series fixes the length and searches for the start; this fixes
+  // the start and solves for the LENGTH, which is a root-find in one window rather than a search
+  // along a curve of them, and no sampling of the task curve produces it.
+  nb::class_<StayTime>(m, "StayTime", "How long a stay can run before it spends a budget.")
+      .def_ro("start_s", &StayTime::startSeconds)
+      .def_ro("budget", &StayTime::budget)
+      .def_ro("max_duration_s", &StayTime::maxDurationSeconds,
+              "The longest stay considered. Part of the question: a search with no ceiling "
+              "would have to invent one.")
+      .def_prop_ro(
+          "duration_s",
+          [](const StayTime& s) -> nb::object {
+            // None rather than a number when the budget was never spent. A caller reading 0.0
+            // here would get "leave immediately" for "stay as long as you like", which is the
+            // worst available way to be wrong about this question, so the type refuses it.
+            return s.bounded ? nb::cast(s.durationSeconds) : nb::none();
+          },
+          "How long the budget lasts, in seconds, or None when it is not spent inside "
+          "max_duration_s.")
+      .def_ro("bounded", &StayTime::bounded)
+      .def_ro("accrued_at_max", &StayTime::accruedAtMax,
+              "What a stay of the full max_duration_s accrues. The useful number when not "
+              "bounded: not 'never spent' but 'a stay this long costs this much of it'.")
+      .def_ro("located_to_s", &StayTime::locatedToSeconds,
+              "The width the duration was narrowed to -- the honest error bar on it.")
+      .def_ro("converged", &StayTime::converged)
+      .def_ro("samples", &StayTime::samples, "Interval integrals spent finding it.")
+      .def("__repr__", [](const StayTime& s) {
+        return "<StayTime from " + formatDuration(s.startSeconds) + ": " +
+               (s.bounded ? formatDuration(s.durationSeconds) : std::string("budget not spent")) +
+               ">";
+      });
+
+  m.def(
+      "stay_time",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& at, double budget,
+         const nb::object& max_stay, const std::string& metric, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, double tolerance, int threads, bool prune,
+         int cram_order) {
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        // The total is what a budget constrains, so the aggregate is fixed rather than offered:
+        // which nuclide spends it does not change how long it lasts, and `rank` is where that
+        // question lives.
+        spec.aggregate = Aggregate::Nuclide;
+        spec.unit = requireUnit(units, spec.metric, Domain::Interval);
+        spec.geometry = geometry;
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        const nb::gil_scoped_release release;
+        return stayTime(data, inventory, spec, timeFrom(at), budget, timeFrom(max_stay), options,
+                        toleranceOf(tolerance));
+      },
+      "data"_a, "inventory"_a, "at"_a, "budget"_a, "max_stay"_a = "24h", "metric"_a = "activity",
+      "units"_a = "", "geometry"_a = exposure::PointSourceGeometry{}, "tolerance"_a = 1.0e-6,
+      "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
+      "How long a stay beginning at `at` can run before it accrues `budget`. The units are "
+      "interval units -- Sv, R, decays -- because a budget is an accrued total and not a rate. "
+      "Costs tens of solves: each step of the root-find is an exact interval integral.");
+
   // A published coefficient table, read at runtime rather than compiled in. What makes it a
   // pack rather than a dictionary is everything in its header: the quantity, the unit, what the
   // coefficient multiplies, the scenario it was tabulated under, and the version -- all of which

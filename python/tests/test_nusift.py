@@ -1291,3 +1291,78 @@ def test_source_decks_carry_the_caveats_a_transport_code_cannot_infer(data, resu
 
     with pytest.raises(nusift.InputError):
         nusift.source_deck(data, inv, spectrum, format="serpent")
+
+
+# --- the stay time -----------------------------------------------------------
+
+
+@needs_store
+def test_stay_time_inverts_the_task_curve_it_is_the_converse_of(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+    geometry = nusift.PointSource(distance_m=2.0)
+
+    stay = nusift.stay_time(
+        data, inv, at="30d", budget=1.0e-4, metric="exposure", units="Sv", geometry=geometry,
+    )
+    assert stay.bounded
+    assert stay.duration_s > 0.0
+    assert stay.converged
+    assert 0.0 < stay.located_to_s < stay.duration_s
+
+    # A task of exactly that length, starting at the same instant, must cost exactly the budget.
+    # The two inversions are one integral read two ways.
+    series = nusift.task_series(
+        data, inv, starts=["30d", "31d"], duration=stay.duration_s,
+        metric="exposure", units="Sv", geometry=geometry,
+    )
+    assert series.values[0] == pytest.approx(1.0e-4, rel=1e-5)
+
+
+@needs_store
+def test_an_unspent_budget_is_none_and_not_zero(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+
+    stay = nusift.stay_time(
+        data, inv, at="30d", budget=1.0e9, metric="exposure", units="Sv",
+        geometry=nusift.PointSource(distance_m=2.0),
+    )
+    assert not stay.bounded
+    # The whole point of the property. A 0.0 here would read as "leave immediately", which is
+    # the exact inverse of what an unspent budget means.
+    assert stay.duration_s is None
+    assert 0.0 < stay.accrued_at_max < stay.budget
+
+
+@needs_store
+def test_waiting_buys_a_longer_stay(data):
+    inv = nusift.Inventory()
+    inv.add("Co-60", 1.0e18)
+    geometry = nusift.PointSource(distance_m=1.0)
+
+    def stay(at):
+        return nusift.stay_time(
+            data, inv, at=at, budget=5.0e-4, max_stay="30d",
+            metric="exposure", units="Sv", geometry=geometry,
+        ).duration_s
+
+    # Co-60 has no ingrowth feeding it, so the source only gets weaker and the same budget can
+    # only buy longer. Monotone in the direction that makes the root unique.
+    assert stay("1d") < stay("5y") < stay("20y")
+
+
+@needs_store
+def test_a_stay_budget_must_be_an_accrued_total(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+
+    # A rate is the wrong dimension for a budget, refused where every other unit mismatch is.
+    with pytest.raises(nusift.InputError):
+        nusift.stay_time(data, inv, at="30d", budget=0.02, metric="exposure", units="Sv/h")
+    with pytest.raises(nusift.InputError):
+        nusift.stay_time(data, inv, at="30d", budget=0.0, metric="exposure", units="Sv")
+    with pytest.raises(nusift.InputError):
+        nusift.stay_time(
+            data, inv, at="30d", budget=0.02, max_stay="0s", metric="exposure", units="Sv",
+        )

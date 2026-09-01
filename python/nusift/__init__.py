@@ -86,6 +86,7 @@ from ._core import (  # noqa: F401
     ResolvedPack,
     ResponseEvaluator,
     ResponseTable,
+    StayTime,
     TrajectoryEvent,
     __version__,
     allowable_scale,
@@ -107,6 +108,7 @@ from ._core import (  # noqa: F401
     response,
     seed_fission,
     source_deck,
+    stay_time,
     task_series,
 )
 from ._data import default_store_path  # noqa: F401
@@ -140,6 +142,7 @@ __all__ = [
     "ResolvedPack",
     "ResponseEvaluator",
     "ResponseTable",
+    "StayTime",
     "TrajectoryEvent",
     "__version__",
     "allowable_scale",
@@ -162,5 +165,6 @@ __all__ = [
     "response",
     "seed_fission",
     "source_deck",
+    "stay_time",
     "task_series",
 ]
