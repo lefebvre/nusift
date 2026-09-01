@@ -7,6 +7,7 @@
 add_library(nusift
   core/nuclide_name.cpp
   nucdata/store_arrays.cpp
+  nucdata/coefficient_pack.cpp
   nucdata/data_store.cpp
   nucdata/nuclear_data.cpp
   engine/inventory.cpp
@@ -79,6 +80,7 @@ if(NUSIFT_INSTALL)
   # translation units that assemble or solve a matrix. Installing either would put Eigen back
   # on every consumer's include path.
   install(FILES
+    nucdata/coefficient_pack.hpp
     nucdata/data_store.hpp
     nucdata/nuclear_data.hpp
     nucdata/fission_yield.hpp
