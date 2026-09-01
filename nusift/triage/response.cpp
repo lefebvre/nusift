@@ -31,10 +31,19 @@ constexpr double kUnmodeledContinuumFlag = 0.05;
 // Every unit, in the order the help text lists them. The one place the set is enumerated, so
 // parseUnit and the error message it raises cannot come to disagree about what exists.
 constexpr Unit kAllUnits[] = {
-    Unit::Becquerel,                  Unit::Curie,     Unit::Decays, Unit::RoentgenPerHour,
-    Unit::GrayPerHour,                Unit::SievertPerHour, Unit::Roentgen, Unit::Gray,
-    Unit::Sievert,                    Unit::PhotonsPerSecond, Unit::Photons,
-    Unit::PhotonsPerSquareMeterPerSecond, Unit::PhotonsPerSquareMeter,
+    Unit::Becquerel,
+    Unit::Curie,
+    Unit::Decays,
+    Unit::RoentgenPerHour,
+    Unit::GrayPerHour,
+    Unit::SievertPerHour,
+    Unit::Roentgen,
+    Unit::Gray,
+    Unit::Sievert,
+    Unit::PhotonsPerSecond,
+    Unit::Photons,
+    Unit::PhotonsPerSquareMeterPerSecond,
+    Unit::PhotonsPerSquareMeter,
 };
 
 // Case-insensitive ASCII equality. Unit spellings are ASCII by construction -- they come from
@@ -369,11 +378,10 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
     // The emitter's total and the per-line coefficient in the SAME weight, so the relative
     // floor below drops a line by its share of its emitter whatever the metric.
     const bool fluence = isFluenceUnit(spec.unit);
-    const double emitterTotal =
-        spec.metric == Metric::Exposure
-            ? exposure::exposureRatePerBecquerel(lines, spec.geometry)
-            : fluence ? exposure::fluenceRatePerBecquerel(lines, spec.geometry)
-                      : totalPhotonYield(lines);
+    const double emitterTotal = spec.metric == Metric::Exposure
+                                    ? exposure::exposureRatePerBecquerel(lines, spec.geometry)
+                                : fluence ? exposure::fluenceRatePerBecquerel(lines, spec.geometry)
+                                          : totalPhotonYield(lines);
     const double floor = emitterTotal * kLineFloor;
     const int flags = data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag
                           ? kFlagUnmodeledContinuum
@@ -383,9 +391,8 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
       const double perBecquerel =
           spec.metric == Metric::Exposure
               ? line.intensity * exposure::pointExposureCoeff(line.energyEv, spec.geometry)
-              : fluence
-                ? line.intensity * exposure::pointFluenceCoeff(line.energyEv, spec.geometry)
-                : line.intensity;
+          : fluence ? line.intensity * exposure::pointFluenceCoeff(line.energyEv, spec.geometry)
+                    : line.intensity;
       if (perBecquerel <= 0.0) {
         continue;
       }
@@ -649,8 +656,7 @@ void requireUsableSpec(const NuclearData& data, const ResponseSpec& spec, Domain
   // A store with no photon lines cannot answer a photon question at all. Returning zeros
   // would be indistinguishable from "nothing here emits photons", which is a different and
   // much more alarming statement.
-  const bool isPhotonMetric =
-      spec.metric == Metric::Exposure || spec.metric == Metric::Photon;
+  const bool isPhotonMetric = spec.metric == Metric::Exposure || spec.metric == Metric::Photon;
   if (spec.aggregate == Aggregate::GammaLine && !isPhotonMetric) {
     throw InputError(tagged(kModule,
                             "ranking by gamma line only makes sense for exposure or photon "
