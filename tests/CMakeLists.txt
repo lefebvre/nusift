@@ -47,6 +47,7 @@ add_executable(nusift_unit_tests
   unit/test_point_source.cpp
   unit/test_report.cpp
   unit/test_seed_fission.cpp
+  unit/test_spectrum.cpp
   unit/test_nuclide.cpp
   unit/test_nuclide_name.cpp
   unit/test_store_locator.cpp

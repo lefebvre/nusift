@@ -26,9 +26,11 @@ add_library(nusift
   triage/events.cpp
   triage/allowable.cpp
   triage/intervention.cpp
+  triage/spectrum.cpp
   io/time_spec.cpp
   io/inventory_io.cpp
-  io/report.cpp)
+  io/report.cpp
+  io/source_report.cpp)
 
 add_library(nusift::nusift ALIAS nusift)
 
@@ -110,6 +112,7 @@ if(NUSIFT_INSTALL)
     triage/intervention.hpp
     triage/ranking.hpp
     triage/response.hpp
+    triage/spectrum.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/triage)
 
   install(FILES
@@ -121,6 +124,7 @@ if(NUSIFT_INSTALL)
     io/inventory_io.hpp
     io/number_format.hpp
     io/report.hpp
+    io/source_report.hpp
     io/time_spec.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/io)
 

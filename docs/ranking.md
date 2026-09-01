@@ -114,6 +114,56 @@ nuclide"* is a question people ask. A dropped line still counts toward the table
 contributes, it just has no column — so the total by line is the total by nuclide exactly, and
 the coverage a line ranking reports stays a true fraction of the whole.
 
+## 3a. The energy axis: a source term rather than a ranking
+
+Line aggregation collapses the atoms onto individual lines and then ranks them, which answers
+*which line*. Collapse the emitters instead and keep the energy, and the same weights give a
+**binned emission spectrum** — the source term a transport code reads, from `nusift source` and
+`binned_spectrum()`.
+
+The quantity is emission, and there is deliberately no geometry in it:
+
+```
+emission(bin b) = Σᵢ λᵢ · nᵢ(t) · Σ_{j : E_j ∈ b} y_ij        [photons/s]
+```
+
+Instantaneously that is photons per second; against atom·seconds it is a *count* of photons over
+the window, integrated exactly, which is the right source for a job that runs while the inventory
+decays under it. The fluence units are refused here, because a fluence has already had an
+inverse-square applied and handing that to MCNP would apply the geometry twice.
+
+**No floor.** The 1e-6 relative threshold above exists so a table stays readable; a histogram has
+no such excuse, since binning collapses the rows anyway. Every evaluated line is placed, and the
+identity
+
+```
+Σ_b emission(b) + belowRange + aboveRange = total
+```
+
+holds to floating point. That is the whole audit. A grid that does not reach Tl-208's 2.6 MeV line
+is not *wrong* — it is short by a number the report states, in the deck as well as on screen.
+
+### What the deck must say that the code cannot infer
+
+A ranking is read by a person who can weigh a footnote. A source deck is read by MCNP, which
+cannot, and whatever the deck does not say is simply not true of the run. So three things travel
+as comment cards at the top of both formats:
+
+| | MCNP `SDEF` | OpenMC |
+| --- | --- | --- |
+| Absolute rate | `SP` is normalised to unity, so the card carries the **shape**; the emission rate is printed for an `FM` multiplier | recorded in `strength=`, which OpenMC also does not apply — tallies score per source particle either way |
+| Geometry | `POS`/`CEL`/`RAD`/`AXS` are the user's; unset, MCNP puts a point at the origin | `space=` is a placeholder `Point` to replace |
+| Units | boundaries in MeV | boundaries in eV, one probability per bin (`len(p) == len(x) - 1`) |
+
+Both decks also carry the unmodelled-continuum fraction, and this is the metric where it matters
+most. Everywhere else in NuSIFT that flag understates a number a person is about to read; here it
+understates a *source*, and the shortfall propagates through someone else's transport run where
+nothing downstream knows to doubt it.
+
+One loss is inherent and is stated rather than mitigated: bin totals are exact, but the discrete
+lines inside a bin cannot be recovered from the bin. A detector-resolution question wants the line
+list of §3, not this.
+
 ## 4. What a ranking guarantees
 
 ```
@@ -726,5 +776,8 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/allowable.cpp`](../nusift/triage/allowable.cpp) | `allowableScale`, the binding-criterion minimum, unbounded semantics, and `scaleSeries` |
 | [`nusift/triage/intervention.hpp`](../nusift/triage/intervention.hpp) | `Removal`, `Intervention`, `InterventionStudy`, and what removing a parent does and does not do |
 | [`nusift/triage/intervention.cpp`](../nusift/triage/intervention.cpp) | `compareInterventions`, selector resolution, and the reachable-versus-present distinction |
+| [`nusift/triage/spectrum.hpp`](../nusift/triage/spectrum.hpp) | `BinScale`, `BinningSpec`, `BinnedSpectrum`, and the conservation identity |
+| [`nusift/triage/spectrum.cpp`](../nusift/triage/spectrum.cpp) | `resolveBinEdges`, the closed top edge, and the floorless per-line binning |
+| [`nusift/io/source_report.cpp`](../nusift/io/source_report.cpp) | The `SDEF` and OpenMC writers, and the caveats they carry as comments |
 | [`nusift/io/report.cpp`](../nusift/io/report.cpp) | Text, CSV, and JSON writers, and the provenance header |
 | [`nusift_apps/nusift.cpp`](../nusift_apps/nusift.cpp) | The `when` and `allowable` verbs, and the `--of` / `--ratio` curve select |
