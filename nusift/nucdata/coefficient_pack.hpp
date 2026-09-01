@@ -72,6 +72,7 @@
 #include <iosfwd>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "nusift/engine/inventory.hpp"
@@ -79,6 +80,28 @@
 namespace nusift {
 
 class NuclearData;
+
+// Which shape a pack's rows take, and so what a row means.
+//
+// A NUCLIDE pack is a published number per nuclide: a transport index, an intake dose
+// coefficient, a submersion coefficient. A KERNEL pack is a published curve against photon
+// ENERGY, which composes with the staged photon lines instead of replacing them -- the same
+// arrangement the built-in exposure and effective-dose metrics use, with the curve read from a
+// file rather than compiled in. A detector efficiency and a fluence-to-dose conversion are the
+// same object to this code, and neither needs C++ to arrive.
+enum class PackShape {
+  Nuclide,
+  Kernel,
+};
+
+const char* packShapeName(PackShape shape);
+
+// What a kernel's coefficient multiplies. One value today, and it is spelled out rather than
+// assumed because a curve against energy could just as well weight the photons EMITTED, and
+// those two differ by the whole point geometry.
+enum class PackApplies {
+  Fluence,  // per photon arriving per square metre at the point the geometry names
+};
 
 // What the coefficient multiplies. A published table states this, usually in its units: an A2
 // fraction is per becquerel, an intake dose coefficient is per becquerel, a gross alpha weight
@@ -128,6 +151,8 @@ struct PackProvenance {
   // deposition is per square metre and a cloud is per cubic metre, and confusing the two is not
   // a units slip but a different question answered.
   std::string per;
+  PackShape shape = PackShape::Nuclide;
+  PackApplies applies = PackApplies::Fluence;  // kernel packs only
   PackBasis basis = PackBasis::Activity;
   PackDomains domains = PackDomains::Both;
   // True when coefficients absorb their progeny, in which case foldedInto() answers for the
@@ -157,6 +182,22 @@ public:
   // The coefficient, or zero for a nuclide the pack does not carry. Always ask covers() first
   // unless a zero is genuinely what you want for both cases.
   double coefficient(std::int64_t zaiKey) const;
+
+  // --- kernel packs ----------------------------------------------------------
+
+  // The coefficient at `energyEv`, log-log interpolated between the tabulated energies and
+  // CLAMPED outside them, exactly as the air and ICRP 116 tables in nusift/exposure are: past
+  // the ends of a published curve its shape is not something this file knows.
+  double kernelAt(double energyEv) const;
+
+  // True when `energyEv` falls outside the tabulated range, so the value above is a clamped end
+  // point. A response reports the share of itself that came from clamped lines, because a
+  // spectrum sitting mostly off the end of a curve is not an answer that curve can give.
+  bool kernelClamps(double energyEv) const;
+
+  // The tabulated range, meaningless for a nuclide pack.
+  double kernelMinEv() const;
+  double kernelMaxEv() const;
 
   // The note against a row, empty when it has none. Carried because a zero that means "no limit
   // applies" has to be able to say so.
@@ -203,6 +244,9 @@ private:
   // every question at runtime actually asks: given this nuclide, is anything already
   // accounting for it.
   std::unordered_map<std::int64_t, std::vector<std::int64_t>> foldedInto_;
+  // Kernel packs: the curve, sorted by energy. A vector rather than a map because every use is
+  // an interpolation between neighbours, which is a search and not a lookup.
+  std::vector<std::pair<double, double>> kernel_;
 };
 
 }  // namespace nusift

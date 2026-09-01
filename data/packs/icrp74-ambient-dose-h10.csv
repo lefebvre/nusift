@@ -1,0 +1,68 @@
+# pack: icrp74-ambient-dose-h10
+# version: ICRP Publication 74 (1996), Table A.21
+# quantity: ambient dose equivalent rate H*(10)
+# unit: Sv/s
+# shape: kernel
+# applies: fluence
+# domain: instant
+# source: ICRP Publication 74, Conversion Coefficients for use in Radiological Protection
+#   against External Radiation, Ann. ICRP 26(3/4), Table A.21 -- conversion coefficients for the
+#   ambient dose equivalent H*(10) from photon fluence, compiled there from ICRU Report 47
+#   (1992) using Hubbell and Seltzer (1995).
+#
+# THE QUANTITY A SURVEY METER READS. H*(10) is an operational quantity: defined in the ICRU
+# sphere rather than in a person, designed to be measurable and to be a conservative estimate of
+# effective dose for photons up to about 10 MeV. It is what makes a computed field comparable
+# with an instrument reading, which is a comparison NuSIFT could not make at all before this.
+# It is NOT effective dose -- that is the ICRP 116 kernel behind `--units Sv/h` -- and the two
+# should be expected to differ by ten to fifty percent across the range decay photons occupy,
+# with H*(10) the larger.
+#
+# A KERNEL RATHER THAN A TABLE OF NUCLIDES. The coefficient is per unit photon FLUENCE, so it
+# composes with the staged photon lines: each line's fluence at the point, times what this curve
+# says a photon of that energy is worth, summed with the geometry inside the sum. That is the
+# same construction the built-in exposure and effective-dose metrics use, which is the point --
+# an operational dose quantity arrives here as data rather than as another C++ metric.
+#
+# Coefficients are in SI, Sv m^2 per unit fluence, which is the printed pSv cm^2 times 1e-16.
+# Each row's note carries the printed value so the file can be checked against the page without
+# undoing a conversion by hand.
+#
+# ICRP 74 GIVES THE SAME QUANTITY TWICE, per unit fluence and per unit air kerma, alongside the
+# air kerma per unit fluence that relates them. The three multiply out to better than 0.7% at
+# every energy except 1.5 MeV, where the printed H*(10)/Phi of 6.90 pSv cm2 sits 2.0% below the
+# 7.04 implied by its neighbours in the same row -- and the table's own footnote says the
+# air-kerma column comes from a different compilation than the protection quantities, so some
+# inconsistency is expected. This pack carries the printed fluence column, including that value:
+# a transcription reproduces what the page says, and the discrepancy is recorded here rather
+# than quietly corrected.
+#
+# The curve is clamped outside 0.01 to 10 MeV rather than extrapolated, as every other
+# coefficient curve here is, and a response reports the share of itself that came from lines
+# outside the range instead of letting a clamp pass unremarked.
+energy_ev,coefficient,note
+10000,6.100000e-18,0.061 pSv cm2 as printed
+15000,8.300000e-17,0.83 pSv cm2 as printed
+20000,1.050000e-16,1.05 pSv cm2 as printed
+30000,8.100000e-17,0.81 pSv cm2 as printed
+40000,6.400000e-17,0.64 pSv cm2 as printed
+50000,5.500000e-17,0.55 pSv cm2 as printed
+60000,5.100000e-17,0.51 pSv cm2 as printed
+80000,5.300000e-17,0.53 pSv cm2 as printed
+100000,6.100000e-17,0.61 pSv cm2 as printed
+150000,8.900000e-17,0.89 pSv cm2 as printed
+200000,1.200000e-16,1.20 pSv cm2 as printed
+300000,1.800000e-16,1.80 pSv cm2 as printed
+400000,2.380000e-16,2.38 pSv cm2 as printed
+500000,2.930000e-16,2.93 pSv cm2 as printed
+600000,3.440000e-16,3.44 pSv cm2 as printed
+800000,4.380000e-16,4.38 pSv cm2 as printed
+1e+06,5.200000e-16,5.20 pSv cm2 as printed
+1.5e+06,6.900000e-16,6.90 pSv cm2 as printed
+2e+06,8.600000e-16,8.60 pSv cm2 as printed
+3e+06,1.110000e-15,11.1 pSv cm2 as printed
+4e+06,1.340000e-15,13.4 pSv cm2 as printed
+5e+06,1.550000e-15,15.5 pSv cm2 as printed
+6e+06,1.760000e-15,17.6 pSv cm2 as printed
+8e+06,2.160000e-15,21.6 pSv cm2 as printed
+1e+07,2.560000e-15,25.6 pSv cm2 as printed

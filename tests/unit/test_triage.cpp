@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -643,12 +644,81 @@ TEST(ResponseExposure, TheIrradiationGeometryReachesTheWeight) {
   EXPECT_NEAR(facing / away, 3.17 / 2.62, 1.0e-3);
 }
 
-// --- coefficient packs as a metric ------------------------------------------
+// --- a kernel pack as a metric ------------------------------------------------
 
 CoefficientPack packFrom(const std::string& text) {
   std::istringstream in(text);
   return CoefficientPack::read(in, "test.csv");
 }
+
+// A kernel is evaluated against the nuclide's own lines and the spec's geometry, which is the
+// same construction the built-in photon metrics use. With one line and a flat curve the whole
+// weight is checkable by hand: lambda * intensity * kappa / (4 pi d^2).
+TEST(ResponsePack, AKernelWeighsTheLinesWithTheGeometryInside) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  synth::addLines(arrays, 1, {6.0e5}, {0.5});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  const CoefficientPack pack = packFrom(
+      "# pack: flat\n# version: 1\n# quantity: a dose quantity\n# unit: Sv/s\n"
+      "# shape: kernel\n# applies: fluence\n# domain: instant\n# source: invented\n"
+      "energy_ev,coefficient\n1.0e5,2.0e-16\n1.0e7,2.0e-16\n");
+  const ResolvedPack resolved = resolvePack(pack, data, inv);
+
+  ResponseSpec spec;
+  spec.metric = Metric::Pack;
+  spec.unit = Unit::PackDefined;
+  spec.pack = &resolved;
+  spec.geometry.distanceM = 1.0;
+  spec.geometry.airAttenuation = false;
+
+  const ResponseTable table =
+      buildResponse(data, decay(data, inv, std::vector<double>{2000.0}), spec);
+  const int emitter = data.indexOfKey(Zai{51, 100, 0}.key());
+  ASSERT_GE(emitter, 0);
+
+  const double atoms =
+      decay(data, inv, std::vector<double>{2000.0}).atomsAt(0)[static_cast<std::size_t>(emitter)];
+  const double expected =
+      data.decayConstant(emitter) * atoms * 0.5 * 2.0e-16 / (4.0 * std::numbers::pi);
+  EXPECT_NEAR(table.totals[0], expected, expected * 1.0e-12);
+  EXPECT_EQ(table.unitLabel, "Sv/s");
+  // Every line sits inside the table, so the curve spoke for all of the answer.
+  EXPECT_DOUBLE_EQ(table.packCoverage[0], 1.0);
+}
+
+// What a kernel can fail to speak for is an ENERGY, not a nuclide, so coverage measures the
+// share of the answer that came from lines inside the tabulated range. A spectrum sitting off
+// the end of a published curve is not an answer that curve can give.
+TEST(ResponsePack, AKernelReportsTheShareOfTheAnswerItHadToClamp) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  // One line inside the curve's range and one far below it, of equal intensity.
+  synth::addLines(arrays, 1, {5.0e5, 1.0e3}, {0.5, 0.5});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  const CoefficientPack pack = packFrom(
+      "# pack: flat\n# version: 1\n# quantity: a dose quantity\n# unit: Sv/s\n"
+      "# shape: kernel\n# applies: fluence\n# domain: instant\n# source: invented\n"
+      "energy_ev,coefficient\n1.0e5,1.0e-16\n1.0e7,1.0e-16\n");
+  const ResolvedPack resolved = resolvePack(pack, data, inv);
+
+  ResponseSpec spec;
+  spec.metric = Metric::Pack;
+  spec.unit = Unit::PackDefined;
+  spec.pack = &resolved;
+  spec.geometry.airAttenuation = false;
+
+  const ResponseTable table =
+      buildResponse(data, decay(data, inv, std::vector<double>{2000.0}), spec);
+  // The curve is flat and the two lines have equal intensity, so the clamped one carries half.
+  EXPECT_NEAR(table.packCoverage[0], 0.5, 1.0e-9);
+}
+
+// --- coefficient packs as a metric ------------------------------------------
 
 // The columns of a table are the chain's, not the seed's, so a nuclide's index is not the order
 // it was written in.
