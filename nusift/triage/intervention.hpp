@@ -108,6 +108,9 @@ struct InterventionEffect {
 struct InterventionStudy {
   Metric metric = Metric::Activity;
   Unit unit = Unit::Becquerel;
+  // The pack's own spelling when the study was run on a pack metric, since Unit::PackDefined
+  // has none. Empty for the built-in metrics, whose unit names itself.
+  std::string unitLabel;
 
   double interventionTimeSeconds = 0.0;
   double responseTimeSeconds = 0.0;

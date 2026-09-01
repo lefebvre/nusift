@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,7 @@
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/exposure/air_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
+#include "nusift/nucdata/coefficient_pack.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
@@ -639,6 +641,148 @@ TEST(ResponseExposure, TheIrradiationGeometryReachesTheWeight) {
   // 661.657 keV, a few hundred eV below ICRP's grid point, so both columns are interpolated
   // and the ratio moves in the fifth figure.
   EXPECT_NEAR(facing / away, 3.17 / 2.62, 1.0e-3);
+}
+
+// --- coefficient packs as a metric ------------------------------------------
+
+CoefficientPack packFrom(const std::string& text) {
+  std::istringstream in(text);
+  return CoefficientPack::read(in, "test.csv");
+}
+
+// The columns of a table are the chain's, not the seed's, so a nuclide's index is not the order
+// it was written in.
+int columnOfLabel(const ResponseTable& table, const std::string& label) {
+  for (int c = 0; c < table.contributorCount(); ++c) {
+    if (table.labels[static_cast<std::size_t>(c)] == label) {
+      return c;
+    }
+  }
+  throw NusiftError("test: no column labelled " + label);
+}
+
+std::string packText(const char* progeny, const char* rows, const char* domain = "instant") {
+  return std::string("# pack: test\n# version: 1\n# quantity: an index\n# unit: 1\n") +
+         "# basis: activity\n# domain: " + domain + "\n# progeny: " + progeny +
+         "\n# source: invented\n" + rows;
+}
+
+// A pack is a metric like any other once resolved: a fixed weight per nuclide, post-multiplied
+// on the same solve, with the total the weighted sum and nothing more.
+TEST(ResponsePack, IsAWeightedSumLikeEveryOtherMetric) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  const CoefficientPack pack =
+      packFrom(packText("excluded", "nuclide,coefficient\nSn-100,2\nSb-100,4\n"));
+  const ResolvedPack resolved = resolvePack(pack, data, inv);
+
+  ResponseSpec spec;
+  spec.metric = Metric::Pack;
+  spec.unit = Unit::PackDefined;
+  spec.pack = &resolved;
+
+  const ResponseTable table = buildResponse(data, decay(data, inv, std::vector<double>{0.0}), spec);
+  const int parent = data.indexOfKey(Zai{50, 100, 0}.key());
+  EXPECT_NEAR(table.totals[0], 2.0 * data.decayConstant(parent) * 1.0e20, table.totals[0] * 1e-12);
+  EXPECT_EQ(table.unitLabel, "1") << "the pack's own spelling, not the enum's placeholder";
+  ASSERT_EQ(table.packCoverage.size(), 1u);
+  EXPECT_DOUBLE_EQ(table.packCoverage[0], 1.0);
+}
+
+// The fold, end to end: a daughter whose parent is seeded contributes nothing of its own and
+// says why, while the same daughter seeded alone uses its own row.
+TEST(ResponsePack, AFoldedDaughterIsNotWeightedTwice) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  const CoefficientPack pack =
+      packFrom(packText("folded", "nuclide,coefficient,folded\nSn-100,2,Sb-100\nSb-100,4,\n"));
+
+  Inventory withParent;
+  withParent.add(Zai{50, 100, 0}, 1.0e20);
+  Inventory daughterOnly;
+  daughterOnly.add(Zai{51, 100, 0}, 1.0e20);
+
+  const ResolvedPack under = resolvePack(pack, data, withParent);
+  const ResolvedPack alone = resolvePack(pack, data, daughterOnly);
+
+  ResponseSpec spec;
+  spec.metric = Metric::Pack;
+  spec.unit = Unit::PackDefined;
+
+  spec.pack = &under;
+  const ResponseTable folded =
+      buildResponse(data, decay(data, withParent, std::vector<double>{5000.0}), spec);
+  spec.pack = &alone;
+  const ResponseTable ownRow =
+      buildResponse(data, decay(data, daughterOnly, std::vector<double>{5000.0}), spec);
+
+  const int daughterColumn = columnOfLabel(folded, "Sb-100");
+  EXPECT_DOUBLE_EQ(folded.valuesAt(0)[static_cast<std::size_t>(daughterColumn)], 0.0)
+      << "its contribution is inside its parent's coefficient";
+  EXPECT_NE(folded.flags[static_cast<std::size_t>(daughterColumn)] & kFlagFoldedInPack, 0);
+  // Covered even though it carries no weight: it IS accounted for, by the row above it.
+  EXPECT_DOUBLE_EQ(folded.packCoverage[0], 1.0);
+
+  EXPECT_GT(ownRow.valuesAt(0)[static_cast<std::size_t>(columnOfLabel(ownRow, "Sb-100"))], 0.0)
+      << "seeded alone, its own row applies";
+}
+
+// A total over a fifth of an inventory looks exactly like one over all of it. The coverage
+// figure is the only thing that tells them apart.
+TEST(ResponsePack, CoverageReportsWhatThePackCouldNotSpeakFor) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  // A pack that knows the daughter and not the parent, asked at t=0 where the parent holds
+  // every becquerel.
+  const CoefficientPack pack = packFrom(packText("excluded", "nuclide,coefficient\nSb-100,4\n"));
+  const ResolvedPack resolved = resolvePack(pack, data, inv);
+  ResponseSpec spec;
+  spec.metric = Metric::Pack;
+  spec.unit = Unit::PackDefined;
+  spec.pack = &resolved;
+
+  const ResponseTable table = buildResponse(data, decay(data, inv, std::vector<double>{0.0}), spec);
+  EXPECT_DOUBLE_EQ(table.totals[0], 0.0);
+  EXPECT_DOUBLE_EQ(table.packCoverage[0], 0.0);
+  EXPECT_NE(table.flags[static_cast<std::size_t>(columnOfLabel(table, "Sn-100"))] & kFlagNotInPack,
+            0);
+}
+
+TEST(ResponsePack, RefusesASpecItCannotAnswer) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{0.0});
+
+  ResponseSpec missing;
+  missing.metric = Metric::Pack;
+  missing.unit = Unit::PackDefined;
+  EXPECT_THROW(buildResponse(data, result, missing), InputError) << "a pack metric with no pack";
+
+  const CoefficientPack instantOnly =
+      packFrom(packText("excluded", "nuclide,coefficient\nSn-100,2\n", "instant"));
+  const ResolvedPack resolved = resolvePack(instantOnly, data, inv);
+  ResponseSpec spec;
+  spec.metric = Metric::Pack;
+  spec.unit = Unit::PackDefined;
+  spec.pack = &resolved;
+
+  // An instantaneous quantity against an integral is a different quantity, not the same one
+  // summed, and the pack said which it is.
+  std::vector<std::int64_t> keys;
+  const std::vector<double> integral = intervalIntegral(data, inv, 0.0, 100.0, &keys);
+  EXPECT_THROW(buildIntervalResponse(data, keys, integral, 0.0, 100.0, spec), InputError);
+
+  ResponseSpec wrongUnit = spec;
+  wrongUnit.unit = Unit::Becquerel;
+  EXPECT_THROW(buildResponse(data, result, wrongUnit), InputError);
 }
 
 // The table carries the optical depth of the air path -- mu(E) rho d for a single line -- and

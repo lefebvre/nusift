@@ -31,6 +31,7 @@
 #include "nusift/core/nuclide.hpp"
 #include "nusift/engine/decay_result.hpp"
 #include "nusift/exposure/point_source.hpp"
+#include "nusift/nucdata/coefficient_pack.hpp"
 
 namespace nusift {
 
@@ -44,6 +45,11 @@ enum class Metric {
   // point (fluence). Energy-free on purpose -- it is the exposure kernel with the kerma factor
   // removed, so a missing dose model cannot make the source term wrong.
   Photon,
+  // Whatever a coefficient pack says. The three above are metrics this file knows how to
+  // compute; this one is a metric someone else computed and NuSIFT reads, which is the whole
+  // point -- a transport index or an intake dose coefficient is not physics NuSIFT should be
+  // reimplementing, it is a published table with a version on it.
+  Pack,
 };
 
 enum class Aggregate {
@@ -63,6 +69,12 @@ enum class Domain {
 };
 
 enum class Unit {
+  // Whatever the pack declares, printed from its header rather than from an enumerator here.
+  // A pack's unit cannot be one of the values below because the point of a pack is that its
+  // quantity was not anticipated: an A2 index is dimensionless, a nCi/g index is not, and
+  // neither is expressible by extending this list.
+  PackDefined,
+
   // Activity. A rate and a count, which is the same distinction Domain draws.
   Becquerel,
   Curie,
@@ -149,6 +161,8 @@ struct ContributorId {
 enum ContributorFlag : int {
   kFlagNone = 0,
   kFlagUnmodeledContinuum = 1 << 0,  // photon energy in a continuum NuSIFT does not model
+  kFlagNotInPack = 1 << 1,           // the pack carries no coefficient for this contributor
+  kFlagFoldedInPack = 1 << 2,        // accounted for by a parent's coefficient, not its own
 };
 
 struct ResponseTable {
@@ -163,6 +177,20 @@ struct ResponseTable {
   std::vector<ContributorId> contributors;  // [nC]
   std::vector<std::string> labels;          // [nC], display names
   std::vector<int> flags;                   // [nC]
+
+  // Metric::Pack only: the unit as the pack's header spells it, since Unit::PackDefined has no
+  // spelling of its own. Empty for every built-in metric, whose unit names itself.
+  std::string unitLabel;
+
+  // Metric::Pack only: the fraction of the quantity the pack's basis measures -- activity for
+  // an activity-basis pack -- that the pack actually carries a coefficient for, at each time.
+  // [nT]
+  //
+  // This is the figure that makes a pack answer usable. A sum of fractions over 97% of the
+  // activity is a screening index; the same number over 60% of it, with the rest in nuclides
+  // the pack never heard of, is a number that looks identical and means nothing. A count of
+  // uncovered nuclides would not do: three negligible ones and one dominant one look the same.
+  std::vector<double> packCoverage;
 
   std::vector<double> values;  // [nT * nC], row-major by time, already in `unit`
   // Sum over ALL contributors, never over a truncated prefix. Ranking reports coverage
@@ -226,10 +254,29 @@ struct ResponseTable {
 // of its lines you are looking at does not change that.
 std::int64_t requirePin(const ResponseTable& table, std::string_view text);
 
+// A pack resolved against a seed: the weight it contributes for every nuclide in a store, and
+// how each of them is accounted for. Resolved once, outside the response, for two reasons --
+// the folds depend on the seed and not on the time, and a weight vector that had to be rebuilt
+// per time would stop being a fixed weight vector, which is what every metric here rests on.
+struct ResolvedPack {
+  const CoefficientPack* pack = nullptr;
+  std::vector<double> weights;         // [data.size()], already carrying the pack's basis
+  std::vector<PackCoverage> coverage;  // [data.size()], parallel
+};
+
+// Resolve `pack` against `seed` over `data`'s index space.
+ResolvedPack resolvePack(const CoefficientPack& pack, const NuclearData& data,
+                         const Inventory& seed);
+
 struct ResponseSpec {
   Metric metric = Metric::Activity;
   Aggregate aggregate = Aggregate::Nuclide;
   Unit unit = Unit::Becquerel;
+
+  // Metric::Pack only, and required by it. Held by pointer because the resolved weights belong
+  // to the caller: a pack outlives the responses built from it, and copying a vector the length
+  // of the store into every spec would be waste.
+  const ResolvedPack* pack = nullptr;
 
   // Used by Metric::Exposure and by the photon fluence units. Held here rather than passed
   // separately because the geometry is part of what the resulting numbers MEAN -- an exposure

@@ -84,6 +84,13 @@ struct Ranking {
   // needing the table it came from.
   double unmodeledEnergyFraction = 0.0;
 
+  // Metric::Pack only, and carried for the same reason: the unit as the pack spells it, since
+  // Unit::PackDefined has none of its own, and the share of the pack's basis quantity the pack
+  // actually carries a coefficient for. A pack answer without its coverage is a number whose
+  // completeness the reader cannot judge.
+  std::string unitLabel;
+  double packCoverage = 1.0;
+
   // Exposure only: the optical depth of the air path in mean free paths at this time, weighted
   // by the exposure each contributor delivers, and the buildup factor the table was built
   // with. Together they let a report say when scattered photons were left out of a path thick

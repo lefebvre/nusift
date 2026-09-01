@@ -700,6 +700,78 @@ def test_windows_flag_the_edges_the_grid_never_observed(data, result):
     assert below == [] or below[0].start_s >= 0.0
 
 
+PACK = Path(__file__).resolve().parents[2] / "data" / "packs" / "iaea-ssr6-a2.csv"
+needs_pack = pytest.mark.skipif(not PACK.is_file(), reason="no shipped pack")
+
+
+@needs_store
+@needs_pack
+def test_a_pack_is_a_metric_carrying_its_own_provenance(data):
+    """A pack answer is only interpretable with its version and scenario, so the binding has to
+    hand those over rather than just the numbers."""
+    pack = nusift.load_pack(str(PACK))
+    assert pack.name == "iaea-ssr6-a2"
+    assert pack.version == "2012 edition"
+    assert pack.unit == "1"
+    assert pack.basis == "activity"
+    assert pack.folds_progeny is True
+    assert pack.size > 300
+    assert "SSR-6" in pack.source
+
+    # 1/A2 for Cs-137, whose A2 is 6e-1 TBq.
+    assert pack.coefficient("Cs-137") == pytest.approx(1.0 / 6.0e11, rel=1e-6)
+    # SSR-6 has no Ba-137m row: its contribution lives inside its parent's value.
+    assert pack.covers("Ba-137m") is False
+    assert pack.folded_into("Ba-137m") == ["Cs-137"]
+    # Chains nest, so one daughter can sit under several parents.
+    assert len(pack.folded_into("Tl-208")) > 1
+
+
+@needs_store
+@needs_pack
+def test_a_folded_daughter_is_not_counted_twice(data):
+    """The regulation's own rule, which only a chain-tracking tool can apply: yttrium-90 shipped
+    alone is limited by its own A2, and yttrium-90 accompanying strontium-90 is already inside
+    its parent's."""
+    pack = nusift.load_pack(str(PACK))
+
+    together = nusift.Inventory()
+    together.add("Sr-90", 1.0e18)
+    alone = nusift.Inventory()
+    alone.add("Y-90", 1.0e18)
+
+    times = [0.0]
+    with_parent = nusift.response(
+        data, nusift.decay(data, together, times),
+        pack=nusift.resolve_pack(pack, data, together))
+    on_its_own = nusift.response(
+        data, nusift.decay(data, alone, times),
+        pack=nusift.resolve_pack(pack, data, alone))
+
+    labels = list(with_parent.labels)
+    yttrium = labels.index("Y-90")
+    assert float(with_parent.values[0][yttrium]) == 0.0
+    assert float(on_its_own.totals[0]) > 0.0
+
+    # Covered either way, and the coverage figure says so: folded is accounted for, not missing.
+    assert float(with_parent.pack_coverage[0]) == pytest.approx(1.0)
+
+
+@needs_store
+@needs_pack
+def test_pack_coverage_says_what_the_pack_could_not_speak_for(data):
+    """A sum of fractions over a quarter of the activity looks identical to one over all of it."""
+    pack = nusift.load_pack(str(PACK))
+    inv = nusift.seed_fission(data, "U-235", energy="thermal", fissions=1e20)
+    res = nusift.decay(data, inv, [3600.0])
+    table = nusift.response(data, res, pack=nusift.resolve_pack(pack, data, inv))
+
+    assert table.unit == "1"
+    coverage = float(table.pack_coverage[0])
+    assert 0.0 < coverage < 0.5, "a fresh fission mix is mostly nuclides SSR-6 does not list"
+    assert table.rank(top=3).pack_coverage == pytest.approx(coverage)
+
+
 @needs_store
 def test_the_sievert_column_is_effective_dose_and_names_its_geometry(data, result):
     """Sv is ICRP 116 effective dose, Gy is air kerma, and they are different quantities rather

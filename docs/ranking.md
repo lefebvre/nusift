@@ -213,6 +213,75 @@ activity top eight. A pure beta emitter can dominate a decay count and contribut
 all; a nuclide can dominate exposure through photons its *daughter* emits. Ranking by the wrong
 one is not a rounding error — it names a different nuclide.
 
+## 5a. Coefficient packs: a metric that is data
+
+Every metric above is a fixed weight per nuclide. Three of them are computed here -- lambda for
+activity, a photon sum through a kernel for exposure and effective dose. Most of the rest are
+not physics NuSIFT should be reimplementing at all: a transport index, an intake dose
+coefficient, a gross alpha weight and a skin dose per unit contamination are published tables
+someone else computed, and the only thing standing between them and this engine was that
+`Metric` and `Unit` are closed enums.
+
+A **pack** is such a table as data: CSV with a machine-readable header, read at runtime, with
+`Metric::Pack` post-multiplying it exactly as every other metric is post-multiplied. CSV rather
+than HDF5 or JSON because the version is part of the answer, so "what changed between editions"
+has to be a question `git diff` can answer.
+
+The header is all required, and each field is there because omitting it would make a number
+uninterpretable rather than merely undocumented:
+
+| field | why it cannot be defaulted |
+| --- | --- |
+| `pack`, `version` | A2 values change between editions of SSR-6; a number under an edition nobody chose cannot be reproduced |
+| `quantity`, `unit` | the response has no other way to know what it is reporting |
+| `basis` | whether the coefficient multiplies atoms, becquerel or grams -- getting it wrong scales every answer by a decay constant, silently |
+| `domain` | a rate-like coefficient against an interval integral is a different quantity, not the same one summed |
+| `progeny` | see below; it decides whether a chain double-counts |
+| `source` | the citation, which is what makes the transcription checkable |
+| `scenario` | optional, and part of the metric's identity when present: an absorption type, a particle size, an irradiation geometry |
+
+### Coverage, not a count
+
+A nuclide the pack does not carry is **flagged and counted against a coverage figure**, never
+silently weighted zero. The figure is measured in the quantity the coefficients multiply -- the
+pack's own basis -- because the response is zero for exactly the nuclides in question, so
+weighting the missing ones by the coefficient they do not have would make coverage 100% by
+construction.
+
+It earns its place immediately. The shipped SSR-6 pack covers 100% of a stored waste inventory
+and **23.4%** of a fission product mix one hour after irradiation, where most of the activity is
+in short-lived nuclides the regulation does not list. The two totals look alike; only the
+coverage line tells them apart, and it is printed whenever it is not complete.
+
+### Folded progeny, and why it depends on the inventory
+
+Published tables are often written in the "+D" convention, where a parent's coefficient already
+includes its short-lived daughters. SSR-6's footnote (a) does exactly this for 75 of its parents
+and 127 daughters -- Ba-137m inside Cs-137, Y-90 inside Sr-90, the radon chain inside Ra-226.
+Against a chain that tracks those daughters explicitly this is a trap in both directions:
+weighting the daughter as well counts it twice, and weighting neither while reporting it
+uncovered understates the coverage figure by the nuclides that usually dominate.
+
+So `progeny: folded` requires a per-row list of what each coefficient absorbs, and a folded
+daughter is covered **through** its parent. Two properties of real tables make this less tidy
+than it sounds, and both are in the shipped pack:
+
+- **A daughter may hold its own row as well.** SSR-6 does this 36 times, and it is the
+  regulation rather than an inconsistency: yttrium-90 shipped alone is limited by its own A2,
+  and yttrium-90 accompanying strontium-90 is inside its parent's. Which applies is a question
+  about the inventory, so the fold is resolved against the **seed** -- which also keeps a metric
+  a fixed weight vector rather than one that moves down the time axis.
+- **A daughter may be folded into several parents**, because chains nest and each parent's value
+  covers everything below it. Tl-208 sits under Bi-212, Pb-212, Ra-224 and Th-228; any one of
+  them being seeded accounts for it.
+
+### What a pack is not
+
+A weighted sum, and nothing more. SSR-6's A2 table gives a **screening index** -- the sum of
+fractions -- and not a classification: special form, fissile status, package type and the LSA
+and SCO provisions all bear on what a consignment may be, and none of them is a weighted sum.
+That rule layer sits above the weights, versioned with them, and is not in NuSIFT.
+
 ## 6. Forecasting: who leads, and when that changes
 
 `dominanceWindows()` walks the grid, records the leader at each sample, coalesces consecutive

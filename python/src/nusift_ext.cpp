@@ -32,6 +32,7 @@
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/number_format.hpp"
 #include "nusift/io/time_spec.hpp"
+#include "nusift/nucdata/coefficient_pack.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
 #include "nusift/seed/seed_fission.hpp"
@@ -602,6 +603,10 @@ NB_MODULE(_core, m) {
               "energies carrying this answer. Past about 0.5 with buildup 1.0, scattered "
               "photons are a large omission.")
       .def_ro("buildup", &Ranking::buildup)
+      .def_ro("pack_coverage", &Ranking::packCoverage,
+              "Pack metrics only: the share of the inventory the pack carries a coefficient "
+              "for. A total taken without reading this cannot be told from one computed over "
+              "the whole inventory.")
       .def_prop_ro("labels",
                    [](const Ranking& r) {
                      std::vector<std::string> names;
@@ -717,7 +722,10 @@ NB_MODULE(_core, m) {
                           static_cast<std::size_t>(t.contributorCount()), self);
           },
           "(times, contributors). A zero-copy view, not a copy.")
-      .def_prop_ro("unit", [](const ResponseTable& t) { return std::string(unitName(t.unit)); })
+      .def_prop_ro("unit",
+                   [](const ResponseTable& t) {
+                     return t.unitLabel.empty() ? std::string(unitName(t.unit)) : t.unitLabel;
+                   })
       .def(
           "rank",
           [](const ResponseTable& table, const nb::object& at, int top, double coverage,
@@ -820,6 +828,14 @@ NB_MODULE(_core, m) {
           "level"_a, "of"_a = nb::none(), "ratio"_a = nb::none(), "refine"_a = nb::none(),
           "tolerance"_a = 1.0e-6,
           "The complement of windows_above, and the shape a \"when is it safe\" question takes.")
+      .def_prop_ro(
+          "pack_coverage",
+          [](nb::handle self) {
+            const ResponseTable& t = nb::cast<const ResponseTable&>(self);
+            return view1d(t.packCoverage.data(), t.packCoverage.size(), self);
+          },
+          "Pack metrics only: the share of the inventory the pack carries a coefficient for, at "
+          "each time, measured in the quantity its coefficients multiply. Empty otherwise.")
       .def("__repr__", [](const ResponseTable& t) {
         return "<ResponseTable " + std::to_string(t.timeCount()) + " times x " +
                std::to_string(t.contributorCount()) + " contributors, " + unitName(t.unit) + ">";
@@ -983,21 +999,95 @@ NB_MODULE(_core, m) {
       "What a task of `duration` accrues, sampled at each start in `starts`. The units are "
       "interval units -- roentgen, decays -- because the values are accrued totals.");
 
+  // A published coefficient table, read at runtime rather than compiled in. What makes it a
+  // pack rather than a dictionary is everything in its header: the quantity, the unit, what the
+  // coefficient multiplies, the scenario it was tabulated under, and the version -- all of which
+  // travel into the answer, because a transport index from the 2012 edition of SSR-6 is not the
+  // same number as one from a later edition.
+  nb::class_<CoefficientPack>(m, "CoefficientPack",
+                              "A versioned table of per-nuclide coefficients.")
+      .def_prop_ro("name", [](const CoefficientPack& p) { return p.provenance().name; })
+      .def_prop_ro("version", [](const CoefficientPack& p) { return p.provenance().version; })
+      .def_prop_ro("quantity", [](const CoefficientPack& p) { return p.provenance().quantity; })
+      .def_prop_ro("unit", [](const CoefficientPack& p) { return p.provenance().unit; })
+      .def_prop_ro("scenario", [](const CoefficientPack& p) { return p.provenance().scenario; })
+      .def_prop_ro("source", [](const CoefficientPack& p) { return p.provenance().source; })
+      .def_prop_ro(
+          "basis",
+          [](const CoefficientPack& p) { return std::string(packBasisName(p.provenance().basis)); })
+      .def_prop_ro("folds_progeny",
+                   [](const CoefficientPack& p) { return p.provenance().foldsProgeny; })
+      .def_prop_ro("size", &CoefficientPack::size)
+      .def(
+          "covers",
+          [](const CoefficientPack& p, const std::string& nuclide) {
+            return p.covers(requireNuclideName(nuclide).key());
+          },
+          "nuclide"_a,
+          "Whether the pack carries a row for this nuclide -- which is NOT the same question "
+          "as whether its coefficient is zero. A zero written in the file means a limit that "
+          "does not bind; a nuclide with no row means the pack cannot speak for it at all.")
+      .def(
+          "coefficient",
+          [](const CoefficientPack& p, const std::string& nuclide) {
+            return p.coefficient(requireNuclideName(nuclide).key());
+          },
+          "nuclide"_a, "The coefficient as the file states it, or zero when there is no row.")
+      .def(
+          "folded_into",
+          [](const CoefficientPack& p, const std::string& nuclide) {
+            return nuclideNames(p.foldedInto(requireNuclideName(nuclide).key()));
+          },
+          "nuclide"_a,
+          "The parents whose coefficients already account for this nuclide. Several, because "
+          "decay chains nest: SSR-6 folds Tl-208 into Bi-212, Pb-212, Ra-224 and Th-228.")
+      .def("__repr__", [](const CoefficientPack& p) {
+        return "<CoefficientPack " + p.provenance().name + " " + p.provenance().version + ", " +
+               std::to_string(p.size()) + " nuclides>";
+      });
+
+  m.def(
+      "load_pack", [](const std::string& path) { return CoefficientPack::open(path); }, "path"_a,
+      "Read a coefficient pack: CSV with a header carrying its quantity, unit, basis, scenario "
+      "and version.");
+
+  // A pack resolved against a seed. Which coefficient applies to a folded daughter is a
+  // question about the inventory -- yttrium-90 alone is limited by its own value, and yttrium-90
+  // with strontium-90 is inside its parent's -- so the resolution happens once, here, and the
+  // response layer post-multiplies a fixed vector as it does for every other metric.
+  nb::class_<ResolvedPack>(m, "ResolvedPack", "A pack resolved against a seed inventory.")
+      .def("__repr__", [](const ResolvedPack& r) {
+        return "<ResolvedPack " + r.pack->provenance().name + " over " +
+               std::to_string(r.weights.size()) + " nuclides>";
+      });
+
+  m.def(
+      "resolve_pack",
+      [](const CoefficientPack& pack, const NuclearData& data, const Inventory& seed) {
+        return resolvePack(pack, data, seed);
+      },
+      "pack"_a, "data"_a, "seed"_a, nb::keep_alive<0, 1>(),
+      "Resolve a pack against the inventory it will be used with, which is what decides whether "
+      "a folded daughter takes its parent's coefficient or its own.");
+
   m.def(
       "response",
       [](const NuclearData& data, const DecayResult& result, const std::string& metric,
          const std::string& by, const std::string& units,
-         const exposure::PointSourceGeometry& geometry) {
+         const exposure::PointSourceGeometry& geometry, const ResolvedPack* pack) {
         ResponseSpec spec;
-        spec.metric = metricFrom(metric);
+        // A pack IS the metric, so naming both would be two answers to one question.
+        spec.metric = pack != nullptr ? Metric::Pack : metricFrom(metric);
         spec.aggregate = aggregateFrom(by);
         spec.unit = requireUnit(units, spec.metric, Domain::Instant);
         spec.geometry = geometry;
+        spec.pack = pack;
         return buildResponse(data, result, spec);
       },
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
-      "geometry"_a = exposure::PointSourceGeometry{},
-      "Turn a decay result into a table of per-contributor values.");
+      "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
+      "Turn a decay result into a table of per-contributor values. `pack` takes a resolved "
+      "coefficient pack and becomes the metric.");
 
   // The same call over an interval result gives the interval domain: one row of totals --
   // decays, or roentgen accrued -- with the units gated accordingly, so `units="Bq"` is
@@ -1006,17 +1096,18 @@ NB_MODULE(_core, m) {
       "response",
       [](const NuclearData& data, const IntervalResult& result, const std::string& metric,
          const std::string& by, const std::string& units,
-         const exposure::PointSourceGeometry& geometry) {
+         const exposure::PointSourceGeometry& geometry, const ResolvedPack* pack) {
         ResponseSpec spec;
-        spec.metric = metricFrom(metric);
+        spec.metric = pack != nullptr ? Metric::Pack : metricFrom(metric);
         spec.aggregate = aggregateFrom(by);
         spec.unit = requireUnit(units, spec.metric, Domain::Interval);
         spec.geometry = geometry;
+        spec.pack = pack;
         return buildIntervalResponse(data, result.nuclideKeys, result.integratedAtoms, result.t1,
                                      result.t2, spec);
       },
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
-      "geometry"_a = exposure::PointSourceGeometry{},
+      "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
 
   // The other attribution of the same number. `rank` says what is producing the response now;
