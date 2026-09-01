@@ -231,7 +231,7 @@ std::string bucketLabel(Aggregate aggregate, std::int64_t key, std::int64_t domi
 
 // Accumulates columns for one aggregate bucket across every time.
 struct Bucket {
-  int column = 0;
+  std::size_t column = 0;
   double peak = 0.0;              // largest single-nuclide contribution seen
   std::int64_t dominant = 0;      // the nuclide named in the label
   double dominantHalfLife = 0.0;  // its half-life, for breaking near-ties
@@ -244,28 +244,27 @@ struct Bucket {
 ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> keys,
                        const std::vector<std::vector<double>>& weightedByTime,
                        const ResponseSpec& spec, Domain domain) {
-  const int nNuc = static_cast<int>(keys.size());
-  const int nT = static_cast<int>(weightedByTime.size());
+  const std::size_t nNuc = keys.size();
+  const std::size_t nT = weightedByTime.size();
 
   std::map<std::int64_t, Bucket> buckets;
-  std::vector<int> columnOf(static_cast<std::size_t>(nNuc), -1);
+  std::vector<std::size_t> columnOf(nNuc, 0);
 
-  for (int i = 0; i < nNuc; ++i) {
-    const Zai zai = Zai::fromKey(keys[static_cast<std::size_t>(i)]);
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    const Zai zai = Zai::fromKey(keys[i]);
     const std::int64_t bucket = bucketKey(spec.aggregate, zai);
     auto [it, inserted] = buckets.try_emplace(bucket);
     if (inserted) {
-      it->second.column = static_cast<int>(buckets.size()) - 1;
+      it->second.column = buckets.size() - 1;
     }
-    columnOf[static_cast<std::size_t>(i)] = it->second.column;
+    columnOf[i] = it->second.column;
 
     // Largest contribution this nuclide makes at any time, used to name the bucket. Taken
     // over the whole grid rather than at one time so the label does not change identity
     // partway down a column.
     double peak = 0.0;
-    for (int k = 0; k < nT; ++k) {
-      peak =
-          std::max(peak, weightedByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(i)]);
+    for (std::size_t k = 0; k < nT; ++k) {
+      peak = std::max(peak, weightedByTime[k][i]);
     }
 
     const int dataIndex = data.indexOfKey(zai.key());
@@ -312,37 +311,35 @@ ResponseTable assemble(const NuclearData& data, std::span<const std::int64_t> ke
     }
   }
 
-  const int nC = static_cast<int>(buckets.size());
+  const std::size_t nC = buckets.size();
 
   ResponseTable table;
   table.metric = spec.metric;
   table.aggregate = spec.aggregate;
   table.domain = domain;
   table.unit = spec.unit;
-  table.contributors.resize(static_cast<std::size_t>(nC));
-  table.labels.resize(static_cast<std::size_t>(nC));
-  table.flags.assign(static_cast<std::size_t>(nC), kFlagNone);
-  table.values.assign(static_cast<std::size_t>(nT) * static_cast<std::size_t>(nC), 0.0);
-  table.totals.assign(static_cast<std::size_t>(nT), 0.0);
+  table.contributors.resize(nC);
+  table.labels.resize(nC);
+  table.flags.assign(nC, kFlagNone);
+  table.values.assign(nT * nC, 0.0);
+  table.totals.assign(nT, 0.0);
 
   for (const auto& [key, bucket] : buckets) {
-    const std::size_t c = static_cast<std::size_t>(bucket.column);
-    table.contributors[c] = ContributorId{key, bucket.dominant};
-    table.labels[c] = bucketLabel(spec.aggregate, key, bucket.dominant);
-    table.flags[c] = bucket.flags;
+    table.contributors[bucket.column] = ContributorId{key, bucket.dominant};
+    table.labels[bucket.column] = bucketLabel(spec.aggregate, key, bucket.dominant);
+    table.flags[bucket.column] = bucket.flags;
   }
 
   const double scale = unitScale(spec.unit) * domainScale(spec.metric, domain);
-  for (int k = 0; k < nT; ++k) {
-    const std::size_t base = static_cast<std::size_t>(k) * static_cast<std::size_t>(nC);
+  for (std::size_t k = 0; k < nT; ++k) {
+    const std::size_t base = k * nC;
     double total = 0.0;
-    for (int i = 0; i < nNuc; ++i) {
-      const double value =
-          weightedByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(i)] * scale;
-      table.values[base + static_cast<std::size_t>(columnOf[static_cast<std::size_t>(i)])] += value;
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      const double value = weightedByTime[k][i] * scale;
+      table.values[base + columnOf[i]] += value;
       total += value;
     }
-    table.totals[static_cast<std::size_t>(k)] = total;
+    table.totals[k] = total;
   }
 
   return table;
@@ -371,23 +368,23 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
                             const ResponseSpec& spec, Domain domain) {
   constexpr double kLineFloor = 1.0e-6;
 
-  const int nNuc = static_cast<int>(keys.size());
-  const int nT = static_cast<int>(atomsByTime.size());
+  const std::size_t nNuc = keys.size();
+  const std::size_t nT = atomsByTime.size();
 
   struct Column {
     std::int64_t emitterKey = 0;
     double energyEv = 0.0;
-    double weight = 0.0;  // lambda * intensity * the metric's kernel for the energy
-    int nuclide = 0;      // index into the result's space
+    double weight = 0.0;      // lambda * intensity * the metric's kernel for the energy
+    std::size_t nuclide = 0;  // index into the result's space
     int flags = kFlagNone;
   };
   std::vector<Column> columns;
   // Per nuclide, lambda times what its sub-floor lines deliver per becquerel: the weight of
   // everything this table does not carry as a column.
-  std::vector<double> droppedWeight(static_cast<std::size_t>(nNuc), 0.0);
+  std::vector<double> droppedWeight(nNuc, 0.0);
 
-  for (int i = 0; i < nNuc; ++i) {
-    const Zai zai = Zai::fromKey(keys[static_cast<std::size_t>(i)]);
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    const Zai zai = Zai::fromKey(keys[i]);
     const int dataIndex = data.indexOfKey(zai.key());
     if (dataIndex < 0) {
       continue;
@@ -423,53 +420,48 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
         continue;
       }
       if (perBecquerel < floor) {
-        droppedWeight[static_cast<std::size_t>(i)] += lambda * perBecquerel;
+        droppedWeight[i] += lambda * perBecquerel;
         continue;
       }
       columns.push_back(Column{zai.key(), line.energyEv, lambda * perBecquerel, i, flags});
     }
   }
 
-  const int nC = static_cast<int>(columns.size());
+  const std::size_t nC = columns.size();
 
   ResponseTable table;
   table.metric = spec.metric;
   table.aggregate = spec.aggregate;
   table.domain = domain;
   table.unit = spec.unit;
-  table.contributors.resize(static_cast<std::size_t>(nC));
-  table.labels.resize(static_cast<std::size_t>(nC));
-  table.flags.assign(static_cast<std::size_t>(nC), kFlagNone);
-  table.values.assign(static_cast<std::size_t>(nT) * static_cast<std::size_t>(nC), 0.0);
-  table.totals.assign(static_cast<std::size_t>(nT), 0.0);
+  table.contributors.resize(nC);
+  table.labels.resize(nC);
+  table.flags.assign(nC, kFlagNone);
+  table.values.assign(nT * nC, 0.0);
+  table.totals.assign(nT, 0.0);
 
-  for (int c = 0; c < nC; ++c) {
-    const Column& column = columns[static_cast<std::size_t>(c)];
+  for (std::size_t c = 0; c < nC; ++c) {
+    const Column& column = columns[c];
     const Zai emitter = Zai::fromKey(column.emitterKey);
-    table.contributors[static_cast<std::size_t>(c)] =
-        ContributorId{column.emitterKey, column.emitterKey, column.energyEv};
-    table.labels[static_cast<std::size_t>(c)] = lineLabel(emitter, column.energyEv);
-    table.flags[static_cast<std::size_t>(c)] = column.flags;
+    table.contributors[c] = ContributorId{column.emitterKey, column.emitterKey, column.energyEv};
+    table.labels[c] = lineLabel(emitter, column.energyEv);
+    table.flags[c] = column.flags;
   }
 
   const double scale = unitScale(spec.unit) * domainScale(spec.metric, domain);
-  for (int k = 0; k < nT; ++k) {
-    const std::size_t base = static_cast<std::size_t>(k) * static_cast<std::size_t>(nC);
+  for (std::size_t k = 0; k < nT; ++k) {
+    const std::size_t base = k * nC;
     double total = 0.0;
-    for (int c = 0; c < nC; ++c) {
-      const Column& column = columns[static_cast<std::size_t>(c)];
-      const double value =
-          column.weight *
-          atomsByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(column.nuclide)] *
-          scale;
-      table.values[base + static_cast<std::size_t>(c)] = value;
+    for (std::size_t c = 0; c < nC; ++c) {
+      const Column& column = columns[c];
+      const double value = column.weight * atomsByTime[k][column.nuclide] * scale;
+      table.values[base + c] = value;
       total += value;
     }
-    for (int i = 0; i < nNuc; ++i) {
-      total += droppedWeight[static_cast<std::size_t>(i)] *
-               atomsByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(i)] * scale;
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      total += droppedWeight[i] * atomsByTime[k][i] * scale;
     }
-    table.totals[static_cast<std::size_t>(k)] = total;
+    table.totals[k] = total;
   }
 
   return table;
@@ -482,12 +474,12 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
 std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
                                              std::span<const std::int64_t> keys,
                                              const std::vector<std::vector<double>>& atomsByTime) {
-  const int nNuc = static_cast<int>(keys.size());
-  std::vector<double> modelled(static_cast<std::size_t>(nNuc), 0.0);
-  std::vector<double> missing(static_cast<std::size_t>(nNuc), 0.0);
+  const std::size_t nNuc = keys.size();
+  std::vector<double> modelled(nNuc, 0.0);
+  std::vector<double> missing(nNuc, 0.0);
 
-  for (int i = 0; i < nNuc; ++i) {
-    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    const int index = data.indexOfKey(keys[i]);
     if (index < 0) {
       continue;
     }
@@ -495,18 +487,18 @@ std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
     if (lambda <= 0.0) {
       continue;
     }
-    modelled[static_cast<std::size_t>(i)] = lambda * discretePhotonEnergyEv(data.lines(index));
-    missing[static_cast<std::size_t>(i)] = lambda * data.continuumPhotonEv(index);
+    modelled[i] = lambda * discretePhotonEnergyEv(data.lines(index));
+    missing[i] = lambda * data.continuumPhotonEv(index);
   }
 
   std::vector<double> fractions(atomsByTime.size(), 0.0);
   for (std::size_t k = 0; k < atomsByTime.size(); ++k) {
     double modelledTotal = 0.0;
     double missingTotal = 0.0;
-    for (int i = 0; i < nNuc; ++i) {
-      const double atoms = atomsByTime[k][static_cast<std::size_t>(i)];
-      modelledTotal += modelled[static_cast<std::size_t>(i)] * atoms;
-      missingTotal += missing[static_cast<std::size_t>(i)] * atoms;
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      const double atoms = atomsByTime[k][i];
+      modelledTotal += modelled[i] * atoms;
+      missingTotal += missing[i] * atoms;
     }
     const double total = modelledTotal + missingTotal;
     fractions[k] = total > 0.0 ? missingTotal / total : 0.0;
@@ -521,12 +513,12 @@ std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
 std::vector<double> meanOpticalDepths(const NuclearData& data, std::span<const std::int64_t> keys,
                                       const std::vector<std::vector<double>>& weightedByTime,
                                       const exposure::PointSourceGeometry& geometry) {
-  const int nNuc = static_cast<int>(keys.size());
-  std::vector<double> depth(static_cast<std::size_t>(nNuc), 0.0);
-  for (int i = 0; i < nNuc; ++i) {
-    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+  const std::size_t nNuc = keys.size();
+  std::vector<double> depth(nNuc, 0.0);
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    const int index = data.indexOfKey(keys[i]);
     if (index >= 0) {
-      depth[static_cast<std::size_t>(i)] = exposure::meanOpticalDepth(data.lines(index), geometry);
+      depth[i] = exposure::meanOpticalDepth(data.lines(index), geometry);
     }
   }
 
@@ -534,10 +526,10 @@ std::vector<double> meanOpticalDepths(const NuclearData& data, std::span<const s
   for (std::size_t k = 0; k < weightedByTime.size(); ++k) {
     double weighted = 0.0;
     double total = 0.0;
-    for (int i = 0; i < nNuc; ++i) {
-      const double share = weightedByTime[k][static_cast<std::size_t>(i)];
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      const double share = weightedByTime[k][i];
       if (share > 0.0) {
-        weighted += share * depth[static_cast<std::size_t>(i)];
+        weighted += share * depth[i];
         total += share;
       }
     }
@@ -574,50 +566,51 @@ void fillPhotonCaveats(ResponseTable& table, const NuclearData& data,
 std::vector<double> packCoverageByTime(const NuclearData& data, std::span<const std::int64_t> keys,
                                        const std::vector<std::vector<double>>& atomsByTime,
                                        const ResponseSpec& spec) {
-  const int nNuc = static_cast<int>(keys.size());
-  const int nT = static_cast<int>(atomsByTime.size());
+  const std::size_t nNuc = keys.size();
+  const std::size_t nT = atomsByTime.size();
 
   // The basis quantity per atom, which is what a coefficient would have multiplied.
-  std::vector<double> perAtom(static_cast<std::size_t>(nNuc), 0.0);
-  std::vector<char> counted(static_cast<std::size_t>(nNuc), 0);
-  for (int i = 0; i < nNuc; ++i) {
-    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+  std::vector<double> perAtom(nNuc, 0.0);
+  std::vector<char> counted(nNuc, 0);
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    // The store indexes with int across its whole interface, so this is the one conversion the
+    // loop cannot avoid -- and it is a different index space from `i`, which is why it is named.
+    const int index = data.indexOfKey(keys[i]);
     if (index < 0) {
       continue;
     }
     switch (spec.pack->pack->provenance().basis) {
       case PackBasis::Activity:
-        perAtom[static_cast<std::size_t>(i)] = data.decayConstant(index);
+        perAtom[i] = data.decayConstant(index);
         break;
       case PackBasis::Atoms:
-        perAtom[static_cast<std::size_t>(i)] = 1.0;
+        perAtom[i] = 1.0;
         break;
       case PackBasis::Mass:
-        perAtom[static_cast<std::size_t>(i)] = data.molarMassGPerMol(index) / units::kAvogadro;
+        perAtom[i] = data.molarMassGPerMol(index) / units::kAvogadro;
         break;
     }
     // Folded counts as covered: the daughter's contribution is inside a parent's coefficient,
     // so it is accounted for even though it carries no weight of its own. Reporting it as
     // missing is how a coverage figure lies about the nuclides that usually dominate.
-    counted[static_cast<std::size_t>(i)] = static_cast<char>(
-        spec.pack->coverage[static_cast<std::size_t>(index)] != PackCoverage::None);
+    counted[i] = static_cast<char>(spec.pack->coverage[static_cast<std::size_t>(index)] !=
+                                   PackCoverage::None);
   }
 
-  std::vector<double> coverage(static_cast<std::size_t>(nT), 0.0);
-  for (int k = 0; k < nT; ++k) {
+  std::vector<double> coverage(nT, 0.0);
+  for (std::size_t k = 0; k < nT; ++k) {
     double total = 0.0;
     double carried = 0.0;
-    for (int i = 0; i < nNuc; ++i) {
-      const double quantity = perAtom[static_cast<std::size_t>(i)] *
-                              atomsByTime[static_cast<std::size_t>(k)][static_cast<std::size_t>(i)];
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      const double quantity = perAtom[i] * atomsByTime[k][i];
       total += quantity;
-      if (counted[static_cast<std::size_t>(i)] != 0) {
+      if (counted[i] != 0) {
         carried += quantity;
       }
     }
     // An empty inventory covers nothing and misses nothing; reporting 0% would read as a
     // warning about a pack that has not been asked anything yet.
-    coverage[static_cast<std::size_t>(k)] = total > 0.0 ? carried / total : 1.0;
+    coverage[k] = total > 0.0 ? carried / total : 1.0;
   }
   return coverage;
 }
@@ -1033,27 +1026,27 @@ ResponseTable buildResponse(const NuclearData& data, const DecayResult& result,
                             const ResponseSpec& spec) {
   requireUsableSpec(data, spec, Domain::Instant);
 
-  const int nNuc = result.nuclideCount();
-  const int nT = result.timeCount();
+  const std::size_t nNuc = result.nuclideKeys.size();
+  const std::size_t nT = result.times.size();
 
-  std::vector<double> weight(static_cast<std::size_t>(nNuc), 0.0);
-  for (int i = 0; i < nNuc; ++i) {
-    const int index = data.indexOfKey(result.nuclideKeys[static_cast<std::size_t>(i)]);
-    weight[static_cast<std::size_t>(i)] = index >= 0 ? weightFor(spec, data, index) : 0.0;
+  std::vector<double> weight(nNuc, 0.0);
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    // indexOfKey answers in the STORE's index space, which is int-based and is not this loop's.
+    const int index = data.indexOfKey(result.nuclideKeys[i]);
+    weight[i] = index >= 0 ? weightFor(spec, data, index) : 0.0;
   }
 
-  std::vector<std::vector<double>> weighted(static_cast<std::size_t>(nT));
-  std::vector<std::vector<double>> rawAtoms(static_cast<std::size_t>(nT));
-  for (int k = 0; k < nT; ++k) {
-    const std::span<const double> atoms = result.atomsAt(k);
-    std::vector<double> row(static_cast<std::size_t>(nNuc), 0.0);
+  std::vector<std::vector<double>> weighted(nT);
+  std::vector<std::vector<double>> rawAtoms(nT);
+  for (std::size_t k = 0; k < nT; ++k) {
+    const std::span<const double> atoms = result.atomsAt(static_cast<int>(k));
+    std::vector<double> row(nNuc, 0.0);
     std::vector<double> raw(atoms.begin(), atoms.end());
-    for (int i = 0; i < nNuc; ++i) {
-      row[static_cast<std::size_t>(i)] =
-          weight[static_cast<std::size_t>(i)] * atoms[static_cast<std::size_t>(i)];
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      row[i] = weight[i] * atoms[i];
     }
-    weighted[static_cast<std::size_t>(k)] = std::move(row);
-    rawAtoms[static_cast<std::size_t>(k)] = std::move(raw);
+    weighted[k] = std::move(row);
+    rawAtoms[k] = std::move(raw);
   }
 
   // The line assembler applies its own per-line weights, so it takes atoms directly rather
@@ -1080,17 +1073,16 @@ ResponseTable buildIntervalResponse(const NuclearData& data, std::span<const std
     throw NusiftError(tagged(kModule, "interval integral does not match its index space"));
   }
 
-  const int nNuc = static_cast<int>(keys.size());
+  const std::size_t nNuc = keys.size();
   const std::vector<double> integratedAtoms(integral.begin(), integral.end());
 
   // lambda against atom-seconds: a dimensionless count of decays over the window, or the
   // roentgen accrued once domainScale() has taken the hour back out.
-  std::vector<std::vector<double>> weighted{std::vector<double>(static_cast<std::size_t>(nNuc))};
-  for (int i = 0; i < nNuc; ++i) {
-    const int index = data.indexOfKey(keys[static_cast<std::size_t>(i)]);
+  std::vector<std::vector<double>> weighted{std::vector<double>(nNuc)};
+  for (std::size_t i = 0; i < nNuc; ++i) {
+    const int index = data.indexOfKey(keys[i]);
     const double weight = index >= 0 ? weightFor(spec, data, index) : 0.0;
-    weighted[0][static_cast<std::size_t>(i)] =
-        weight * integratedAtoms[static_cast<std::size_t>(i)];
+    weighted[0][i] = weight * integratedAtoms[i];
   }
 
   // Same split as the instantaneous builder, for the same reason: the line assembler applies
