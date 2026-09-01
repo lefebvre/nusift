@@ -16,6 +16,7 @@ add_library(nusift
   nucdata/fission_yield.cpp
   seed/seed_fission.cpp
   exposure/air_coefficients.cpp
+  exposure/dose_coefficients.cpp
   exposure/point_source.cpp
   triage/response.cpp
   triage/ranking.cpp
@@ -95,6 +96,7 @@ if(NUSIFT_INSTALL)
 
   install(FILES
     exposure/air_coefficients.hpp
+    exposure/dose_coefficients.hpp
     exposure/point_source.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/exposure)
 

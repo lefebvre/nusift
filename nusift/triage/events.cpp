@@ -540,7 +540,8 @@ void requireSameCurve(const ResponseTable& table, const ResponseEvaluator& evalu
   const exposure::PointSourceGeometry& asked = spec.geometry;
   const bool sameGeometry =
       sampled.distanceM == asked.distanceM && sampled.airDensityKgM3 == asked.airDensityKgM3 &&
-      sampled.airAttenuation == asked.airAttenuation && sampled.buildup == asked.buildup;
+      sampled.airAttenuation == asked.airAttenuation && sampled.buildup == asked.buildup &&
+      sampled.irradiation == asked.irradiation;
   if (table.metric != spec.metric || table.aggregate != spec.aggregate || table.unit != spec.unit ||
       !sameGeometry) {
     throw InputError(tagged(kModule,

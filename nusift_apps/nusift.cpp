@@ -66,6 +66,7 @@ struct CommonOptions {
   std::string metric = "activity";
   std::string aggregate = "nuclide";
   std::string unit;
+  std::string irradiation = "ap";
   double distanceM = 1.0;
   double airDensity = 1.205;
   bool noAirAttenuation = false;
@@ -133,6 +134,13 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
   // computed at, so these are reported in the output header alongside the values.
   app->add_option("--distance", options.distanceM, "Point-source distance in metres")
       ->check(CLI::PositiveNumber);
+  // Effective dose is defined for a body in a field, so how the body stands in it is half of
+  // what a sievert means. Ignored by every unit that is not a sievert, which is why it sits
+  // beside the distance rather than in front of it.
+  app->add_option("--irradiation", options.irradiation,
+                  "Irradiation geometry for sievert units: ap, pa, llat, rlat, rot, iso")
+      ->check(CLI::IsMember(
+          {"ap", "pa", "llat", "rlat", "rot", "iso", "AP", "PA", "LLAT", "RLAT", "ROT", "ISO"}));
   app->add_option("--air-density", options.airDensity, "Air density in kg/m^3 (lower at elevation)")
       ->check(CLI::PositiveNumber);
   app->add_flag("--no-air-attenuation", options.noAirAttenuation,
@@ -180,6 +188,10 @@ exposure::PointSourceGeometry geometryFrom(const CommonOptions& options) {
   geometry.airDensityKgM3 = options.airDensity;
   geometry.airAttenuation = !options.noAirAttenuation;
   geometry.buildup = options.buildup;
+  if (!exposure::parseIrradiation(options.irradiation, geometry.irradiation)) {
+    throw InputError("exposure: \"" + options.irradiation +
+                     "\" is not an irradiation geometry (ap, pa, llat, rlat, rot, iso)");
+  }
   return geometry;
 }
 
@@ -248,7 +260,19 @@ std::string describeGeometry(const CommonOptions& options, Metric metric, Unit u
   char distance[32];
   std::snprintf(distance, sizeof(distance), "%.3g", options.distanceM);
 
-  std::string text = "point source at ";
+  std::string text;
+  // Which QUANTITY a sievert is cannot be left to the unit alone: the same metric in gray is
+  // air kerma and in sievert is effective dose to a person, computed for a stated orientation.
+  // A report that named neither would leave the reader to assume, and the assumption people
+  // arrive with is the one this replaced.
+  if (isEffectiveDoseUnit(unit)) {
+    exposure::Irradiation irradiation = exposure::Irradiation::AP;
+    exposure::parseIrradiation(options.irradiation, irradiation);
+    text += "ICRP 116 effective dose, ";
+    text += exposure::irradiationName(irradiation);
+    text += ", ";
+  }
+  text += "point source at ";
   text += distance;
   text += " m, ";
   text += options.noAirAttenuation ? "no air attenuation" : "air attenuation on";

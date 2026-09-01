@@ -72,10 +72,13 @@ GAMMA_UNIT_SCALE = {
 SOFT_PHOTON_EV = 100.0e3
 SOFT_FRACTION_LIMIT = 0.30
 
-# R*m^2/(h*Bq) -> mSv/(h*MBq) at 1 m, for comparison against tabulated effective-dose
-# constants: 0.00876 Gy/R with a photon radiation weighting factor of 1, then per MBq, then
-# milli. See docs/exposure.md section 6 -- this column is air kerma wearing a sievert label.
+# R*m^2/(h*Bq) -> mSv/(h*MBq) at 1 m: 0.00876 Gy/R, then per MBq, then milli. This is the AIR
+# KERMA column, kept because showing what the sievert column used to hold is the only way a
+# reader sees the size of the repair. See docs/exposure.md section 6.
 TO_MSV_PER_H_MBQ = 0.00876 * 1.0e6 * 1.0e3
+# Effective dose in Sv/(h.Bq) to the same units. No kerma conversion in it, because the
+# quantity is already a sievert -- which is the whole point of the column it checks.
+SV_TO_MSV_PER_H_MBQ = 1.0e6 * 1.0e3
 
 SECONDS_PER = {"s": 1.0, "min": 60.0, "h": 3600.0, "d": 86400.0, "y": 365.25 * 86400.0}
 
@@ -264,20 +267,28 @@ def chain_yield_rows(data, fissions=1.0e20):
 def icrp116_rows(data):
     """NuSIFT's sievert column against tabulated ICRP 116 effective-dose constants.
 
-    This is the honesty check rather than an agreement check. NuSIFT reports air kerma with a
-    photon radiation weighting factor of 1, which is not effective dose to a person; near 1 MeV
-    the two happen to coincide, and going soft they do not. Am-241 is gated on DIVERGING by
-    about a factor of five, so the caveat can never quietly stop being true.
+    This was once an honesty check: the column held air kerma with a photon radiation weighting
+    factor of 1, the two quantities coincide near 1 MeV and diverge going soft, and Am-241 was
+    gated on STILL diverging by a factor of five so the caveat could not quietly stop being
+    true. The kernel that made the column mean what it says turns it into an agreement check,
+    and the expected ratios are 1.00 because the quantities are now the same quantity.
+
+    Computed through effective_dose_constant, in the AP irradiation geometry the reference is
+    tabulated in. Air kerma has not gone anywhere -- it is what the gray and roentgen columns
+    report, and gamma_constant still returns it.
     """
     rows = []
     for reference in load_reference("icrp116_ratios"):
         published, unit, tolerance, gate, source, note = _common(reference)
         expected_ratio = float(reference["expected_ratio"])
-        computed = data.gamma_constant(reference["key"]) * TO_MSV_PER_H_MBQ
+        computed = data.effective_dose_constant(reference["key"]) * SV_TO_MSV_PER_H_MBQ
         ratio = computed / published
         row = _row(reference["key"], published, computed, unit, tolerance, gate, source, note)
         row["ratio"] = ratio
         row["expected_ratio"] = expected_ratio
+        # Kept beside the dose so the report can show what the column used to hold, which is
+        # the only way a reader sees the size of the repair rather than being told about it.
+        row["air_kerma"] = data.gamma_constant(reference["key"]) * TO_MSV_PER_H_MBQ
         row["residual"] = (ratio - expected_ratio) / expected_ratio
         row["within"] = abs(row["residual"]) <= tolerance
         rows.append(row)

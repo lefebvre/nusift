@@ -370,9 +370,10 @@ command of its own:
 
 The units are interval units — roentgen rather than roentgen per hour, decays rather than
 becquerel — because the values are accrued totals, and `buildIntervalResponse()` refuses the rest
-on the same gating every other interval answer uses. What the budget *means* is the caller's:
-today's sievert column is air kerma with a photon weighting factor of 1
-([exposure.md §6](exposure.md)), so a worker-dose budget is not yet what this inverts.
+on the same gating every other interval answer uses. A budget in sieverts now means what a reader
+takes it to mean -- ICRP 116 effective dose, in the irradiation geometry the report names
+([exposure.md §6](exposure.md#6-units)) -- so a dose budget is a dose budget rather than an
+exposure standing in for one.
 
 This is the expensive curve in the library, and deliberately not disguised as a cheap one. Each
 sample is an interval integral — two to three solves rather than one, with nothing shared between

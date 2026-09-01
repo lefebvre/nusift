@@ -51,15 +51,13 @@ TEST(Units, ActivityConversion) {
   EXPECT_EQ(kBqPerCi, 3.7e10);  // exact by definition
 }
 
-// Exposure -> absorbed dose in air. NuSIFT reports one physical quantity and converts with
-// a photon radiation weighting factor of 1, so Gy/R and Sv/R are numerically the same
-// constant. Pinned so a future "improvement" to an ICRP-74 H*(10) coefficient has to be a
-// deliberate, visible change.
+// Exposure -> absorbed dose in air, which is all this constant does. Pinned to its definition
+// so a change to it has to be deliberate; the sievert does not appear here at all, because a
+// sievert is no longer any multiple of this number.
 TEST(Units, ExposureToDoseConversion) {
   EXPECT_EQ(kGyPerR, 0.00876);
-  EXPECT_EQ(kRadiationWeightingPhoton, 1.0);
-  const double exposureRPerHour = 1.0;
-  EXPECT_NEAR(exposureRPerHour * kGyPerR * kRadiationWeightingPhoton, 0.00876, 1e-15);
+  const double exposureR = 2.5;
+  EXPECT_NEAR(exposureR * kGyPerR, 0.0219, 1e-15);
 }
 
 TEST(Units, CrossSectionConversion) {

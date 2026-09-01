@@ -566,9 +566,15 @@ TEST(ResponseExposure, ScalesWithGeometry) {
   EXPECT_NEAR(atTwo, atOne / 4.0, atOne * 1e-12);
 }
 
-// Sv/h is R/h times the air-kerma conversion, applied once at the very end.
-TEST(ResponseExposure, SievertIsTheRoentgenValueConverted) {
-  const NuclearData data = chainWithOnePhotonEmitter();
+// The unit selects the QUANTITY on this metric, and the two quantities are not proportional.
+// A sievert is ICRP 116 effective dose; a roentgen and a gray are air kerma. Whether they
+// happen to agree is a fact about the photon's energy, not about the units.
+//
+// At 662 keV they nearly do -- ICRP's own Table A.2 puts effective dose at 1.02 times air
+// kerma there, which is the coincidence that let the old air-kerma-as-sievert column look
+// right for caesium and cobalt.
+TEST(ResponseExposure, SievertIsEffectiveDoseAndNotAConvertedRoentgen) {
+  const NuclearData data = chainWithOnePhotonEmitter();  // one 661.657 keV line
   Inventory inv;
   inv.add(Zai{50, 100, 0}, 1.0e20);
   const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
@@ -576,12 +582,63 @@ TEST(ResponseExposure, SievertIsTheRoentgenValueConverted) {
   ResponseSpec roentgen;
   roentgen.metric = Metric::Exposure;
   roentgen.unit = Unit::RoentgenPerHour;
+  roentgen.geometry.airAttenuation = false;
   ResponseSpec sievert = roentgen;
   sievert.unit = Unit::SievertPerHour;
 
   const double inR = buildResponse(data, result, roentgen).totals[0];
   const double inSv = buildResponse(data, result, sievert).totals[0];
-  EXPECT_NEAR(inSv, inR * units::kGyPerR, inSv * 1e-12);
+  const double asIfConverted = inR * units::kGyPerR;
+  EXPECT_NEAR(inSv / asIfConverted, 1.02, 0.01);
+}
+
+// And where the old column was wrong, it was wrong by a factor rather than by a rounding. At
+// 20 keV air keeps absorbing strongly while a body's organs are shielded by everything in
+// front of them, so effective dose is a seventh of the air kerma -- ICRP Table A.2 gives 0.130
+// Sv/Gy in AP. The nuclide this describes is Am-241, whose spectrum is mostly this soft.
+TEST(ResponseExposure, ASoftEmitterNoLongerReportsAirKermaAsASievert) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  synth::addLines(arrays, 1, {2.0e4}, {0.9});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec roentgen;
+  roentgen.metric = Metric::Exposure;
+  roentgen.unit = Unit::RoentgenPerHour;
+  roentgen.geometry.airAttenuation = false;
+  ResponseSpec sievert = roentgen;
+  sievert.unit = Unit::SievertPerHour;
+
+  const double inR = buildResponse(data, result, roentgen).totals[0];
+  const double inSv = buildResponse(data, result, sievert).totals[0];
+  EXPECT_NEAR(inSv / (inR * units::kGyPerR), 0.130, 0.130 * 0.02);
+}
+
+// The irradiation geometry is part of what a sievert means, so it has to reach the weight.
+// Facing the source and facing away from it are different answers for the same field, and a
+// table that ignored the field would report one of them under both names.
+TEST(ResponseExposure, TheIrradiationGeometryReachesTheWeight) {
+  const NuclearData data = chainWithOnePhotonEmitter();
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec ap;
+  ap.metric = Metric::Exposure;
+  ap.unit = Unit::SievertPerHour;
+  ResponseSpec pa = ap;
+  pa.geometry.irradiation = exposure::Irradiation::PA;
+
+  const double facing = buildResponse(data, result, ap).totals[0];
+  const double away = buildResponse(data, result, pa).totals[0];
+  EXPECT_GT(facing, away);
+  // ICRP 116 Table A.1 at 0.662 MeV, AP over PA. Not to the last digit: the caesium line is
+  // 661.657 keV, a few hundred eV below ICRP's grid point, so both columns are interpolated
+  // and the ratio moves in the fifth figure.
+  EXPECT_NEAR(facing / away, 3.17 / 2.62, 1.0e-3);
 }
 
 // The table carries the optical depth of the air path -- mu(E) rho d for a single line -- and

@@ -701,6 +701,50 @@ def test_windows_flag_the_edges_the_grid_never_observed(data, result):
 
 
 @needs_store
+def test_the_sievert_column_is_effective_dose_and_names_its_geometry(data, result):
+    """Sv is ICRP 116 effective dose, Gy is air kerma, and they are different quantities rather
+    than two spellings of one. On Am-241 -- soft, and the nuclide the repair was for -- they are
+    a factor of four apart."""
+    _, res = result
+    ap = nusift.PointSource(distance_m=1.0)
+    assert ap.irradiation == "AP"
+
+    sievert = nusift.response(data, res, metric="exposure", units="Sv/h", geometry=ap)
+    gray = nusift.response(data, res, metric="exposure", units="Gy/h", geometry=ap)
+    assert float(sievert.totals[0]) != float(gray.totals[0])
+
+    # The orientation reaches the numbers, and is carried on the table that was built with it.
+    rot = nusift.PointSource(distance_m=1.0, irradiation="rot")
+    assert rot.irradiation == "ROT"
+    rotated = nusift.response(data, res, metric="exposure", units="Sv/h", geometry=rot)
+    assert float(rotated.totals[0]) < float(sievert.totals[0])
+
+    with pytest.raises(nusift.InputError):
+        nusift.PointSource(irradiation="sideways")
+
+
+@needs_store
+def test_effective_dose_constant_matches_the_published_coefficient(data):
+    """The gamma constant's counterpart for the quantity a sievert names. Checked against ICRP
+    116 as tabulated by Peplow (2020), in mSv/(h.MBq) at 1 m: the same three nuclides the
+    validation suite gates, one of which used to be off by a factor of five."""
+    for nuclide, published in (("Co-60", 3.062e-4), ("Ba-137m", 8.228e-5), ("Am-241", 5.413e-6)):
+        computed = data.effective_dose_constant(nuclide) * 1.0e9
+        assert computed == pytest.approx(published, rel=0.03), nuclide
+
+    # Air kerma has not gone anywhere; it is simply no longer what a sievert means. For Am-241
+    # it is still five times the effective dose, which is the size of what was repaired.
+    kerma = data.gamma_constant("Am-241") * 0.00876 * 1.0e9
+    assert kerma / (data.effective_dose_constant("Am-241") * 1.0e9) > 4.0
+
+    assert data.effective_dose_constant("Am-241", irradiation="iso") < data.effective_dose_constant(
+        "Am-241", irradiation="ap"
+    )
+    with pytest.raises(nusift.InputError):
+        data.effective_dose_constant("Am-241", irradiation="sideways")
+
+
+@needs_store
 def test_an_evaluator_narrows_events_a_table_alone_interpolates(data, result):
     """The table carries samples; the evaluator carries a way to ask what happens between two of
     them. Same grid, same crossing, placed by solving instead of by interpolating -- and

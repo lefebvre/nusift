@@ -36,11 +36,15 @@ inline constexpr double kBqPerCi = 3.7e10;  // exact by definition of the curie
 
 // --- exposure and dose ------------------------------------------------------
 // Air kerma per unit exposure. The roentgen is defined as 2.58e-4 C/kg, which with a mean
-// ionization energy of 33.97 J/C gives 8.76e-3 Gy per R. NuSIFT reports one physical
-// quantity -- photon exposure -- and converts to Sv with a radiation weighting factor of 1;
-// this is NOT an ICRP-74 fluence-to-H*(10) conversion, and the headers that use it say so.
+// ionization energy of 33.97 J/C gives 8.76e-3 Gy per R.
+//
+// It relates the two AIR-KERMA units to each other and nothing else. There is deliberately no
+// radiation weighting factor beside it any more: a sievert in NuSIFT is ICRP 116 effective
+// dose, computed through a fluence-to-dose kernel with the irradiation geometry explicit, and
+// no multiple of an air kerma is that quantity. The constant that used to turn one into the
+// other is gone rather than deprecated, because the whole failure mode was that it looked like
+// a units conversion.
 inline constexpr double kGyPerR = 0.00876;
-inline constexpr double kRadiationWeightingPhoton = 1.0;
 
 // Dry air at ~20 C, 101.325 kPa. Scales the mass attenuation coefficient to a linear one;
 // override it for a site at elevation.

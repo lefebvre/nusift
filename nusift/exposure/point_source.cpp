@@ -68,6 +68,17 @@ double pointFluenceCoeff(double energyEv, const PointSourceGeometry& geometry) {
   return spreadingAndAttenuation(energyEv, geometry);
 }
 
+double pointEffectiveDoseCoeff(double energyEv, const PointSourceGeometry& geometry) {
+  requireUsableGeometry(geometry);
+  if (!(energyEv > 0.0)) {
+    return 0.0;
+  }
+  // Fluence at the point [1/m^2 per photon/s], times Sv*m^2 per photon/m^2, times seconds per
+  // hour: the metres and the photons cancel and what is left is Sv/h per photon/s emitted.
+  return spreadingAndAttenuation(energyEv, geometry) *
+         effectiveDosePerFluence(energyEv, geometry.irradiation) * units::kSecondsPerHour;
+}
+
 double gammaConstant(LineSpectrum lines) {
   // Vacuum, so the attenuation exponential is 1 and the 1/(4 pi d^2) factors out to leave a
   // distance-independent constant. This is the only configuration in which a per-nuclide
@@ -95,6 +106,15 @@ double fluenceRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& ge
   double total = 0.0;
   for (const GammaLine& line : lines) {
     total += line.intensity * pointFluenceCoeff(line.energyEv, geometry);
+  }
+  return total;
+}
+
+double effectiveDoseRatePerBecquerel(LineSpectrum lines, const PointSourceGeometry& geometry) {
+  requireUsableGeometry(geometry);
+  double total = 0.0;
+  for (const GammaLine& line : lines) {
+    total += line.intensity * pointEffectiveDoseCoeff(line.energyEv, geometry);
   }
   return total;
 }
