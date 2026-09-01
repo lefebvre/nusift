@@ -700,7 +700,8 @@ def test_windows_flag_the_edges_the_grid_never_observed(data, result):
     assert below == [] or below[0].start_s >= 0.0
 
 
-PACK = Path(__file__).resolve().parents[2] / "data" / "packs" / "iaea-ssr6-a2.csv"
+PACKS = Path(__file__).resolve().parents[2] / "data" / "packs"
+PACK = PACKS / "iaea-ssr6-a2.csv"
 needs_pack = pytest.mark.skipif(not PACK.is_file(), reason="no shipped pack")
 
 
@@ -725,6 +726,50 @@ def test_a_pack_is_a_metric_carrying_its_own_provenance(data):
     assert pack.folded_into("Ba-137m") == ["Cs-137"]
     # Chains nest, so one daughter can sit under several parents.
     assert len(pack.folded_into("Tl-208")) > 1
+
+
+@needs_store
+@needs_pack
+def test_the_intake_packs_carry_the_published_coefficients(data):
+    """Values published widely enough to be recognised on sight. They also guard the extraction:
+    every exponent's minus sign is a glyph the PDF's text layer drops, so a transcription that
+    lost it would put these out by twenty-two orders of magnitude rather than a little."""
+    ingestion = nusift.load_pack(str(PACKS / "icrp119-ingestion-worker.csv"))
+    assert ingestion.unit == "Sv"
+    assert ingestion.basis == "activity"
+    assert ingestion.folds_progeny is False
+    assert "worker" in ingestion.scenario
+
+    assert ingestion.coefficient("Cs-137") == pytest.approx(1.3e-8, rel=1e-6)
+    assert ingestion.coefficient("I-131") == pytest.approx(2.2e-8, rel=1e-6)
+    assert ingestion.coefficient("Sr-90") == pytest.approx(2.8e-8, rel=1e-6)
+
+    inhalation = nusift.load_pack(str(PACKS / "icrp119-inhalation-worker-5um.csv"))
+    assert inhalation.coefficient("Pu-239") == pytest.approx(3.2e-5, rel=1e-6)
+    assert inhalation.coefficient("Am-241") == pytest.approx(2.7e-5, rel=1e-6)
+    # ICRP gives these no particulate coefficient at all -- they are gases, in another table --
+    # so they are absent rather than approximated, and coverage will say so.
+    assert inhalation.covers("H-3") is False
+    assert ingestion.covers("H-3") is True
+
+
+@needs_store
+@needs_pack
+def test_intake_and_external_hazard_rank_differently(data):
+    """The whole argument for ranking by the metric you care about, a fourth time. Caesium leads
+    the ingestion hazard and strontium the inhalation hazard, on one inventory at one instant."""
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+    inv.add("Sr-90", 1.0e17)
+    res = nusift.decay(data, inv, [0.0])
+
+    def leader(name):
+        pack = nusift.load_pack(str(PACKS / name))
+        table = nusift.response(data, res, pack=nusift.resolve_pack(pack, data, inv))
+        return table.rank(top=1).contributors[0].label
+
+    assert leader("icrp119-ingestion-worker.csv") == "Cs-137"
+    assert leader("icrp119-inhalation-worker-5um.csv") == "Sr-90"
 
 
 @needs_store

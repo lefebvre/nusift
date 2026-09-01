@@ -275,6 +275,33 @@ than it sounds, and both are in the shipped pack:
   covers everything below it. Tl-208 sits under Bi-212, Pb-212, Ra-224 and Th-228; any one of
   them being seeded accounts for it.
 
+### What the shipped packs are
+
+Three, and the differences between them are the format's whole argument:
+
+| pack | quantity | basis | progeny | scenario |
+| --- | --- | --- | --- | --- |
+| `iaea-ssr6-a2` | A2 sum of fractions, dimensionless | activity | **folded**, 127 daughters into 75 parents | slow lung absorption, 2012 edition |
+| `icrp119-ingestion-worker` | committed effective dose if the whole inventory were ingested, Sv | activity | excluded | worker, most restrictive f1 |
+| `icrp119-inhalation-worker-5um` | the same by inhalation, Sv | activity | excluded | worker, 5 µm AMAD, most restrictive absorption type |
+
+The two ICRP packs are **progeny excluded** where SSR-6 is folded, and the reason is not a
+convention difference but a physical one: an intake coefficient covers the daughters that grow
+in *inside the body* after intake, which is a different population from the daughters already
+present in the material — those are their own intake, with their own coefficients, and summing
+each nuclide on its own terms is the standard treatment. A transport A2 value, by contrast,
+absorbs the daughters that travel in the package.
+
+They also demonstrate the point ranking exists to make. On one inventory at one instant, the
+ingestion hazard is led by Cs-137 and the inhalation hazard by Sr-90, because strontium's
+inhalation coefficient is an order of magnitude further above caesium's than its ingestion
+coefficient is. Same atoms, same solve, different weight vector, different answer.
+
+An intake coefficient is `domain: instant` for a reason the field exists to catch: it multiplies
+**becquerel**, so against an activity it gives sieverts, and against a time-integrated activity
+in becquerel-seconds it would give sievert-seconds, which is not a quantity. The pack declares
+the domain and the response layer refuses the other.
+
 ### What a pack is not
 
 A weighted sum, and nothing more. SSR-6's A2 table gives a **screening index** -- the sum of
