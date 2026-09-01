@@ -286,4 +286,73 @@ EventSeries taskSeries(const NuclearData& data, const Inventory& inventory,
                        double durationSeconds, const DecayOptions& options = {},
                        bool refine = false);
 
+// --- the stay time: the other inversion of the same integral -------------------
+//
+// taskSeries answers "when should a job of fixed length be done": the DURATION is given and the
+// start is the unknown, so the answer is a search along a curve of windows. This answers its
+// converse -- "how long may someone who goes in now stay" -- where the start is given and the
+// LENGTH is the unknown. It is a root-find in the size of one window rather than a search over
+// many of them, and no amount of sampling the task curve produces it.
+//
+// What makes it a well-posed root-find rather than a search is a property nothing else in this
+// file can claim about its curve:
+//
+//     A(D) = integral over [t0, t0 + D] of R(tau) dtau
+//
+// is monotonically NON-DECREASING in D, because no response weight can be negative -- lambda for
+// activity, a sum of photon intensities through a non-negative kernel for exposure and dose, and
+// a coefficient pack refuses a negative coefficient at load. So A meets a positive budget at
+// most once. There is no second root to land on by accident, no question of which crossing is
+// meant, and the bracket [0, maxDuration] is valid by construction because A(0) = 0 exactly.
+//
+// The budget has to be in a quantity that means what a limit means. Since the sievert became
+// ICRP 116 effective dose, that can be the quantity an occupational dose limit is actually
+// written in, rather than an air kerma standing in for one; the unit still has to be an
+// INTERVAL unit, because a stay accrues a total rather than holding a rate, and
+// buildIntervalResponse() refuses the rest where that refusal already lives.
+struct StayTime {
+  double startSeconds = 0.0;
+  double budget = 0.0;  // in spec.unit
+  // The longest stay considered. Part of the question rather than a solver setting: "how long
+  // can I stay" asked of a decaying source has an operational ceiling behind it -- a shift, a
+  // campaign -- and a search with no ceiling would have to invent one.
+  double maxDurationSeconds = 0.0;
+
+  // How long the budget lasts. Meaningful only when `bounded`; left at zero otherwise, so a
+  // caller that read the number without the flag would get "leave immediately" for "stay as
+  // long as you like", which is the worst possible way to be wrong about this question.
+  double durationSeconds = 0.0;
+  bool bounded = false;
+
+  // What a stay of the FULL maxDurationSeconds accrues. Chiefly the answer when !bounded, where
+  // it is what makes that case useful rather than merely negative: not "the budget is never
+  // spent" but "a stay this long costs 62% of it". Always computed, because the search takes
+  // this sample first to find out whether a bracket exists at all.
+  double accruedAtMax = 0.0;
+
+  // The width the duration was narrowed to -- the honest error bar on it, on the same terms as
+  // TrajectoryEvent::locatedToSeconds. Zero when the budget is spent exactly at the ceiling.
+  double locatedToSeconds = 0.0;
+  // False when the search hit maxIterations first. The duration is still inside its bracket,
+  // only more loosely placed than was asked for.
+  bool converged = true;
+
+  // Interval integrals spent. Unlike everything else here the cost is not the caller's sampling
+  // but this function's iteration, so it is reported rather than left to be guessed at.
+  int samples = 0;
+};
+
+// How long a stay beginning at `startSeconds` can run before it accrues `budget`.
+//
+// COST, on the same terms taskSeries states its own: every sample is an exact interval integral,
+// which is two to three solves, and the root-find takes on the order of ten to twenty of them
+// for a relative tolerance of 1e-6. Tens of solves for one answer -- more than any single
+// ranking, less than a task curve.
+//
+// Throws InputError for a negative start, a non-positive budget or ceiling, or a spec whose unit
+// cannot express an accrued total.
+StayTime stayTime(const NuclearData& data, const Inventory& inventory, const ResponseSpec& spec,
+                  double startSeconds, double budget, double maxDurationSeconds,
+                  const DecayOptions& options = {}, const EventTolerance& tolerance = {});
+
 }  // namespace nusift

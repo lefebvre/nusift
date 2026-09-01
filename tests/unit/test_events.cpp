@@ -656,5 +656,143 @@ TEST(TrajectoryEvents, ATaskRefusesADurationOrAGridItCannotBeAskedAbout) {
   EXPECT_THROW(taskSeries(data, inv, rate, starts, 60.0), InputError);
 }
 
+// --- the stay time: the other inversion --------------------------------------
+
+// A single decaying nuclide with a stable terminator, so the total decay rate is the parent's
+// alone and the accrual over [t0, t0 + D] is
+//
+//     A(D) = N0 (e^{-lambda t0} - e^{-lambda (t0 + D)})
+//
+// which inverts in closed form. Sampling the task curve would never produce this number: it is
+// a root in the LENGTH of the window, and every point of that curve has a fixed length.
+TEST(StayTime, MatchesTheAnalyticInversionOfTheAccrual) {
+  const double lambda = 1.0e-4;
+  const double atoms = 1.0e20;
+  const double start = 5.0e3;
+
+  const NuclearData data = oneEmitter(lambda);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  const double remaining = atoms * std::exp(-lambda * start);
+  const double budget = 0.25 * remaining;
+  const double expected = -std::log(1.0 - budget / remaining) / lambda;
+
+  const StayTime stay = stayTime(data, inv, spec, start, budget, /*maxDurationSeconds=*/1.0e6);
+  ASSERT_TRUE(stay.bounded);
+  EXPECT_TRUE(stay.converged);
+  EXPECT_NEAR(stay.durationSeconds, expected, expected * 1.0e-5);
+  // The width the root was narrowed to is the honest error bar, and it has to be tighter than
+  // the answer it qualifies or it says nothing.
+  EXPECT_GT(stay.locatedToSeconds, 0.0);
+  EXPECT_LT(stay.locatedToSeconds, expected * 1.0e-4);
+  EXPECT_GT(stay.samples, 1);
+}
+
+// The cross-check between the two inversions. If the stay time says D, then a task of length D
+// starting at the same instant must accrue exactly the budget -- the task curve and the stay
+// time are one integral read two ways, and a disagreement would mean one of them is wrong about
+// a quantity the other reports.
+TEST(StayTime, AgreesWithTheTaskCurveAtTheDurationItFinds) {
+  const double lambda = 3.0e-5;
+  const double atoms = 1.0e20;
+  const double start = 1.0e4;
+
+  const NuclearData data = oneEmitter(lambda);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  const double budget = 1.0e18;
+  const StayTime stay = stayTime(data, inv, spec, start, budget, 1.0e6);
+  ASSERT_TRUE(stay.bounded);
+
+  const std::vector<double> starts = {start, start + 1.0};
+  const EventSeries task = taskSeries(data, inv, spec, starts, stay.durationSeconds);
+  EXPECT_NEAR(task.values.front(), budget, budget * 1.0e-5);
+}
+
+// The case that makes the flag worth having. A budget larger than everything the inventory has
+// left to give is never spent, and reporting that as a very large duration -- or worse, as a
+// zero -- would invert the answer.
+TEST(StayTime, SaysWhenTheBudgetIsNeverSpentRatherThanInventingADuration) {
+  const double lambda = 1.0e-4;
+  const double atoms = 1.0e20;
+
+  const NuclearData data = oneEmitter(lambda);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  // Twice every decay the inventory can ever produce, so no ceiling would reach it.
+  const StayTime stay = stayTime(data, inv, spec, 0.0, 2.0 * atoms, 1.0e6);
+  EXPECT_FALSE(stay.bounded);
+  EXPECT_DOUBLE_EQ(stay.durationSeconds, 0.0) << "unset, not 'leave immediately'";
+  EXPECT_GT(stay.accruedAtMax, 0.0);
+  EXPECT_LT(stay.accruedAtMax, stay.budget);
+  EXPECT_EQ(stay.samples, 1) << "one integral establishes there is no bracket to search";
+
+  // The same budget over a ceiling short enough to matter is the ordinary occupancy case: not
+  // spent in an hour, and the report has a number to say how much of it an hour costs.
+  const StayTime hour = stayTime(data, inv, spec, 0.0, 2.0 * atoms, 3600.0);
+  EXPECT_FALSE(hour.bounded);
+  EXPECT_LT(hour.accruedAtMax, stay.accruedAtMax);
+}
+
+// A decaying source is cheaper to stand next to later, so the same budget has to buy a longer
+// stay from a later start. Monotone in the direction physics requires, which is the property
+// that makes the root unique in the first place.
+TEST(StayTime, BuysLongerTheLongerYouWait) {
+  const double lambda = 1.0e-4;
+  const double atoms = 1.0e20;
+
+  const NuclearData data = oneEmitter(lambda);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, atoms);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+  const double budget = 1.0e17;
+
+  const StayTime early = stayTime(data, inv, spec, 0.0, budget, 1.0e6);
+  const StayTime late = stayTime(data, inv, spec, 2.0e4, budget, 1.0e6);
+  ASSERT_TRUE(early.bounded);
+  ASSERT_TRUE(late.bounded);
+  EXPECT_GT(late.durationSeconds, early.durationSeconds);
+
+  // And a larger budget buys longer from the same start, which is the other monotonicity the
+  // uniqueness of the root rests on.
+  const StayTime richer = stayTime(data, inv, spec, 0.0, 2.0 * budget, 1.0e6);
+  ASSERT_TRUE(richer.bounded);
+  EXPECT_GT(richer.durationSeconds, early.durationSeconds);
+}
+
+TEST(StayTime, RefusesAQuestionItCannotAnswer) {
+  const NuclearData data = oneEmitter(1.0e-4);
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  EXPECT_THROW(stayTime(data, inv, spec, -1.0, 1.0e17, 1.0e6), InputError);
+  EXPECT_THROW(stayTime(data, inv, spec, 0.0, 0.0, 1.0e6), InputError);
+  EXPECT_THROW(stayTime(data, inv, spec, 0.0, -1.0, 1.0e6), InputError);
+  EXPECT_THROW(stayTime(data, inv, spec, 0.0, 1.0e17, 0.0), InputError);
+
+  // A budget is an accrued total, so a rate unit is the wrong dimension for it -- the same
+  // refusal a task curve makes, from the same place.
+  ResponseSpec rate;
+  rate.unit = Unit::Becquerel;
+  EXPECT_THROW(stayTime(data, inv, rate, 0.0, 1.0e17, 1.0e6), InputError);
+}
+
 }  // namespace
 }  // namespace nusift

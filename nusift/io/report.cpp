@@ -1242,6 +1242,117 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
   }
 }
 
+namespace {
+
+// The one sentence a stay-time report exists to make unambiguous, worded the same way in every
+// format that has room for words.
+std::string neverSpentNote(const StayTime& stay, const std::string& unit) {
+  char share[32];
+  std::snprintf(share, sizeof(share), "%.1f%%",
+                stay.budget > 0.0 ? 100.0 * stay.accruedAtMax / stay.budget : 0.0);
+  return "not spent within " + formatDuration(stay.maxDurationSeconds) +
+         " -- a stay that long "
+         "accrues " +
+         sci(stay.accruedAtMax) + (unit.empty() ? "" : " " + unit) + ", " + share +
+         " of the budget";
+}
+
+void writeStayText(std::ostream& out, const StayReport& report, const ReportContext& context) {
+  out << "NuSIFT " << report.metric << " stay time\n";
+  out << "  budget: " << sci(report.budget);
+  if (!report.unit.empty()) {
+    out << ' ' << report.unit;
+  }
+  out << ", over stays of up to " << formatDuration(report.maxDurationSeconds) << '\n';
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << '\n';
+
+  out << "   going in at        may stay        located to      integrals\n";
+  for (const StayTime& stay : report.stays) {
+    out << "   " << std::left << std::setw(16) << formatDuration(stay.startSeconds) << std::right;
+    if (stay.bounded) {
+      out << std::setw(12) << formatDuration(stay.durationSeconds) << "  " << std::setw(14)
+          << (stay.locatedToSeconds > 0.0 ? formatDuration(stay.locatedToSeconds) : "exactly")
+          << "  " << std::setw(9) << stay.samples;
+      if (!stay.converged) {
+        out << "   (search stopped before the tolerance was reached)";
+      }
+      out << '\n';
+    } else {
+      // Deliberately not a number in the duration column. A very large figure there would be
+      // read as a duration, and the honest statement is that no duration was located.
+      out << std::setw(12) << "--" << "  " << std::setw(14) << "--" << "  " << std::setw(9)
+          << stay.samples << '\n';
+      out << "     " << neverSpentNote(stay, report.unit) << '\n';
+    }
+  }
+
+  out << "\n  A stay time is the exact interval integral inverted: the accrued total is closed\n"
+         "  form within the decay model, so what is approximated is only where the root sits,\n"
+         "  and the located-to column is that width rather than a tolerance that was asked for.\n";
+}
+
+void writeStayCsv(std::ostream& out, const StayReport& report) {
+  out << "start_s,budget,unit,max_duration_s,bounded,duration_s,accrued_at_max,located_to_s,"
+         "converged,samples\n";
+  for (const StayTime& stay : report.stays) {
+    out << shortestRoundTrip(stay.startSeconds) << ',' << shortestRoundTrip(stay.budget) << ','
+        << csvField(report.unit) << ',' << shortestRoundTrip(stay.maxDurationSeconds) << ','
+        << (stay.bounded ? "true" : "false") << ',';
+    // Empty rather than zero: a spreadsheet column of durations with a 0 in it reads as "leave
+    // immediately", which is the opposite of what an unbounded stay means.
+    if (stay.bounded) {
+      out << shortestRoundTrip(stay.durationSeconds);
+    }
+    out << ',' << shortestRoundTrip(stay.accruedAtMax) << ','
+        << shortestRoundTrip(stay.locatedToSeconds) << ',' << (stay.converged ? "true" : "false")
+        << ',' << stay.samples << '\n';
+  }
+}
+
+void writeStayJson(std::ostream& out, const StayReport& report) {
+  out << "{\n";
+  out << "  \"metric\": \"" << report.metric << "\",\n";
+  out << "  \"unit\": \"" << report.unit << "\",\n";
+  out << "  \"budget\": " << jsonNumber(report.budget) << ",\n";
+  out << "  \"max_duration_s\": " << jsonNumber(report.maxDurationSeconds) << ",\n";
+  out << "  \"stays\": [\n";
+  for (std::size_t i = 0; i < report.stays.size(); ++i) {
+    const StayTime& stay = report.stays[i];
+    out << "    {\"start_s\": " << jsonNumber(stay.startSeconds)
+        << ", \"bounded\": " << (stay.bounded ? "true" : "false") << ", \"duration_s\": "
+        << (stay.bounded ? jsonNumber(stay.durationSeconds) : std::string("null"))
+        << ", \"accrued_at_max\": " << jsonNumber(stay.accruedAtMax)
+        << ", \"located_to_s\": " << jsonNumber(stay.locatedToSeconds)
+        << ", \"converged\": " << (stay.converged ? "true" : "false")
+        << ", \"samples\": " << stay.samples << "}";
+    out << (i + 1 == report.stays.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeStayTimes(std::ostream& out, const StayReport& report, const ReportContext& context,
+                    ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeStayText(out, report, context);
+      return;
+    case ReportFormat::Csv:
+      writeStayCsv(out, report);
+      return;
+    case ReportFormat::Json:
+      writeStayJson(out, report);
+      return;
+  }
+}
+
 void writeAllowable(std::ostream& out, const std::vector<AllowableScale>& scaled,
                     std::span<const Criterion> criteria, const ReportContext& context,
                     ReportFormat format) {

@@ -1326,6 +1326,76 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   return 0;
 }
 
+// --- how long may I stay ------------------------------------------------------
+
+// Options for `stay`. The budget is spelled `--budget` rather than `--level` because it is not
+// a level: `when --level` asks where a curve meets a value, and this asks how much of a
+// quantity may be spent. Naming them the same would suggest the two searches are the same one.
+struct StayOptions {
+  double budget = 0.0;
+  std::string maxStay = "24h";
+  double tolerance = 1.0e-6;
+};
+
+// The converse of `when --task`: there the length is fixed and the start is the unknown, here
+// the start is fixed and the LENGTH is. Two inversions of one exact integral, and neither is
+// obtainable by sampling the other.
+int runStay(const CommonOptions& options, const StayOptions& stayOptions, const char* argv0) {
+  if (!(stayOptions.budget > 0.0)) {
+    throw InputError("stay: give the budget a stay has to fit inside with --budget");
+  }
+  const double maxDuration = parseDuration(stayOptions.maxStay);
+
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options);
+  // Nuclide aggregate always: a stay time is a root on the TOTAL, and which nuclide is
+  // responsible does not change how long the budget lasts. `rank` is where that question lives.
+  spec.aggregate = Aggregate::Nuclide;
+  // The interval domain is what makes this a budget rather than a rate. requireUnit refuses a
+  // rate unit here with the same message it refuses one on `integrate`, which is the refusal a
+  // user who typed Sv/h should see.
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Interval);
+  spec.pack = packs.resolved();
+  spec.geometry = geometryFrom(options);
+
+  EventTolerance tolerance;
+  tolerance.relative = stayOptions.tolerance;
+
+  StayReport report;
+  report.metric = metricName(spec.metric);
+  report.unit =
+      spec.metric == Metric::Pack ? packs.resolved()->pack->provenance().unit : unitName(spec.unit);
+  report.budget = stayOptions.budget;
+  report.maxDurationSeconds = maxDuration;
+  for (const double start : timesFrom(options)) {
+    report.stays.push_back(stayTime(data, inventory, spec, start, stayOptions.budget, maxDuration,
+                                    decayOptionsFrom(options), tolerance));
+  }
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  // A table is needed for the continuum footnote and nothing else, so it is built at the first
+  // start time: which emitters carry an unmodelled continuum is a property of the inventory,
+  // not of how long anyone stands next to it.
+  const DecayResult result =
+      decay(data, inventory, std::vector<double>{report.stays.front().startSeconds},
+            decayOptionsFrom(options));
+  ResponseSpec instant = spec;
+  instant.unit = defaultUnit(spec.metric, Domain::Instant);
+  ReportContext context =
+      contextFor(data, storePath, inventory, buildResponse(data, result, instant), packs);
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+
+  OutputStream out(options.output);
+  writeStayTimes(out.get(), report, context, format);
+  return 0;
+}
+
 // --- how much is allowed ------------------------------------------------------
 
 struct AllowableOptions {
@@ -1596,6 +1666,22 @@ int main(int argc, char** argv) {
                    "Relative tolerance for --refine (default 1e-6)")
       ->check(CLI::PositiveNumber);
 
+  CommonOptions stayOptions;
+  StayOptions stayExtra;
+  CLI::App* stayCmd =
+      app.add_subcommand("stay", "How long a stay beginning at a time can run on a dose budget");
+  addCommonOptions(stayCmd, stayOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  stayCmd
+      ->add_option("--budget", stayExtra.budget,
+                   "The total a stay has to fit inside, in an INTERVAL unit (Sv, R, Gy, decays)")
+      ->required()
+      ->check(CLI::PositiveNumber);
+  stayCmd->add_option("--max-stay", stayExtra.maxStay,
+                      "The longest stay to consider (default 24h). A budget not spent inside it "
+                      "is reported as not spent, rather than as a very long duration");
+  stayCmd->add_option("--tolerance", stayExtra.tolerance, "Relative tolerance on the duration")
+      ->check(CLI::PositiveNumber);
+
   CommonOptions allowableOptions;
   AllowableOptions allowableExtra;
   CLI::App* allowableCmd = app.add_subcommand(
@@ -1677,6 +1763,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (stayCmd->parsed()) {
+      return runStay(stayOptions, stayExtra, argv0);
     }
     if (sourceCmd->parsed()) {
       return runSource(sourceOptions, sourceExtra, argv0);

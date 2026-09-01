@@ -588,11 +588,53 @@ samples — so a sixty-point start grid is a couple of hundred solves, seconds r
 milliseconds, and refinement adds more. What it buys is a curve whose every point is exact within
 its own window, which is what makes inverting it worth doing at all.
 
+### The stay time: the other inversion
+
+The task curve fixes the length and searches for the start. Fix the start instead and the
+**length** becomes the unknown, and that is a different inversion of the same integral: a root-find
+in the size of one window rather than a search along a curve of them. No amount of sampling the
+task curve produces it, because every point of that curve has the same length.
+
+```
+A(D) = ∫ over [t₀, t₀+D] of R(τ) dτ = budget       solve for D
+```
+
+`stayTime()` does it, and it is the only search in this file that can guarantee its root is
+unique. `A(D)` is monotonically **non-decreasing** in `D`, because no response weight can be
+negative — λ for activity, a sum of intensities through a non-negative kernel for exposure and
+dose, and a coefficient pack [refuses a negative coefficient](#5a-coefficient-packs-a-metric-that-is-data)
+at load. So `A` meets a positive budget at most once, there is no second root to land on, and the
+bracket `[0, maxDuration]` is valid by construction because `A(0) = 0` exactly — one endpoint free,
+no solve spent on it.
+
+**The ceiling is part of the question, not a solver setting.** "How long can I stay" asked of a
+decaying source has an operational bound behind it — a shift, a campaign — and a search with none
+would have to invent one. `--max-stay` defaults to 24 h. A budget not spent inside it is reported
+as *not spent*, with the number that makes that useful:
+
+```
+   going in at        may stay        located to      integrals
+   30 d                      --              --          1
+     not spent within 1 d -- a stay that long accrues 5.4994e+01 Sv, 55.0% of the budget
+```
+
+Never as a very large duration, and never as zero. This is the inverse of the mistake
+[§8](#8-maximum-allowable-scale-how-much-is-allowed) guards against and the more dangerous of the
+two: a caller who read `0.0` out of an unbounded stay would get *leave immediately* for *stay as
+long as you like*. The Python property returns `None` rather than a float for exactly that reason,
+and the JSON writer emits `null`.
+
+Cost is tens of solves for one answer — each Illinois step is an interval integral, and a relative
+tolerance of 1e-6 takes four to seven of them in practice. More than any single ranking, far less
+than a task curve. The `located to` column is the width the root was narrowed to, not the tolerance
+that was asked for, on the same terms every other located event reports its bracket.
+
 ### Reaching it
 
 The engine is reachable from all three front ends: `nusift when` on the command line,
-`ResponseTable.crossings` / `.extrema` / `.windows_above` / `.windows_below` and
-`nusift.task_series` from Python, and `writeEvents()` in the report writers. Each carries the
+`nusift stay` for the duration inversion, `ResponseTable.crossings` / `.extrema` /
+`.windows_above` / `.windows_below`, `nusift.task_series` and `nusift.stay_time` from Python, and
+`writeEvents()` / `writeStayTimes()` in the report writers. Each carries the
 bracket, because an instant without one claims a precision the sampling does not support.
 
 Refinement is **opt in**, because it is solves: `--refine` on `when` and on `forecast`,
@@ -772,6 +814,7 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/forecast.cpp`](../nusift/triage/forecast.cpp) | `dominanceWindows`, crossing interpolation, `unionTopN`, `persistentTopN` |
 | [`nusift/triage/events.hpp`](../nusift/triage/events.hpp) | `EventSeries`, `TrajectoryEvent`, `LevelWindow`, and the missed-event semantics |
 | [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `crossings`, `extrema`, `windowsAbove`/`windowsBelow`, Illinois and golden-section refinement, and the table-backed series |
+| [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `taskSeries` and `stayTime` — the two inversions of the interval integral, and the unbounded case |
 | [`nusift/triage/allowable.hpp`](../nusift/triage/allowable.hpp) | `Criterion`, `CriterionHeadroom`, `AllowableScale`, and what the rule layer above them owns |
 | [`nusift/triage/allowable.cpp`](../nusift/triage/allowable.cpp) | `allowableScale`, the binding-criterion minimum, unbounded semantics, and `scaleSeries` |
 | [`nusift/triage/intervention.hpp`](../nusift/triage/intervention.hpp) | `Removal`, `Intervention`, `InterventionStudy`, and what removing a parent does and does not do |

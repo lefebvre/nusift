@@ -121,6 +121,26 @@ struct EventReport {
 void writeEvents(std::ostream& out, const EventReport& report, const ReportContext& context,
                  ReportFormat format);
 
+// What a report of stay times is about. The budget and its unit are not decoration here: a
+// duration with no quantity behind it says nothing, and the quantity is the half a reader would
+// otherwise have to remember from the command line.
+struct StayReport {
+  std::string metric;
+  std::string unit;  // the budget's unit, an interval unit by construction
+  double budget = 0.0;
+  double maxDurationSeconds = 0.0;
+  std::vector<StayTime> stays;  // one per start time asked about, in time order
+};
+
+// Render stay times: how long a stay beginning at each start can run on the budget.
+//
+// A stay whose budget is never spent inside the ceiling is printed as such in every format --
+// JSON gives it a null duration, which is the only encoding a parser cannot read as "leave
+// immediately". It is the inverse mistake to the one allowableScale() guards against, and the
+// more dangerous of the two.
+void writeStayTimes(std::ostream& out, const StayReport& report, const ReportContext& context,
+                    ReportFormat format);
+
 // Render the maximum allowable scale over time: what binds, what it permits, and which
 // contributors drive it.
 //

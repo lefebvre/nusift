@@ -64,6 +64,10 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 # (each sample is an exact interval integral, so this costs solves the rate curve does not)
 nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
 
+# And the converse: going in at 30 d, how long may someone stay on a dose budget?
+nusift stay -i inventory.csv --at 30d --at 1y --at 30y --metric exposure \
+        --units Sv --budget 0.02 --distance 2
+
 # Place an event by re-solving inside its bracket instead of interpolating across it
 nusift when -i inventory.csv --times 1h:300y:log:80 --level 5e13 --refine
 
@@ -275,6 +279,7 @@ Implemented:
 - Seeding an inventory from fission, by fission count, kilotons, or joules
 - Dominance forecasting: who leads, and when that changes
 - Located events: crossings, turns, level windows, and when a fixed-length task fits a budget
+- Stay times: how long a stay beginning at a given time can run before it spends a dose budget
 - Seed attribution: which seeded nuclide a response is riding on, as an exact partition
 - A binned photon emission spectrum, written as an MCNP `SDEF` card or an OpenMC source
 - Python bindings, with zero-copy NumPy views
