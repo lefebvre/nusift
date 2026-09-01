@@ -68,10 +68,13 @@ enum class Unit {
   Curie,
   Decays,  // interval only
 
-  // Exposure. Likewise a rate and an accrued total. Gray and sievert are the same number here
-  // -- air kerma with a photon radiation weighting factor of 1 -- but they name different
-  // quantities, and a report that says "Sv" when it means absorbed dose in air invites exactly
-  // the misreading the distinction exists to prevent.
+  // Exposure. Likewise a rate and an accrued total -- but NOT all the same quantity. Roentgen
+  // and gray are air kerma: what the field would deposit in air. Sievert is ICRP 116 effective
+  // dose to a person in that field, computed through a fluence-to-dose kernel with the
+  // irradiation geometry explicit, and it is not air kerma scaled by anything. The two agree
+  // within a percent or two near 1 MeV by coincidence and differ by a factor of five at 60 keV.
+  //
+  // This is why the unit is not merely a display choice on this metric: it selects the weight.
   RoentgenPerHour,
   GrayPerHour,
   SievertPerHour,
@@ -101,6 +104,11 @@ bool unitSuitsDomain(Unit unit, Domain domain);
 // the strength at the source. Named once because the weight, the line assembler, and the
 // report header all have to agree about which geometry a photon number rides on.
 bool isFluenceUnit(Unit unit);
+
+// The exposure-metric units that mean effective dose rather than air kerma. Named for the same
+// reason: the weight, the report header and the caveats all have to agree about which quantity
+// a number is, and asking "is this a sievert" in three places is how they come to disagree.
+bool isEffectiveDoseUnit(Unit unit);
 
 const char* unitName(Unit unit);
 

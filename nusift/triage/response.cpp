@@ -77,10 +77,13 @@ double unitScale(Unit unit) {
     case Unit::Curie:
       return 1.0 / units::kBqPerCi;
     case Unit::GrayPerHour:
-    case Unit::SievertPerHour:
     case Unit::Gray:
-    case Unit::Sievert:
       return units::kGyPerR;
+    // No conversion: a sievert is computed as a sievert. The weight below is already ICRP 116
+    // effective dose per becquerel, not an air kerma waiting to be relabelled.
+    case Unit::SievertPerHour:
+    case Unit::Sievert:
+      return 1.0;
     case Unit::Becquerel:
     case Unit::Decays:
     case Unit::RoentgenPerHour:
@@ -127,11 +130,19 @@ double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
       // rather than two metrics.
       return lambda;
     case Metric::Exposure:
-      // lambda * (exposure per becquerel), in R/h per atom. Against atom-seconds it is
-      // roentgen accrued, once domainScale() has taken the hour back out. The per-becquerel
-      // factor sums over the nuclide's photon lines WITH air attenuation inside the sum,
-      // which is why it depends on the geometry and why no single per-nuclide constant could
-      // stand in for it.
+      // Which QUANTITY this is depends on the unit, and that is the point rather than a
+      // complication: roentgen and gray name air kerma, and a sievert names effective dose to
+      // a person. They are different physics -- air's energy absorption against a phantom
+      // calculation -- and a factor of five apart on a soft emitter, so one weight cannot
+      // serve both by scaling.
+      //
+      // lambda * (per becquerel), in R/h or Sv/h per atom. Against atom-seconds it is the
+      // accrued total, once domainScale() has taken the hour back out. Either per-becquerel
+      // factor sums over the nuclide's photon lines WITH the geometry inside the sum, which is
+      // why no single per-nuclide constant could stand in for it.
+      if (isEffectiveDoseUnit(spec.unit)) {
+        return lambda * exposure::effectiveDoseRatePerBecquerel(data.lines(index), spec.geometry);
+      }
       return lambda * exposure::exposureRatePerBecquerel(data.lines(index), spec.geometry);
     case Metric::Photon:
       // lambda * (photons per decay): the source strength, in photons/s per atom, independent
@@ -656,6 +667,10 @@ void requireUsableSpec(const NuclearData& data, const ResponseSpec& spec, Domain
 }
 
 }  // namespace
+
+bool isEffectiveDoseUnit(Unit unit) {
+  return unit == Unit::SievertPerHour || unit == Unit::Sievert;
+}
 
 bool isFluenceUnit(Unit unit) {
   return unit == Unit::PhotonsPerSquareMeterPerSecond || unit == Unit::PhotonsPerSquareMeter;

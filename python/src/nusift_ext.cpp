@@ -28,6 +28,7 @@
 #include "nusift/core/nuclide_name.hpp"
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/engine/inventory.hpp"
+#include "nusift/exposure/dose_coefficients.hpp"
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/number_format.hpp"
 #include "nusift/io/time_spec.hpp"
@@ -251,16 +252,37 @@ NB_MODULE(_core, m) {
       .def(
           "__init__",
           [](exposure::PointSourceGeometry* self, double distance_m, double air_density,
-             bool air_attenuation, double buildup) {
-            new (self)
-                exposure::PointSourceGeometry{distance_m, air_density, air_attenuation, buildup};
+             bool air_attenuation, double buildup, const std::string& irradiation) {
+            exposure::Irradiation orientation = exposure::Irradiation::AP;
+            if (!exposure::parseIrradiation(irradiation, orientation)) {
+              throw InputError("exposure: \"" + irradiation +
+                               "\" is not an irradiation geometry (ap, pa, llat, rlat, rot, iso)");
+            }
+            new (self) exposure::PointSourceGeometry{distance_m, air_density, air_attenuation,
+                                                     buildup, orientation};
           },
           "distance_m"_a = 1.0, "air_density"_a = 1.205, "air_attenuation"_a = true,
-          "buildup"_a = 1.0)
+          "buildup"_a = 1.0, "irradiation"_a = "ap")
       .def_rw("distance_m", &exposure::PointSourceGeometry::distanceM)
       .def_rw("air_density", &exposure::PointSourceGeometry::airDensityKgM3)
       .def_rw("air_attenuation", &exposure::PointSourceGeometry::airAttenuation)
-      .def_rw("buildup", &exposure::PointSourceGeometry::buildup);
+      .def_rw("buildup", &exposure::PointSourceGeometry::buildup)
+      // Read and written as the spelling ICRP prints, not as an opaque enum: the string is what
+      // a report shows and what the CLI takes, and a binding that spoke a different language
+      // for the same fact would be a third spelling to keep in step.
+      .def_prop_rw(
+          "irradiation",
+          [](const exposure::PointSourceGeometry& g) {
+            return std::string(exposure::irradiationName(g.irradiation));
+          },
+          [](exposure::PointSourceGeometry& g, const std::string& text) {
+            if (!exposure::parseIrradiation(text, g.irradiation)) {
+              throw InputError("exposure: \"" + text +
+                               "\" is not an irradiation geometry (ap, pa, llat, rlat, rot, iso)");
+            }
+          },
+          "How the body is oriented in the field, for sievert units: AP, PA, LLAT, RLAT, ROT, "
+          "ISO. Half of what an effective dose means, so it is reported beside every one.");
 
   // --- nuclear data ----------------------------------------------------------
   m.def(
@@ -344,6 +366,40 @@ NB_MODULE(_core, m) {
           "nuclide"_a, "min_energy_ev"_a = 0.0,
           "Specific gamma-ray constant in R*m^2/(h*Bq), vacuum. With min_energy_ev, counts only "
           "photons at or above that energy, matching tabulations that state a cutoff.")
+      .def(
+          "effective_dose_constant",
+          [](const NuclearData& d, const std::string& name, const std::string& irradiation,
+             double minEnergyEv) {
+            const int i = d.indexOf(requireNuclideName(name));
+            if (i < 0) {
+              return 0.0;
+            }
+            // Vacuum at one metre, so the 1/(4 pi d^2) is the whole geometry and the result is
+            // distance-independent -- the same construction gammaConstant() uses, and what
+            // makes this comparable with a published per-activity coefficient.
+            exposure::PointSourceGeometry vacuum;
+            vacuum.distanceM = 1.0;
+            vacuum.airAttenuation = false;
+            if (!exposure::parseIrradiation(irradiation, vacuum.irradiation)) {
+              throw InputError("exposure: \"" + irradiation +
+                               "\" is not an irradiation geometry (ap, pa, llat, rlat, rot, iso)");
+            }
+            if (minEnergyEv <= 0.0) {
+              return exposure::effectiveDoseRatePerBecquerel(d.lines(i), vacuum);
+            }
+            std::vector<GammaLine> kept;
+            for (const GammaLine& line : d.lines(i)) {
+              if (line.energyEv >= minEnergyEv) {
+                kept.push_back(line);
+              }
+            }
+            return exposure::effectiveDoseRatePerBecquerel(LineSpectrum(kept.data(), kept.size()),
+                                                           vacuum);
+          },
+          "nuclide"_a, "irradiation"_a = "ap", "min_energy_ev"_a = 0.0,
+          "ICRP 116 effective dose per unit activity at 1 m in vacuum, in Sv*m^2/(h*Bq). The "
+          "gamma constant's counterpart for the quantity a sievert actually names, and what a "
+          "published effective-dose coefficient is comparable with.")
       .def("__repr__", [](const NuclearData& d) {
         return "<NuclearData " + d.provenance().library + ", " + std::to_string(d.stagedCount()) +
                " nuclides>";

@@ -30,8 +30,11 @@ nusift rank -i inventory.csv --at 30d --pin Cs-137 --pin A=90
 # How many decays occur in the first year?
 nusift integrate -i inventory.csv --interval 0,1y
 
-# What dominates the exposure rate at 2 m, in Sv/h?
+# What dominates the effective dose rate at 2 m, in Sv/h? (ICRP 116, AP by default)
 nusift rank -i inventory.csv --at 30d --metric exposure --distance 2 --units Sv/h
+
+# The same field as air kerma instead, which for a soft emitter is a different number
+nusift rank -i inventory.csv --at 30d --metric exposure --distance 2 --units Gy/h
 
 # Build the inventory from fission instead of reading one
 nusift rank --seed-fission U-235 --energy thermal --yield-kt 20 --at 1h --metric exposure
@@ -255,7 +258,8 @@ Implemented:
 - Inventory input in atoms, moles, mass, or activity units
 - Decay to a set of cooling times, with exact time integrals over an interval
 - Ranking by nuclide, mass chain, element, or gamma line, with any of them pinnable
-- Point-source gamma exposure in R/h, Gy/h, or Sv/h, at any distance
+- Point-source gamma exposure and air kerma in R/h or Gy/h, at any distance
+- ICRP 116 effective dose in Sv/h, in any of the six irradiation geometries
 - Staging a data store from ENDF decay and fission-yield tapes
 - Seeding an inventory from fission, by fission count, kilotons, or joules
 - Dominance forecasting: who leads, and when that changes

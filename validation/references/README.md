@@ -104,6 +104,26 @@ as a vacuum quantity — a point source in a vacuum, no self-attenuation, no air
 last point is why the residual on the gamma constants is *not* scatter that an uncollided
 calculation omits.
 
+**`icrp116`** — ICRP (2010). *Conversion Coefficients for Radiological Protection Quantities for
+External Radiation Exposures.* ICRP Publication 116, Ann. ICRP 40(2–5).
+
+Unlike every other source here this one is not a reference to compare against — it is an INPUT.
+Table A.1, effective dose per unit fluence for monoenergetic photons in six irradiation
+geometries, is transcribed into
+[`nusift/exposure/dose_coefficients.cpp`](../../nusift/exposure/dose_coefficients.cpp) and is
+what makes a sievert in NuSIFT a sievert. The publication itself is not in the repository; the
+table is, printed digit for digit as ICRP prints it, on ICRP's own energy grid, so it can be
+checked against a copy of the page line by line.
+
+The transcription is checked without a copy of the page too, and by a route that shares nothing
+with it. Publication 116 also gives Table A.2, effective dose per air kerma free-in-air, which it
+does not ship: dividing NuSIFT's dose kernel by its air-kerma kernel — one built from this table,
+the other from NIST's mass energy-absorption coefficients — has to reproduce A.2, and does, to
+better than 1% from 20 keV to 2 MeV. Above that the two drift apart by air's radiative yield,
+because ICRP's denominator is kerma and NIST's µ_en/ρ counts only what is absorbed; that
+departure is asserted rather than tolerated, in
+[`tests/unit/test_point_source.cpp`](../../tests/unit/test_point_source.cpp).
+
 **`glasstone1977`** — Glasstone, S., & Dolan, P. J. (1977). *The Effects of Nuclear Weapons*
 (3rd ed.). U.S. Department of Defense and Energy Research and Development Administration.
 
@@ -160,12 +180,20 @@ sits +2.5% high because I-137 emits a delayed neutron in about 7% of its decays,
 This is a consistency check on seeding and mass-chain aggregation rather than an independent
 measurement, and it is labelled as one.
 
-**ICRP 116 ratios — ±6% on the agreeing rows, ±15% on Am-241.**
-This table checks that a caveat is still true. Co-60 and Ba-137m agree with tabulated effective
-dose to better than a percent, which is a coincidence of energy near 1 MeV rather than evidence
-that NuSIFT's sievert column is effective dose. Am-241 is gated on **diverging** by about a
-factor of five. If that row ever started agreeing, the warning in
-[exposure.md §6](../../docs/exposure.md#6-units) would have quietly become wrong.
+**ICRP 116 ratios — ±3%.**
+This table used to check that a caveat was still true, and now checks an agreement. The sievert
+column is computed through ICRP 116's fluence-to-effective-dose kernel in the AP geometry these
+coefficients are tabulated in, so it is the same quantity as the reference rather than air kerma
+wearing its label, and the expected ratios are 1.00.
+
+The band is the decay data's rather than the kernel's. Co-60 and Ba-137m land within a
+thousandth; Am-241 sits 2% high for a measured reason — one of its lines falls below the table's
+10 keV floor and takes the floor's coefficient, carrying 1.5% of the total, and excluding it the
+ratio is 1.002. The row states that rather than the band absorbing it silently.
+
+The suite also asserts that the air kerma this column no longer reports still diverges from
+effective dose by a factor of five for Am-241. Without that, agreement would stop being evidence
+the kernel does anything.
 
 **Way-Wigner — slope within [−1.35, −1.05].**
 An empirical fit to gross behaviour, quoted as good to roughly 25% over its validity window, not

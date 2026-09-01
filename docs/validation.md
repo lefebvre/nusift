@@ -265,14 +265,16 @@ Held out of the gate, with the cause measured rather than assumed:
 
 ![ICRP 116](figures/validation-icrp116.svg)
 
-| nuclide | ICRP 116 effective dose | NuSIFT air kerma | ratio | expected |
+| nuclide | ICRP 116 effective dose | NuSIFT effective dose | ratio | air kerma, for comparison |
 | --- | --- | --- | --- | --- |
-| Co-60 | 0.0003062 | 0.0003057 | 0.998 | 1.00 |
-| Ba-137m | 8.228e-05 | 8.221e-05 | 0.999 | 1.00 |
-| Am-241 | 5.413e-06 | 2.802e-05 | 5.176 | 5.17 |
+| Co-60 | 0.0003062 | 0.0003058 | 0.999 | 0.0003057 |
+| Ba-137m | 8.228e-05 | 8.23e-05 | 1.000 | 8.221e-05 |
+| Am-241 | 5.413e-06 | 5.506e-06 | 1.017 | 2.802e-05 |
 
-Units are mSv·h⁻¹·MBq⁻¹ at 1 m. See [exposure.md §6](exposure.md#6-units) for why the
-sievert here is air kerma wearing a label.
+Units are mSv·h⁻¹·MBq⁻¹ at 1 m, in the AP irradiation geometry the reference is
+tabulated in. The last column is what this column held before the kernel existed —
+air kerma, which for Am-241 overstates the dose to a person fivefold. See
+[exposure.md §6](exposure.md#6-units).
 
 ## What gates in CI
 

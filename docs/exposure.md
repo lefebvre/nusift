@@ -182,38 +182,66 @@ rather than a hypothetical one. Attributing each line to its emitter makes it un
 
 ## 6. Units
 
-One physical quantity is computed — **photon exposure in air, in roentgen** — and converted once,
-at the end:
+The metric computes **two** physical quantities, and which one you get is decided by the unit
+rather than displayed by it:
 
-| Unit | Conversion | Caveat |
+| Unit | Quantity | Kernel |
 | --- | --- | --- |
-| R, R/h | native | — |
-| Gy, Gy/h | × 0.00876 Gy/R | absorbed dose **in air** |
-| Sv, Sv/h | × 0.00876, w_R = 1 | see below |
+| R, R/h | photon exposure in air | native |
+| Gy, Gy/h | air kerma | × 0.00876 Gy/R |
+| Sv, Sv/h | **ICRP 116 effective dose** | fluence × ICRP 116 Table A.1, per irradiation geometry |
 
 The roentgen is defined as 2.58e-4 C/kg, which with a mean ionization energy of 33.97 J/C gives
-8.76e-3 Gy per R.
+8.76e-3 Gy per R. That constant relates the two air-kerma units to each other and does nothing
+else: **a sievert is not a multiple of an air kerma.** It is computed down its own path —
+uncollided fluence at the point, times ICRP 116's fluence-to-effective-dose coefficient for the
+photon's energy, summed line by line — and shares only the geometry with the roentgen beside it.
 
-**The sievert here is an air-kerma conversion with a photon radiation weighting factor of 1. It
-is not an ICRP-74 fluence-to-H\*(10) operational quantity, and it is not effective dose to a
-person.** The headers say so, `roentgenToGray` and `roentgenToSievert` are separate functions
-returning the same number precisely because the quantities are different, and conflating them in
-a report is how a dose gets misread.
+Note which factor is absent from that path: air's mass energy-absorption coefficient. Effective
+dose does not care what air would have absorbed. The phantom calculation behind ICRP's table
+already carries what a body absorbs, and applying µ_en/ρ as well would count the interaction
+twice.
 
-How wrong can it be? Against [Peplow's](https://doi.org/10.1097/HP.0000000000001136) tabulation
-of ICRP 116 effective dose (AP) per unit activity, in mSv·h⁻¹·MBq⁻¹ at 1 m:
+### The irradiation geometry is half of the answer
 
-| Nuclide | NuSIFT air-kerma Sv | ICRP 116 effective dose | ratio |
+Effective dose is defined for a person standing in a field, so it depends on how they stand.
+NuSIFT defaults to **AP** — facing the source, the most exposing orientation for the organs
+carrying the largest tissue weights, and the one screening reaches for — and `--irradiation`
+selects among ICRP's six (AP, PA, LLAT, RLAT, ROT, ISO). The choice is printed in the report
+header beside the distance, because a sievert with no irradiation geometry named is as
+incomplete as an exposure with no distance. It is not a small effect: for Am-241 at 1 m, AP
+gives 5.18e-3 Sv/h where ISO gives 2.47e-3.
+
+### What this replaced, and why it mattered
+
+Until the kernel existed, the sievert column was air kerma multiplied by a photon radiation
+weighting factor of 1 — a number that is not effective dose to a person, and that this document
+apologised for. Against
+[Peplow's](https://doi.org/10.1097/HP.0000000000001136) tabulation of ICRP 116 effective dose
+(AP) per unit activity, in mSv·h⁻¹·MBq⁻¹ at 1 m:
+
+| Nuclide | old air-kerma Sv | NuSIFT effective dose | ICRP 116 |
 | --- | --- | --- | --- |
-| Co-60 | 3.057e-4 | 3.062e-4 | 1.00 |
-| Ba-137m | 8.220e-5 | 8.228e-5 | 1.00 |
-| Am-241 | 2.801e-5 | 5.413e-6 | **5.17** |
+| Co-60 | 3.057e-4 | 3.058e-4 | 3.062e-4 |
+| Ba-137m | 8.221e-5 | 8.230e-5 | 8.228e-5 |
+| Am-241 | 2.802e-5 | 5.506e-6 | 5.413e-6 |
 
-The agreement on the first two is a coincidence of energy — effective dose per fluence happens to
-track air kerma per fluence near 1 MeV — and **it does not survive going soft**. 83% of Am-241's
-constant sits below 20 keV and 10.9% below 10 keV, where µ_en/ρ is clamped (§3). Those photons
-load air kerma heavily and deposit almost no effective dose, so the label overstates the hazard
-to a person by a factor of five. Read the sievert column as air kerma wearing a label.
+The old column's agreement on the first two was a coincidence of energy — effective dose per
+fluence happens to track air kerma per fluence near 1 MeV — and it did not survive going soft.
+83% of Am-241's constant sits below 20 keV, where those photons load air kerma heavily and
+deposit little effective dose, so the label overstated the hazard to a person fivefold. That row
+is now 1.02 rather than 5.18.
+
+The residual 2% on Am-241 is the table's low-energy floor rather than the physics. ICRP 116
+starts at 10 keV; one Am-241 line sits below that and takes the floor's coefficient, carrying
+1.5% of the computed total. Excluding it the ratio is 1.002. Clamping overstates a soft photon's
+dose rather than understating it, which is the direction to be wrong in, and
+`isOutsideTabulatedDoseRange()` names the energies it happens to.
+
+**What a sievert here is still not**: it is not H\*(10), the operational quantity a survey meter
+reads — that needs ICRP 74, which NuSIFT does not carry — and it is not the dose to any
+particular person. Effective dose is a protection quantity defined on reference phantoms with
+sex-averaged, tissue-weighted organ doses, for setting and checking limits.
 
 Interval-domain exposure carries one more correction: the rate is computed per **hour** while the
 integral weights atom-**seconds**, so an accrued exposure has a spurious factor of an hour taken
@@ -285,7 +313,8 @@ because the geometry is a plain value type a caller can assemble however it like
 | File | Role |
 | --- | --- |
 | [`nusift/exposure/point_source.hpp`](../nusift/exposure/point_source.hpp) | The model, the geometry parameters, and the exclusions — stated in the header |
-| [`nusift/exposure/point_source.cpp`](../nusift/exposure/point_source.cpp) | `pointExposureCoeff`, `pointFluenceCoeff`, `gammaConstant`, `exposureRatePerBecquerel`, `fluenceRatePerBecquerel` |
+| [`nusift/exposure/point_source.cpp`](../nusift/exposure/point_source.cpp) | `pointExposureCoeff`, `pointFluenceCoeff`, `pointEffectiveDoseCoeff`, `gammaConstant`, and the per-becquerel sums |
 | [`nusift/exposure/air_coefficients.cpp`](../nusift/exposure/air_coefficients.cpp) | The NIST table and the clamped log-log interpolation |
-| [`nusift/units.hpp`](../nusift/units.hpp) | The roentgen definition and the radiation weighting factor |
+| [`nusift/exposure/dose_coefficients.cpp`](../nusift/exposure/dose_coefficients.cpp) | ICRP 116 Table A.1, the six irradiation geometries, and the same clamped log-log interpolation |
+| [`nusift/units.hpp`](../nusift/units.hpp) | The roentgen definition |
 | [`nusift/nucdata/photon_lines.hpp`](../nusift/nucdata/photon_lines.hpp) | `GammaLine`, absolute intensities, the discrete-energy sum, and the photon yield |

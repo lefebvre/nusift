@@ -5,6 +5,7 @@
 
 #include "nusift/core/error.hpp"
 #include "nusift/exposure/air_coefficients.hpp"
+#include "nusift/exposure/dose_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/nucdata/photon_lines.hpp"
 #include "nusift/units.hpp"
@@ -397,10 +398,125 @@ TEST(PointSource, MeanOpticalDepthIsExposureWeighted) {
 
 TEST(PointSource, RoentgenConversions) {
   EXPECT_DOUBLE_EQ(roentgenToGray(1.0), 0.00876);
-  EXPECT_DOUBLE_EQ(roentgenToSievert(1.0), 0.00876);
-  // A photon radiation weighting factor of 1 makes the two numerically identical; they are
-  // named separately because absorbed dose and equivalent dose are different quantities.
-  EXPECT_DOUBLE_EQ(roentgenToGray(2.5), roentgenToSievert(2.5));
+  EXPECT_DOUBLE_EQ(roentgenToGray(2.5), 2.5 * 0.00876);
+  // There is no roentgenToSievert to test beside it. A sievert is effective dose and comes
+  // from the ICRP 116 kernel below; it is not air kerma multiplied by anything.
+}
+
+// --- effective dose --------------------------------------------------------
+
+// The cross-check that matters, and it is against ICRP's OWN second table rather than against
+// a number this code produced. Publication 116 gives effective dose per fluence (Table A.1,
+// which is what NuSIFT ships) and effective dose per air kerma free-in-air (Table A.2, which
+// it does not). Dividing our dose kernel by our air-kerma kernel has to reproduce A.2 -- and
+// the two paths share nothing but the geometry: one goes through ICRP's phantom coefficients,
+// the other through NIST's mass energy-absorption coefficients for air.
+//
+// Agreement to a fraction of a percent across the range decay photons occupy therefore checks
+// the transcription, the interpolation, the unit conversion and the kernel assembly at once.
+TEST(PointSource, EffectiveDoseReproducesIcrpsOwnRatioToAirKerma) {
+  struct Point {
+    double mev;
+    double svPerGy;  // ICRP 116 Table A.2, AP column
+  };
+  constexpr Point kPoints[] = {{0.02, 0.130}, {0.03, 0.423}, {0.05, 1.13}, {0.06, 1.33},
+                               {0.1, 1.39},   {0.2, 1.17},   {0.5, 1.04},  {0.662, 1.02},
+                               {1.0, 1.00},   {1.33, 0.996}, {2.0, 0.990}};
+
+  PointSourceGeometry vacuum;
+  vacuum.airAttenuation = false;
+
+  for (const Point& point : kPoints) {
+    const double energyEv = point.mev * 1.0e6;
+    const double sievert = pointEffectiveDoseCoeff(energyEv, vacuum);
+    const double gray = pointExposureCoeff(energyEv, vacuum) * units::kGyPerR;
+    EXPECT_NEAR(sievert / gray, point.svPerGy, point.svPerGy * 0.01)
+        << "at " << point.mev << " MeV, against ICRP 116 Table A.2";
+  }
+}
+
+// Above a few MeV the same comparison drifts, and the drift is physics rather than a defect:
+// ICRP's denominator is air KERMA -- energy transferred to charged particles, including what
+// those particles later radiate away as bremsstrahlung -- while NIST's mu_en/rho counts only
+// what is absorbed. The gap between them is air's radiative yield, about 1.8% at 5 MeV and
+// 3.4% at 10 MeV, and our ratio sits high by very nearly that. It is asserted rather than
+// merely tolerated, because a departure that stopped tracking the radiative yield would mean
+// something else was wrong.
+TEST(PointSource, AboveAFewMeVTheRatioDepartsByAirsRadiativeYield) {
+  PointSourceGeometry vacuum;
+  vacuum.airAttenuation = false;
+
+  const auto ratioAt = [&vacuum](double mev) {
+    const double energyEv = mev * 1.0e6;
+    return (pointEffectiveDoseCoeff(energyEv, vacuum) /
+            (pointExposureCoeff(energyEv, vacuum) * units::kGyPerR));
+  };
+
+  EXPECT_NEAR(ratioAt(5.0) / 0.943, 1.0 + 0.018, 0.01) << "air's radiative yield at 5 MeV";
+  EXPECT_NEAR(ratioAt(10.0) / 0.848, 1.0 + 0.034, 0.01) << "and at 10 MeV";
+}
+
+// A tabulated energy comes back as tabulated rather than as an interpolation that lands
+// nearby. ICRP put the lines this tool cares about on their own grid -- 0.511, 0.662, 1.117
+// and 1.33 MeV are all grid points -- so the commonest answers involve no interpolation at
+// all. Checked to round-off rather than to the bit, because a log-log interpolator returns
+// exp(log(v)) at a grid point and that is not bitwise v.
+TEST(PointSource, ATabulatedEnergyIsReturnedAsTabulated) {
+  EXPECT_NEAR(effectiveDosePerFluence(0.662e6, Irradiation::AP), 3.17e-16, 3.17e-16 * 1.0e-12);
+  EXPECT_NEAR(effectiveDosePerFluence(1.33e6, Irradiation::AP), 5.59e-16, 5.59e-16 * 1.0e-12);
+  EXPECT_NEAR(effectiveDosePerFluence(0.511e6, Irradiation::ROT), 1.96e-16, 1.96e-16 * 1.0e-12);
+  EXPECT_NEAR(effectiveDosePerFluence(1.0e4, Irradiation::ISO), 0.0288e-16, 0.0288e-16 * 1.0e-12);
+}
+
+// Below the table the coefficient is clamped rather than extrapolated. The curve is falling
+// steeply there -- a factor of two per five keV -- so an extrapolation would be invention, and
+// clamping is conservative in the direction that matters: it overstates a soft photon's dose
+// rather than understating it. Am-241 is the nuclide this actually reaches.
+TEST(PointSource, BelowTheTableTheCoefficientIsClampedNotExtrapolated) {
+  const double atFloor = effectiveDosePerFluence(kMinTabulatedDoseEv, Irradiation::AP);
+  EXPECT_DOUBLE_EQ(effectiveDosePerFluence(5.0e3, Irradiation::AP), atFloor);
+  EXPECT_DOUBLE_EQ(effectiveDosePerFluence(1.0, Irradiation::AP), atFloor);
+  EXPECT_TRUE(isOutsideTabulatedDoseRange(5.0e3));
+  EXPECT_FALSE(isOutsideTabulatedDoseRange(kMinTabulatedDoseEv));
+
+  const double atCeiling = effectiveDosePerFluence(kMaxTabulatedDoseEv, Irradiation::AP);
+  EXPECT_DOUBLE_EQ(effectiveDosePerFluence(1.0e15, Irradiation::AP), atCeiling);
+  EXPECT_TRUE(isOutsideTabulatedDoseRange(1.0e15));
+}
+
+// The irradiation geometry is not a label on the answer, it IS part of the answer. At 30 keV
+// the same fluence delivers 3.3 times the effective dose to someone facing the source as to
+// someone facing away, because at that energy the organs carrying the largest tissue weights
+// are shielded by the whole body in PA and by nothing in AP.
+TEST(PointSource, IrradiationGeometryChangesTheDoseSubstantially) {
+  const double ap = effectiveDosePerFluence(3.0e4, Irradiation::AP);
+  const double pa = effectiveDosePerFluence(3.0e4, Irradiation::PA);
+  const double iso = effectiveDosePerFluence(3.0e4, Irradiation::ISO);
+  EXPECT_NEAR(ap / pa, 0.313 / 0.0940, 1.0e-9);
+  EXPECT_LT(iso, ap);
+  EXPECT_GT(iso, pa);
+
+  // And it converges at high energy, where a body is no longer able to shield itself.
+  const double apHard = effectiveDosePerFluence(5.0e6, Irradiation::AP);
+  const double paHard = effectiveDosePerFluence(5.0e6, Irradiation::PA);
+  EXPECT_NEAR(apHard / paHard, 13.4 / 13.1, 1.0e-9);
+}
+
+TEST(PointSource, IrradiationNamesRoundTrip) {
+  for (const Irradiation irradiation : {Irradiation::AP, Irradiation::PA, Irradiation::LLAT,
+                                        Irradiation::RLAT, Irradiation::ROT, Irradiation::ISO}) {
+    Irradiation parsed = Irradiation::PA;
+    ASSERT_TRUE(parseIrradiation(irradiationName(irradiation), parsed));
+    EXPECT_EQ(parsed, irradiation);
+  }
+
+  Irradiation lower = Irradiation::PA;
+  EXPECT_TRUE(parseIrradiation("ap", lower));
+  EXPECT_EQ(lower, Irradiation::AP);
+  EXPECT_TRUE(parseIrradiation("RoT", lower));
+  EXPECT_EQ(lower, Irradiation::ROT);
+  EXPECT_FALSE(parseIrradiation("sideways", lower));
+  EXPECT_FALSE(parseIrradiation("", lower));
 }
 
 // A point source has no exposure rate at zero distance. Reporting an infinity would put a

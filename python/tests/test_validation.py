@@ -76,18 +76,24 @@ def test_chain_yields_match_the_evaluated_cumulative_yields(data):
     _assert_gated(rows)
 
 
-# The sievert column is air kerma with a photon weighting factor of 1, not effective dose to a
-# person. Co-60 and Ba-137m agree with ICRP 116 by coincidence of energy; Am-241 does not, and
-# asserting that it still diverges by about five is what stops the caveat quietly expiring.
-def test_the_sievert_column_tracks_and_departs_from_effective_dose(data):
+# The sievert column is ICRP 116 effective dose, so this is an agreement check on one quantity
+# rather than the divergence check it used to be. Am-241 carries both halves: it agrees now, and
+# the air kerma it is no longer reporting still overstates the dose to a person fivefold. The
+# second assertion is what keeps the first meaningful -- if air kerma ever stopped diverging,
+# agreement would no longer be evidence that the kernel is doing anything.
+def test_the_sievert_column_is_effective_dose(data):
     rows = checks.icrp116_rows(data)
     _assert_has_gated_rows(rows, 3)
     _assert_gated(rows)
 
     americium = next(row for row in rows if row["key"] == "Am-241")
-    assert americium["ratio"] > 3.0, (
-        "Am-241 air kerma should overstate ICRP 116 effective dose several-fold; "
-        f"ratio is {americium['ratio']:.2f}"
+    assert abs(americium["ratio"] - 1.0) < 0.05, (
+        "Am-241 effective dose should agree with the tabulated value; "
+        f"ratio is {americium['ratio']:.3f}"
+    )
+    assert americium["air_kerma"] / americium["published"] > 3.0, (
+        "air kerma should still overstate ICRP 116 effective dose several-fold for Am-241; "
+        f"ratio is {americium['air_kerma'] / americium['published']:.2f}"
     )
 
 

@@ -438,36 +438,47 @@ def figure_icrp116(path, rows):
         parts.append(text(ax.x(value), ax.top - 16, f"{value:g}x", "muted", 10, "middle"))
     parts.append(line(ax.x(1.0), ax.top - 8, ax.x(1.0), ax.bottom + 8, "axis", 1.4))
 
+    # Two bars a nuclide: what the sievert column holds now, and what it held when it was air
+    # kerma wearing the label. The second is the size of the repair, and it is the only way a
+    # reader sees it rather than being told about it.
     for index, row in enumerate(rows):
-        y = ax.top + 46 * index + 14
-        ratio = row["ratio"]
-        diverges = ratio > 1.5
-        parts.append(rect(ax.x(0.0), y, ax.x(ratio) - ax.x(0.0), 16,
-                          "fill-b" if diverges else "fill-a", 0.85, rx=3, width=0))
-        parts.append(text(ax.left - 12, y + 13, row["key"], "ink", 11.5, "end", "600"))
-        parts.append(text(ax.x(ratio) + 10, y + 13, f"{ratio:.2f}x", "muted", 11))
-        parts.append(text(58, y + 13, f"{row['computed']:.3e} vs {row['published']:.3e}",
+        y = ax.top + 46 * index + 6
+        before = row["air_kerma"] / row["published"]
+        parts.append(rect(ax.x(0.0), y, ax.x(row["ratio"]) - ax.x(0.0), 13,
+                          "fill-a", 0.85, rx=3, width=0))
+        parts.append(text(ax.x(row["ratio"]) + 10, y + 11, f"{row['ratio']:.2f}x", "muted", 10))
+        parts.append(rect(ax.x(0.0), y + 16, ax.x(before) - ax.x(0.0), 13,
+                          "fill-b", 0.45, rx=3, width=0))
+        parts.append(text(ax.x(before) + 10, y + 27, f"{before:.2f}x was air kerma", "muted", 10))
+        parts.append(text(ax.left - 12, y + 19, row["key"], "ink", 11.5, "end", "600"))
+        parts.append(text(58, y + 19, f"{row['computed']:.3e} vs {row['published']:.3e}",
                           "muted", 10))
 
     parts.append(text(58, 30, "The sievert column against ICRP 116 effective dose",
                       "ink", 13.5, "start", "600"))
-    caption(parts, 58, 50, ["mSv per hour per MBq at 1 m. Ratio of NuSIFT's air kerma to "
-                            "tabulated effective dose."], width)
+    caption(parts, 58, 50, ["mSv per hour per MBq at 1 m, AP. Ratio of NuSIFT's effective dose "
+                            "to the tabulated value."], width)
     after = caption(parts, 58, 300,
-                    ["This figure exists to keep a caveat true, not to show agreement. NuSIFT "
-                     "reports air kerma with a photon weighting factor of 1, which is not "
-                     "effective dose to a person."], width, size=12, cls="ink")
+                    ["The sievert column is now ICRP 116 effective dose, computed through the "
+                     "fluence-to-dose kernel in the AP geometry these coefficients are "
+                     "tabulated in, so this is an agreement check on the same quantity."],
+                    width, size=12, cls="ink")
     after = caption(parts, 58, after + 4,
-                    ["Co-60 and Ba-137m agree because effective dose per fluence happens to "
-                     "track air kerma per fluence near 1 MeV. It is a coincidence of energy and "
-                     "it does not survive going soft. Am-241 emits at 60 keV and below, where "
-                     "air kerma loads heavily and effective dose does not, so the label "
-                     "overstates the hazard to a person fivefold."], width)
+                    ["The lower bar on each row is what the column used to hold: air kerma with "
+                     "a photon radiation weighting factor of 1. Co-60 and Ba-137m barely move, "
+                     "because effective dose per fluence happens to track air kerma per fluence "
+                     "near 1 MeV -- a coincidence of energy that made the old label look "
+                     "defensible. Am-241 emits at 60 keV and below, where air keeps absorbing "
+                     "strongly and a body's organs do not, and it moves by a factor of five."],
+                    width)
     after = caption(parts, 58, after + 4,
-                    ["The Am-241 row is gated on STILL diverging: if it ever started agreeing, "
-                     "this warning would have quietly become wrong."], width)
+                    ["The residual 2% on Am-241 is the table's low-energy floor, and it is "
+                     "measured rather than assumed: one line below 10 keV takes the floor's "
+                     "coefficient and carries 1.5% of the total. Excluding it the ratio is "
+                     "1.002. The clamp overstates rather than understates, which is the "
+                     "direction to be wrong in."], width)
     write(path, svg(width, after + 16, "\n".join(parts),
-                    "Air kerma against ICRP 116 effective dose"))
+                    "Effective dose against ICRP 116"))
 
 
 # --------------------------------------------------------------------------------------
@@ -738,12 +749,15 @@ def main():
     add("")
     add("![ICRP 116](figures/validation-icrp116.svg)")
     add("")
-    add(table(["nuclide", "ICRP 116 effective dose", "NuSIFT air kerma", "ratio", "expected"],
+    add(table(["nuclide", "ICRP 116 effective dose", "NuSIFT effective dose", "ratio",
+               "air kerma, for comparison"],
               [[r["key"], f"{r['published']:.4g}", f"{r['computed']:.4g}", f"{r['ratio']:.3f}",
-                f"{r['expected_ratio']:.2f}"] for r in icrp]))
+                f"{r['air_kerma']:.4g}"] for r in icrp]))
     add("")
-    add("Units are mSv·h⁻¹·MBq⁻¹ at 1 m. See [exposure.md §6](exposure.md#6-units) for why the")
-    add("sievert here is air kerma wearing a label.")
+    add("Units are mSv·h⁻¹·MBq⁻¹ at 1 m, in the AP irradiation geometry the reference is")
+    add("tabulated in. The last column is what this column held before the kernel existed —")
+    add("air kerma, which for Am-241 overstates the dose to a person fivefold. See")
+    add("[exposure.md §6](exposure.md#6-units).")
     add("")
 
     add("## What gates in CI")
