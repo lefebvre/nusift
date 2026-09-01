@@ -36,6 +36,7 @@ target_link_libraries(nusift_make_test_store PRIVATE nusift::nusift nusift_warni
 add_executable(nusift_unit_tests
   unit/test_allowable.cpp
   unit/test_attribution.cpp
+  unit/test_coefficient_pack.cpp
   unit/test_data_store.cpp
   unit/test_decay_engine.cpp
   unit/test_events.cpp
