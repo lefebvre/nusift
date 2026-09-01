@@ -284,6 +284,7 @@ Three, and the differences between them are the format's whole argument:
 | `iaea-ssr6-a2` | A2 sum of fractions, dimensionless | activity | **folded**, 127 daughters into 75 parents | slow lung absorption, 2012 edition |
 | `icrp119-ingestion-worker` | committed effective dose if the whole inventory were ingested, Sv | activity | excluded | worker, most restrictive f1 |
 | `icrp119-inhalation-worker-5um` | the same by inhalation, Sv | activity | excluded | worker, 5 µm AMAD, most restrictive absorption type |
+| `fgr15-air-submersion-adult` | effective dose rate in a contaminated cloud, Sv/s | **concentration**, per m³ | excluded | adult, semi-infinite cloud |
 
 The two ICRP packs are **progeny excluded** where SSR-6 is folded, and the reason is not a
 convention difference but a physical one: an intake coefficient covers the daughters that grow
@@ -296,6 +297,34 @@ They also demonstrate the point ranking exists to make. On one inventory at one 
 ingestion hazard is led by Cs-137 and the inhalation hazard by Sr-90, because strontium's
 inhalation coefficient is an order of magnitude further above caesium's than its ingestion
 coefficient is. Same atoms, same solve, different weight vector, different answer.
+
+### The distributed source, and the input an inventory cannot supply
+
+FGR-15's coefficients are per unit activity **concentration** — Sv·Bq⁻¹·s⁻¹·m³ for a cloud,
+·m² for ground deposition — and an `Inventory` carries atoms. A concentration is atoms over an
+extent, and nothing in the material says what that extent is, so `basis: concentration` requires
+the caller to state it: `--extent 1e6`, in the unit the pack's `per` field declares. The number
+is bare precisely so it cannot disagree with the pack about whether it is an area or a volume,
+and the report prints it back, because the same inventory in ten times the volume gives a tenth
+the dose rate.
+
+Both mistakes are refused rather than one being quietly absorbed: a concentration pack with no
+extent, and an extent handed to a pack that multiplies becquerel, which does not become a
+different number when told how much space the becquerels occupy.
+
+**The geometry is the assumption, and it is a large one.** These coefficients are computed for a
+person inside a uniformly contaminated, semi-infinite cloud — infinite compared with the mean
+free path of the photons carrying the dose, which in air at 1 MeV is of order a hundred metres.
+A plume that is smaller, or not uniform, or not surrounding the person gives less, and no
+coefficient can know that. The pack answers "what would standing inside a cloud of this
+composition commit", not "what does the plume over there deliver", and its header says so.
+
+It is also where the chain earns its keep. FGR-15 states that its coefficients exclude decay
+products and that a parent and its progeny "should be combined only after consideration of the
+equations describing production and decay of daughter radionuclides over time" — which is what
+the solve underneath the ranking already is. Caesium-137's own submersion coefficient is
+9.4e-17 and barium-137m's is 2.7e-14, so on a caesium inventory the barium carries 99% of the
+dose rate and arrives there by ingrowth rather than by being tabulated with its parent.
 
 An intake coefficient is `domain: instant` for a reason the field exists to catch: it multiplies
 **becquerel**, so against an activity it gives sieverts, and against a time-integrated activity

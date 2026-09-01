@@ -68,6 +68,10 @@ struct CommonOptions {
   // registry name: a pack is a file someone chose, and resolving a name would need a search
   // order that could quietly pick a different edition than the one intended.
   std::string packPath;
+  // The area, volume or mass a concentration pack's inventory is spread through. A bare number:
+  // which unit it is in is the pack's to say, and the report prints it back so a volume given
+  // to a per-square-metre pack is visible rather than silently accepted.
+  double packExtent = 0.0;
 
   std::string metric = "activity";
   std::string aggregate = "nuclide";
@@ -131,6 +135,10 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
   app->add_option("--pack", options.packPath,
                   "Rank by a coefficient pack instead: a CSV of per-nuclide coefficients with "
                   "its quantity, units, basis and version in its header");
+  app->add_option("--extent", options.packExtent,
+                  "For a pack whose coefficients are per unit concentration: the volume, area "
+                  "or mass the inventory is spread through, in the unit the pack declares")
+      ->check(CLI::PositiveNumber);
   app->add_option("--by", options.aggregate,
                   "Aggregate: nuclide, mass-chain, element, line (line is exposure or photon "
                   "only)")
@@ -207,7 +215,14 @@ public:
       return;
     }
     pack_ = CoefficientPack::open(options.packPath);
-    resolved_ = resolvePack(*pack_, data, seed);
+    PackExtent extent;
+    if (options.packExtent > 0.0) {
+      extent.value = options.packExtent;
+      // The unit is the pack's, so --extent takes a bare number and cannot disagree with it.
+      // A pack that wants no extent refuses one, which is where a misplaced flag surfaces.
+      extent.unit = pack_->provenance().per;
+    }
+    resolved_ = resolvePack(*pack_, data, seed, extent);
   }
 
   const ResolvedPack* resolved() const { return resolved_ ? &*resolved_ : nullptr; }
@@ -223,6 +238,16 @@ public:
     std::string text = p.name + " " + p.version + ", " + p.quantity;
     if (!p.scenario.empty()) {
       text += " (" + p.scenario + ")";
+    }
+    // The extent is not a setting, it is half of what a concentration answer means: the same
+    // inventory in ten times the volume gives a tenth the dose rate.
+    if (resolved_ && resolved_->extent.value > 0.0) {
+      char spread[64];
+      std::snprintf(spread, sizeof(spread), "%.4g", resolved_->extent.value);
+      text += ", spread through ";
+      text += spread;
+      text += " ";
+      text += resolved_->extent.unit;
     }
     return text;
   }

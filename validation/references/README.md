@@ -148,6 +148,27 @@ The values are checked against figures published widely enough to be recognised 
 Cs-137 ingestion 1.3e-8 Sv/Bq, I-131 ingestion 2.2e-8, Sr-90 ingestion 2.8e-8 at f1 = 0.3,
 H-3 (HTO) 1.8e-11, Pu-239 inhalation Type M at 5 um 3.2e-5, Am-241 the same at 2.7e-5.
 
+**`fgr15`** — EPA (2025). *External Exposure to Radionuclides in Air, Water, and Soil.*
+Federal Guidance Report No. 15, EPA 402-R-25-001.
+
+An INPUT, like `icrp116` and `icrp119`. Table 4-6's reference person effective dose rate
+coefficients for air submersion, adult column, are transcribed into
+[`data/packs/fgr15-air-submersion-adult.csv`](../../data/packs/fgr15-air-submersion-adult.csv):
+1246 nuclides, every one of which resolves against the ENDF/B-VIII.1 store.
+
+This table extracts cleanly from the PDF's text layer -- the exponents keep their minus signs,
+unlike ICRP 119's -- so the checks are on the shape of the result rather than on the glyphs:
+every row carries six age columns that parse as numbers, no nuclide appears twice, and the adult
+coefficient is the smallest of the six in all 1246 rows, which is both the expected physics
+(children take more dose from the same cloud) and a check that the columns were not transposed.
+Twenty-four nuclides have a coefficient of exactly zero, which is a real value -- they have no
+penetrating emission -- and is carried with that reason in the row rather than as a gap.
+
+FGR-15 states that its coefficients exclude decay products, so the pack declares
+`progeny: excluded`, and the publication's own instruction to combine a parent with its progeny
+"only after consideration of the equations describing production and decay of daughter
+radionuclides over time" is what the decay solve underneath the ranking performs.
+
 **`glasstone1977`** — Glasstone, S., & Dolan, P. J. (1977). *The Effects of Nuclear Weapons*
 (3rd ed.). U.S. Department of Defense and Energy Research and Development Administration.
 

@@ -589,6 +589,11 @@ std::vector<double> packCoverageByTime(const NuclearData& data, std::span<const 
       case PackBasis::Mass:
         perAtom[i] = data.molarMassGPerMol(index) / units::kAvogadro;
         break;
+      case PackBasis::Concentration:
+        // Coverage asks which nuclides the pack can speak for, and the extent divides every
+        // term of that ratio equally, so it cancels. Activity is the quantity being shared out.
+        perAtom[i] = data.decayConstant(index);
+        break;
     }
     // Folded counts as covered: the daughter's contribution is inside a parent's coefficient,
     // so it is accounted for even though it carries no weight of its own. Reporting it as
@@ -959,10 +964,11 @@ std::int64_t requirePin(const ResponseTable& table, std::string_view text) {
 }
 
 ResolvedPack resolvePack(const CoefficientPack& pack, const NuclearData& data,
-                         const Inventory& seed) {
+                         const Inventory& seed, const PackExtent& extent) {
   ResolvedPack resolved;
   resolved.pack = &pack;
-  resolved.weights = pack.weights(data, seed);
+  resolved.extent = extent;
+  resolved.weights = pack.weights(data, seed, extent);
   resolved.coverage = pack.covered(data, seed);
   return resolved;
 }
