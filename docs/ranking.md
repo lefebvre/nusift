@@ -285,6 +285,7 @@ Three, and the differences between them are the format's whole argument:
 | `icrp119-ingestion-worker` | committed effective dose if the whole inventory were ingested, Sv | activity | excluded | worker, most restrictive f1 |
 | `icrp119-inhalation-worker-5um` | the same by inhalation, Sv | activity | excluded | worker, 5 µm AMAD, most restrictive absorption type |
 | `fgr15-air-submersion-adult` | effective dose rate in a contaminated cloud, Sv/s | **concentration**, per m³ | excluded | adult, semi-infinite cloud |
+| `icrp74-ambient-dose-h10` | ambient dose equivalent rate H\*(10), Sv/s | **kernel**, per unit fluence | — | the quantity a survey meter reads |
 
 The two ICRP packs are **progeny excluded** where SSR-6 is folded, and the reason is not a
 convention difference but a physical one: an intake coefficient covers the daughters that grow
@@ -330,6 +331,37 @@ An intake coefficient is `domain: instant` for a reason the field exists to catc
 **becquerel**, so against an activity it gives sieverts, and against a time-integrated activity
 in becquerel-seconds it would give sievert-seconds, which is not a quantity. The pack declares
 the domain and the response layer refuses the other.
+
+### The second shape: a curve against energy
+
+Four of the five shipped packs are a published number per nuclide. The fifth is a **kernel** — a
+curve against photon energy, which composes with the staged photon lines rather than replacing
+them:
+
+    weight(nuclide) = λ · Σ  intensity(line) · fluence(E, geometry) · κ(E)
+                       lines
+
+That is exactly the construction the built-in exposure and effective-dose metrics use, with κ
+read from a file instead of compiled in. A fluence-to-dose conversion and a detector efficiency
+curve are the same object to this code, and neither needs C++ to arrive — which was the whole
+claim packs were meant to make good.
+
+A kernel declares `shape: kernel` and `applies: fluence`, and has no `basis`: what it multiplies
+is a photon line, and the decay constant and the intensity are not a choice. It carries no
+nuclides either, so the coverage question changes shape with it. What a kernel can fail to speak
+for is an **energy**, not a nuclide: a line outside the tabulated range takes a clamped value,
+so coverage is the share of the answer that came from lines *inside* the range. On a caesium
+field against ICRP 74 that is 99.99% — the missing ten-thousandth is caesium's L X-rays, below
+the curve's 10 keV floor.
+
+The first kernel closes the gap item 1 left open. H\*(10) is the operational quantity a survey
+meter reads — defined in the ICRU sphere, designed to be measurable and to be a conservative
+estimate of effective dose below about 10 MeV — and it is what makes a computed field comparable
+with an instrument. On a caesium field it comes out at 10.99 Sv/h against the ICRP 116 effective
+dose of 9.25 Sv/h, a ratio of 1.19, which is the published relationship between the two
+quantities at 662 keV. The two curves were transcribed from two publications by two different
+routes, one out of a text layer and one off an image scan, so their agreeing on that ratio is a
+check on both.
 
 ### What a pack is not
 

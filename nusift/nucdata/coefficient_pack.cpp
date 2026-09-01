@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <istream>
 #include <optional>
@@ -87,6 +88,16 @@ bool splitHeader(const std::string& line, std::string& key, std::string& value) 
 
 }  // namespace
 
+const char* packShapeName(PackShape shape) {
+  switch (shape) {
+    case PackShape::Nuclide:
+      return "nuclide";
+    case PackShape::Kernel:
+      return "kernel";
+  }
+  return "?";
+}
+
 const char* packBasisName(PackBasis basis) {
   switch (basis) {
     case PackBasis::Activity:
@@ -110,6 +121,8 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
   std::string line;
   int lineNumber = 0;
   bool sawColumns = false;
+  bool kernel = false;
+  bool sawShape = false;
   int foldedColumn = -1;
   int noteColumn = -1;
   int rows = 0;
@@ -128,6 +141,18 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
       if (splitHeader(text, key, value)) {
         fields[key] = value;
         lastKey = key;
+        // Read as it arrives rather than with the rest of the header: it decides how every row
+        // below is parsed, and the rows come first in the file only for a nuclide pack.
+        if (key == "shape") {
+          const std::string shape = lowered(value);
+          if (shape == "kernel") {
+            kernel = true;
+          } else if (shape != "nuclide") {
+            throw InputError(
+                tagged(kModule, where + ": shape \"" + value + "\" is not `nuclide` or `kernel`"));
+          }
+          sawShape = true;
+        }
       } else if (!lastKey.empty()) {
         // A continuation of the field above, joined with a space so a citation reads as one.
         fields[lastKey] += " " + trimmed(std::string_view(text).substr(1));
@@ -139,6 +164,17 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
       // The column line, checked rather than skipped: a pack whose columns are in another order
       // would load silently and weight everything by the wrong number.
       const std::string columns = lowered(text);
+      if (kernel) {
+        if (columns.rfind("energy_ev,coefficient", 0) != 0) {
+          throw InputError(tagged(kModule, where +
+                                               ": a kernel pack's columns are "
+                                               "`energy_ev,coefficient[,note]`, got \"" +
+                                               text + "\""));
+        }
+        noteColumn = columns.find(",note") != std::string::npos ? 2 : -1;
+        sawColumns = true;
+        continue;
+      }
       if (columns.rfind("nuclide,coefficient", 0) != 0) {
         throw InputError(tagged(kModule, where +
                                              ": expected the column line "
@@ -178,10 +214,6 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
                                  ? cells[static_cast<std::size_t>(noteColumn)]
                                  : std::string();
 
-    const std::optional<Zai> zai = parseNuclideName(name);
-    if (!zai) {
-      throw InputError(tagged(kModule, where + ": \"" + name + "\" is not a nuclide name"));
-    }
     double value = 0.0;
     try {
       std::size_t consumed = 0;
@@ -194,6 +226,41 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
     }
     if (!(value >= 0.0)) {
       throw InputError(tagged(kModule, where + ": a coefficient cannot be negative"));
+    }
+
+    if (kernel) {
+      // A kernel row is an energy and a coefficient. Energies must ascend, because the
+      // interpolation walks them in order and a table out of order would interpolate between
+      // whichever neighbours it happened to find.
+      double energyEv = 0.0;
+      try {
+        std::size_t consumed = 0;
+        energyEv = std::stod(name, &consumed);
+        if (consumed != name.size()) {
+          throw std::invalid_argument("trailing");
+        }
+      } catch (const std::exception&) {
+        throw InputError(tagged(kModule, where + ": \"" + name + "\" is not an energy in eV"));
+      }
+      if (!(energyEv > 0.0)) {
+        throw InputError(tagged(kModule, where + ": an energy has to be positive"));
+      }
+      if (!pack.kernel_.empty() && !(energyEv > pack.kernel_.back().first)) {
+        throw InputError(tagged(kModule, where + ": energies must ascend"));
+      }
+      if (!(value > 0.0)) {
+        throw InputError(
+            tagged(kModule, where + ": a kernel coefficient has to be positive, because the "
+                                    "curve is interpolated in the log of it"));
+      }
+      pack.kernel_.emplace_back(energyEv, value);
+      ++rows;
+      continue;
+    }
+
+    const std::optional<Zai> zai = parseNuclideName(name);
+    if (!zai) {
+      throw InputError(tagged(kModule, where + ": \"" + name + "\" is not a nuclide name"));
     }
     if (!pack.coefficients_.emplace(zai->key(), value).second) {
       throw InputError(tagged(kModule, where + ": " + name +
@@ -239,11 +306,54 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
   pack.provenance_.quantity = required("quantity");
   pack.provenance_.unit = required("unit");
   pack.provenance_.source = required("source");
-  pack.provenance_.basis = basisFrom(required("basis"), sourceName);
   pack.provenance_.domains = domainsFrom(required("domain"), sourceName);
+  pack.provenance_.shape = kernel ? PackShape::Kernel : PackShape::Nuclide;
+  (void)sawShape;
+
+  if (kernel) {
+    // A kernel has no basis to declare: what it multiplies is a photon line's contribution, and
+    // the lambda and the intensity are not a choice. What it DOES have to say is which photon
+    // quantity the curve is against, because per-fluence and per-emitted differ by the whole
+    // point geometry.
+    if (fields.count("basis") != 0) {
+      throw InputError(tagged(
+          kModule, sourceName + ": a kernel pack has no `basis`. It multiplies a photon line, "
+                                "and `applies` says which quantity of it"));
+    }
+    const std::string applies = lowered(required("applies"));
+    if (applies != "fluence") {
+      throw InputError(
+          tagged(kModule, sourceName + ": applies \"" + applies + "\" is not `fluence`"));
+    }
+    pack.provenance_.applies = PackApplies::Fluence;
+    if (pack.kernel_.size() < 2) {
+      throw InputError(tagged(kModule, sourceName +
+                                           ": a kernel needs at least two energies to interpolate "
+                                           "between"));
+    }
+  } else {
+    pack.provenance_.basis = basisFrom(required("basis"), sourceName);
+    if (fields.count("applies") != 0) {
+      throw InputError(tagged(kModule, sourceName +
+                                           ": `applies` describes a kernel, and this pack is per "
+                                           "nuclide"));
+    }
+  }
 
   // Progeny handling is not a preference, it is whether the numbers can be used at all: a table
   // that folds daughters into the parent double-counts against a chain that tracks them.
+  if (kernel) {
+    if (fields.count("progeny") != 0 && lowered(fields["progeny"]) != "excluded") {
+      throw InputError(
+          tagged(kModule, sourceName + ": a kernel is a curve against energy and has no progeny to "
+                                       "fold. Its nuclides come from the chain being solved"));
+    }
+    if (rows == 0) {
+      throw InputError(tagged(kModule, sourceName + ": no coefficients"));
+    }
+    return pack;
+  }
+
   const std::string progeny = lowered(required("progeny"));
   if (progeny == "excluded") {
     if (!pack.foldedInto_.empty()) {
@@ -349,6 +459,12 @@ bool parentIsSeeded(const std::unordered_map<std::int64_t, std::vector<std::int6
 
 std::vector<double> CoefficientPack::weights(const NuclearData& data, const Inventory& seed,
                                              const PackExtent& extent) const {
+  // A kernel's weight depends on the geometry the response is being computed in, so it cannot
+  // be formed here: the response layer evaluates it per nuclide against the spec it was given.
+  if (provenance_.shape == PackShape::Kernel) {
+    return std::vector<double>(static_cast<std::size_t>(data.size()), 0.0);
+  }
+
   // The extent is required by exactly one basis and meaningless to the rest, so both mistakes
   // are refused rather than one being quietly ignored.
   if (provenance_.basis == PackBasis::Concentration) {
@@ -412,6 +528,43 @@ std::vector<double> CoefficientPack::weights(const NuclearData& data, const Inve
     }
   }
   return weights;
+}
+
+double CoefficientPack::kernelAt(double energyEv) const {
+  if (kernel_.empty()) {
+    throw NusiftError(tagged(kModule, "pack \"" + provenance_.name + "\" is not a kernel"));
+  }
+  // Clamped at both ends rather than extrapolated, as the air and ICRP 116 tables are: past the
+  // ends of a published curve its shape is not something this file knows. What a response does
+  // with a clamped line is REPORT it, which is why kernelClamps() sits beside this.
+  if (energyEv <= kernel_.front().first) {
+    return kernel_.front().second;
+  }
+  if (energyEv >= kernel_.back().first) {
+    return kernel_.back().second;
+  }
+  std::size_t hi = 1;
+  while (hi < kernel_.size() && kernel_[hi].first < energyEv) {
+    ++hi;
+  }
+  const auto& [loEv, loValue] = kernel_[hi - 1];
+  const auto& [hiEv, hiValue] = kernel_[hi];
+  // Log-log, the same choice and for the same reason as every other coefficient curve here:
+  // close to a power law over one interval, and orders of magnitude across the table.
+  const double t = (std::log(energyEv) - std::log(loEv)) / (std::log(hiEv) - std::log(loEv));
+  return std::exp(std::log(loValue) + t * (std::log(hiValue) - std::log(loValue)));
+}
+
+bool CoefficientPack::kernelClamps(double energyEv) const {
+  return kernel_.empty() || energyEv < kernel_.front().first || energyEv > kernel_.back().first;
+}
+
+double CoefficientPack::kernelMinEv() const {
+  return kernel_.empty() ? 0.0 : kernel_.front().first;
+}
+
+double CoefficientPack::kernelMaxEv() const {
+  return kernel_.empty() ? 0.0 : kernel_.back().first;
 }
 
 const std::vector<std::int64_t>& CoefficientPack::foldedInto(std::int64_t zaiKey) const {

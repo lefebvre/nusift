@@ -755,6 +755,38 @@ def test_the_intake_packs_carry_the_published_coefficients(data):
 
 @needs_store
 @needs_pack
+def test_h10_is_the_conservative_estimator_of_effective_dose(data):
+    """Two kernels transcribed from two publications by two different routes -- ICRP 116 out of a
+    text layer, ICRP 74 off an image scan -- reproducing the relationship between the quantities
+    they describe. H*(10) is designed to be a conservative estimate of effective dose for photons
+    up to about 10 MeV, and on a caesium field it exceeds it by the expected fifth."""
+    pack = nusift.load_pack(str(PACKS / "icrp74-ambient-dose-h10.csv"))
+    assert pack.unit == "Sv/s"
+    assert pack.size == 0, "a kernel carries no nuclides; it applies to whatever lines exist"
+
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e15)
+    res = nusift.decay(data, inv, [86400.0])
+    geometry = nusift.PointSource(distance_m=1.0)
+
+    ambient = nusift.response(data, res, geometry=geometry,
+                              pack=nusift.resolve_pack(pack, data, inv))
+    effective = nusift.response(data, res, metric="exposure", units="Sv/h", geometry=geometry)
+
+    per_hour = float(ambient.totals[0]) * 3600.0
+    ratio = per_hour / float(effective.totals[0])
+    assert 1.1 < ratio < 1.3, f"H*(10) should exceed effective dose by about a fifth here: {ratio}"
+
+    # Almost all of the answer comes from lines inside the curve's range, but not quite all:
+    # caesium's L X-rays sit below ICRP 74's 10 keV floor and take a clamped value. That is the
+    # coverage figure doing its job -- it is a share of the ANSWER, so a few soft lines carrying
+    # a ten-thousandth of the dose show up as a ten-thousandth rather than as a warning.
+    coverage = float(ambient.pack_coverage[0])
+    assert 0.999 < coverage < 1.0
+
+
+@needs_store
+@needs_pack
 def test_a_concentration_pack_needs_the_extent_it_is_spread_through(data):
     """An inventory is atoms and a concentration is atoms over an extent, so the extent is an
     input rather than a property of the material -- and it is half of what the answer means."""

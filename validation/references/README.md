@@ -169,6 +169,32 @@ FGR-15 states that its coefficients exclude decay products, so the pack declares
 "only after consideration of the equations describing production and decay of daughter
 radionuclides over time" is what the decay solve underneath the ranking performs.
 
+**`icrp74`** — ICRP (1996). *Conversion Coefficients for use in Radiological Protection against
+External Radiation.* ICRP Publication 74, Ann. ICRP 26(3/4).
+
+An INPUT. Table A.21's conversion coefficients from photon fluence to the ambient dose
+equivalent H*(10) are transcribed into
+[`data/packs/icrp74-ambient-dose-h10.csv`](../../data/packs/icrp74-ambient-dose-h10.csv), 25
+energies from 10 keV to 10 MeV.
+
+**This one was transcribed by eye, and it is the only table here that was.** The copy is a page
+scan with no text layer in the body and unusable OCR on the front matter, so there was nothing
+to parse; the table was read from the page image. What makes that defensible is that ICRP 74
+gives the same quantity twice -- per unit fluence and per unit air kerma -- alongside the air
+kerma per unit fluence relating them, so the three columns have to multiply out. They do, to
+better than 0.7% at every energy except 1.5 MeV, where the printed H*(10)/Phi of 6.90 pSv cm2
+sits 2.0% below the 7.04 its neighbours imply. That row is carried as printed: a transcription
+reproduces the page, and the discrepancy is recorded in the pack's own header rather than
+quietly corrected. The publication's footnote says the air-kerma column comes from a different
+compilation than the protection quantities, which is consistent with some inconsistency between
+them.
+
+The independent check is against the other kernel already in the tree: H*(10) is designed to be
+a conservative estimate of effective dose for photons below about 10 MeV, and on a caesium field
+this pack gives 10.99 Sv/h against ICRP 116's 9.25 Sv/h -- a ratio of 1.19, which is the
+published relationship at 662 keV between two curves transcribed from different publications by
+different routes.
+
 **`glasstone1977`** — Glasstone, S., & Dolan, P. J. (1977). *The Effects of Nuclear Weapons*
 (3rd ed.). U.S. Department of Defense and Energy Research and Development Administration.
 

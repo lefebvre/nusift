@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -187,6 +188,81 @@ TEST(CoefficientPack, AFoldIntoAParentThePackLacksDoesNotCover) {
   Inventory other;
   other.add(requireNuclideName("Sn-100"), 1.0e20);
   EXPECT_EQ(orphan.coverageOf(requireNuclideName("Sb-100").key(), other), PackCoverage::None);
+}
+
+// --- kernels -----------------------------------------------------------------
+
+std::string kernelHeader() {
+  return "# pack: test-kernel\n"
+         "# version: 1\n"
+         "# quantity: a dose quantity\n"
+         "# unit: Sv/s\n"
+         "# shape: kernel\n"
+         "# applies: fluence\n"
+         "# domain: instant\n"
+         "# source: invented for this test\n";
+}
+
+TEST(CoefficientPack, AKernelIsACurveAgainstEnergy) {
+  const CoefficientPack pack = packFrom(kernelHeader() +
+                                        "energy_ev,coefficient,note\n"
+                                        "1.0e4,1.0e-18,\n"
+                                        "1.0e5,1.0e-16,\n"
+                                        "1.0e6,1.0e-15,\n");
+  EXPECT_EQ(pack.provenance().shape, PackShape::Kernel);
+  EXPECT_EQ(pack.provenance().applies, PackApplies::Fluence);
+  EXPECT_EQ(pack.size(), 0) << "a kernel carries no nuclides at all";
+  EXPECT_DOUBLE_EQ(pack.kernelMinEv(), 1.0e4);
+  EXPECT_DOUBLE_EQ(pack.kernelMaxEv(), 1.0e6);
+
+  // Tabulated points come back as tabulated, to round-off.
+  EXPECT_NEAR(pack.kernelAt(1.0e5), 1.0e-16, 1.0e-16 * 1e-12);
+  // Log-log between them: a decade in energy for two decades in value is a power law, and the
+  // midpoint in log energy sits at the geometric mean of the values.
+  EXPECT_NEAR(pack.kernelAt(std::sqrt(1.0e4 * 1.0e5)), std::sqrt(1.0e-18 * 1.0e-16),
+              1.0e-17 * 1e-9);
+}
+
+// Clamped outside the table rather than extrapolated, and the clamping is reportable: past the
+// ends of a published curve its shape is not something this code knows.
+TEST(CoefficientPack, AKernelClampsOutsideItsRangeAndSaysSo) {
+  const CoefficientPack pack = packFrom(kernelHeader() +
+                                        "energy_ev,coefficient\n"
+                                        "1.0e4,2.0e-18\n"
+                                        "1.0e6,5.0e-15\n");
+  EXPECT_DOUBLE_EQ(pack.kernelAt(1.0e3), 2.0e-18);
+  EXPECT_DOUBLE_EQ(pack.kernelAt(1.0e8), 5.0e-15);
+  EXPECT_TRUE(pack.kernelClamps(1.0e3));
+  EXPECT_TRUE(pack.kernelClamps(1.0e8));
+  EXPECT_FALSE(pack.kernelClamps(1.0e5));
+  EXPECT_FALSE(pack.kernelClamps(1.0e4)) << "an endpoint is inside the table";
+}
+
+TEST(CoefficientPack, AKernelRefusesWhatItCannotInterpolate) {
+  const std::string columns = "energy_ev,coefficient\n";
+  EXPECT_THROW(packFrom(kernelHeader() + columns + "1.0e4,1e-18\n"), InputError)
+      << "one energy is not a curve";
+  EXPECT_THROW(packFrom(kernelHeader() + columns + "1.0e5,1e-18\n1.0e4,1e-16\n"), InputError)
+      << "energies out of order";
+  EXPECT_THROW(packFrom(kernelHeader() + columns + "1.0e4,0\n1.0e6,1e-15\n"), InputError)
+      << "a zero cannot be interpolated in the log";
+  EXPECT_THROW(packFrom(kernelHeader() + columns + "soft,1e-18\n1.0e6,1e-15\n"), InputError);
+  EXPECT_THROW(packFrom(kernelHeader() + "nuclide,coefficient\nCs-137,1e-18\n"), InputError)
+      << "a kernel's columns are energies";
+}
+
+// The two shapes describe different objects, so each refuses the other's header fields rather
+// than ignoring them: a `basis` on a kernel would suggest the curve multiplies something a
+// caller chooses, and it does not.
+TEST(CoefficientPack, TheTwoShapesRefuseEachOthersFields) {
+  EXPECT_THROW(packFrom(kernelHeader() + "# basis: activity\n" +
+                        "energy_ev,coefficient\n1e4,1e-18\n1e6,1e-15\n"),
+               InputError);
+  EXPECT_THROW(packFrom(headerWith("# applies: fluence\n") + "nuclide,coefficient\nCs-137,1\n"),
+               InputError);
+  EXPECT_THROW(packFrom(kernelHeader() + "# progeny: folded\n" +
+                        "energy_ev,coefficient\n1e4,1e-18\n1e6,1e-15\n"),
+               InputError);
 }
 
 // --- concentration ------------------------------------------------------------

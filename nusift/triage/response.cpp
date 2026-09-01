@@ -135,13 +135,51 @@ double domainScale(Metric metric, Domain domain) {
 // themselves -- the same spectrum, with or without the geometry that says where they get to.
 // The shared factor is not a coincidence: every metric NuSIFT reports is per-decay, so it is
 // proportional to the decay rate, and the metric is what each decay is worth.
+// A kernel pack's weight for one nuclide, and how much of it came from photon lines INSIDE the
+// curve's tabulated range. The second number is what a coverage figure is built from: a
+// spectrum sitting mostly off the end of a published curve is not an answer that curve can
+// give, and clamping it quietly would hide exactly that.
+struct KernelWeight {
+  double total = 0.0;
+  double inRange = 0.0;
+};
+
+KernelWeight kernelWeightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
+  const CoefficientPack& pack = *spec.pack->pack;
+  const double lambda = data.decayConstant(index);
+  KernelWeight weight;
+  if (lambda <= 0.0) {
+    return weight;
+  }
+  // The same construction the built-in photon metrics use, with the curve read from a file
+  // instead of compiled in: each line's fluence at the point, times what the curve says a
+  // photon of that energy is worth, summed with the geometry inside the sum.
+  for (const GammaLine& line : data.lines(index)) {
+    if (!(line.energyEv > 0.0 && line.intensity > 0.0)) {
+      continue;
+    }
+    const double contribution = lambda * line.intensity *
+                                exposure::pointFluenceCoeff(line.energyEv, spec.geometry) *
+                                pack.kernelAt(line.energyEv);
+    weight.total += contribution;
+    if (!pack.kernelClamps(line.energyEv)) {
+      weight.inRange += contribution;
+    }
+  }
+  return weight;
+}
+
 double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
   const double lambda = data.decayConstant(index);
   switch (spec.metric) {
     case Metric::Pack:
-      // Already resolved, basis and folds included, over this store's index space. The spec
-      // carries the vector rather than the pack because which coefficient applies to a folded
-      // daughter is a question about the seed, and the seed is not visible from here.
+      // A kernel is evaluated here, against this nuclide's lines and this spec's geometry,
+      // exactly as exposure is. A per-nuclide pack was resolved earlier -- basis and folds
+      // included -- because which coefficient applies to a folded daughter is a question about
+      // the seed, and the seed is not visible from here.
+      if (spec.pack->pack->provenance().shape == PackShape::Kernel) {
+        return kernelWeightFor(spec, data, index).total;
+      }
       return spec.pack->weights[static_cast<std::size_t>(index)];
     case Metric::Activity:
       // Against atoms this is a rate in Bq; against atom-seconds it is a count of decays.
@@ -568,6 +606,37 @@ std::vector<double> packCoverageByTime(const NuclearData& data, std::span<const 
                                        const ResponseSpec& spec) {
   const std::size_t nNuc = keys.size();
   const std::size_t nT = atomsByTime.size();
+
+  // A kernel pack asks a different coverage question from a per-nuclide one. There is no list
+  // of nuclides it does or does not carry -- it applies to every photon line there is -- so
+  // what it can fail to speak for is an ENERGY: a line outside the curve's tabulated range
+  // takes a clamped value. Coverage is therefore the share of the response that came from
+  // lines inside the range, which is the same thing the built-in kernels report about their
+  // own clamps.
+  if (spec.pack->pack->provenance().shape == PackShape::Kernel) {
+    std::vector<double> total(nNuc, 0.0);
+    std::vector<double> inRange(nNuc, 0.0);
+    for (std::size_t i = 0; i < nNuc; ++i) {
+      const int index = data.indexOfKey(keys[i]);
+      if (index < 0) {
+        continue;
+      }
+      const KernelWeight weight = kernelWeightFor(spec, data, index);
+      total[i] = weight.total;
+      inRange[i] = weight.inRange;
+    }
+    std::vector<double> coverage(nT, 1.0);
+    for (std::size_t k = 0; k < nT; ++k) {
+      double all = 0.0;
+      double carried = 0.0;
+      for (std::size_t i = 0; i < nNuc; ++i) {
+        all += total[i] * atomsByTime[k][i];
+        carried += inRange[i] * atomsByTime[k][i];
+      }
+      coverage[k] = all > 0.0 ? carried / all : 1.0;
+    }
+    return coverage;
+  }
 
   // The basis quantity per atom, which is what a coefficient would have multiplied.
   std::vector<double> perAtom(nNuc, 0.0);
