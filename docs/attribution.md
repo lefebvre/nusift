@@ -161,16 +161,16 @@ share of the response came from rows that stated an uncertainty at all — an er
 from rows holding half the answer is not an error bar on the answer — and that the nuclear data is
 taken as exact, which is the next section's subject.
 
-## 6. Not implemented: parameter sensitivities
+## 6. Parameter sensitivities: what the evaluated data does
 
 `dR/dn₀` is a sensitivity to the *seed*. The related question — how much the answer depends on
-the **evaluated data**, `dR/dλ` for half-lives or `dR/dσ` for cross sections — is a different
-calculation, and is not implemented.
+the **evaluated data** — is a different calculation. `dR/dλ` for half-lives is now implemented,
+in [`nusift/engine/sensitivity.hpp`](../nusift/engine/sensitivity.hpp), `nusift sensitivity`, and
+`nusift.decay_sensitivity`; `dR/dσ` for cross sections waits on activation.
 
-It is measurable today: `tests/spike/sensitivity_spike.cpp` (built with
-`-DNUSIFT_BUILD_SPIKES=ON`) runs it against cram's adjoint quadrature and checks it against
-central finite differences. Three findings from that harness are worth recording, because they
-shape what a future feature would have to do:
+`tests/spike/sensitivity_spike.cpp` (built with `-DNUSIFT_BUILD_SPIKES=ON`) is the harness that
+measured it first, against central finite differences. Its three findings are what the feature is
+built around, and each one is load-bearing rather than incidental:
 
 1. **A weighted response has two derivative terms.** cram's `R = ⟨w, n(T)⟩` holds `w` fixed, so
    its adjoint returns only the implicit term. But NuSIFT's weight *is* λ, so the derivative
@@ -193,9 +193,41 @@ This is the **other** parameter class from §5a, and the two do not overlap: tha
 what the assay said about the inventory at fixed nuclear data, this one would propagate what the
 evaluation says about the nuclear data at a fixed inventory. A complete error budget wants both.
 
+### How the feature answers each
+
+**The three terms are computed and reported separately**, because their *sum* is what cancels: a
+small total beside two large terms is a pinned nuclide, not an unimportant one, and a reader who
+saw only the total could not tell them apart. `weightDecayDerivatives()` supplies the explicit
+term and is **asked rather than assumed** — every built-in weight is λ times something
+λ-independent, but an atoms- or mass-basis coefficient pack carries no λ at all, and reporting
+`w/λ` there would invent a term that is not present. The basis term needs to know which atoms came
+from an activity measurement, which is why `InventoryEntry` carries `atomsFromActivity` as an
+*amount* rather than a basis enum: a nuclide weighed in one drum and counted in another has both,
+and one flag would have overwritten the other.
+
+**The elasticity leads the report.** `λ·(dR/dλ)/R` is dimensionless, survives the cancellation,
+and multiplies a relative σ directly. On a Cs-137 source at 30 d, Ba-137m's two terms agree to
+nine digits and cancel; its elasticity is 5×10⁻⁸ against Cs-137's 10⁻³, which is secular
+equilibrium stated as a number.
+
+**The refinement is chosen, not defaulted.** `chooseEndRefinements()` applies cram's own rule —
+raise it until the smallest quadrature piece falls below the shortest removal time in the pruned
+set — and refinement costs *two more pieces each*, not twice as many, so satisfying it is cheap. A
+30-day Cs-137 problem needs 12 against cram's default of 6. Where the rule asks for more than
+cram's ceiling of 30 — a fission source, whose chain carries microsecond isomers — the answer is
+**under-refined by cram's own criterion and says so**, because nothing in the numbers would show
+it.
+
+### What the norm is not
+
+The root-sum-square is printed as a **sensitivity norm** and never as an error bar. It takes Σ
+diagonal, and evaluated half-lives are not independent of the branchings and yields fitted
+alongside them. Off-diagonal terms move it in either direction.
+
 Uncertainty propagation on top of any of this additionally needs evaluated σ's, which the store
-reserves (`nuclide_half_life_uncertainty`, `mode_branching_uncertainty`,
-`nfy_product_yield_uncertainty`) and does not yet stage. Measured elasticities are near-equal
+now stages and previously only reserved (`nuclide_half_life_uncertainty`, `mode_branching_uncertainty`,
+`nfy_product_yield_uncertainty`) — 3270 of 3562 half-lives in ENDF/B-VIII.1, which is why the
+report states what share of the sensitivity sits on nuclides carrying one. Measured elasticities are near-equal
 between half-lives and yields (RSS `0.227` against `0.236`), so which parameter class dominates
 an error budget is decided entirely by those σ's — and therefore cannot be answered at all until
 they are staged.
@@ -222,4 +254,6 @@ staging problem than the σ's alone.
 | [`nusift/triage/uncertainty.hpp`](../nusift/triage/uncertainty.hpp) | Why `gᵀΣg` is exact, why the basis is not needed, and why a dated assay needs no new solve |
 | [`nusift/triage/uncertainty.cpp`](../nusift/triage/uncertainty.cpp) | The per-assay adjoint at `T + τ`, and the variance ordering |
 | [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `responseWeights`, which hands the adjoint the same metric definition the forward path uses |
+| [`nusift/engine/sensitivity.hpp`](../nusift/engine/sensitivity.hpp) | The three terms, why the elasticity leads, and the refinement rule |
+| [`nusift/engine/sensitivity.cpp`](../nusift/engine/sensitivity.cpp) | `chooseEndRefinements`, the quadrature, and the scatter back to chain space |
 | [`tests/spike/sensitivity_spike.cpp`](../tests/spike/sensitivity_spike.cpp) | The parameter-sensitivity measurements behind §6 |

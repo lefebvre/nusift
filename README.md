@@ -64,6 +64,10 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 # (each sample is an exact interval integral, so this costs solves the rate curve does not)
 nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
 
+# And the other parameter class: how much does the answer rest on the evaluated
+# half-lives? (elasticities, with the refinement chosen from the chain itself)
+nusift sensitivity -i inventory.csv --at 30d --metric exposure --units Sv/h
+
 # Given what the sheet says about each row, what is the error bar -- and which
 # measurement is it resting on? (exact: R is linear in the seed)
 nusift uncertainty -i assay.csv --at 30d --metric exposure --units Sv/h
@@ -288,6 +292,8 @@ Implemented:
 - Assays dated per row, reconciled to a common epoch and merged -- forward only, by refusal
 - Error bars from the assay's own uncertainties, exact rather than first order, ranked by which
   measurement dominates the variance
+- Decay-constant sensitivities: which evaluated half-lives the answer rests on, as elasticities
+- Evaluated 1-sigma on half-lives, branchings and fission yields, staged from the ENDF tapes
 - Decay to a set of cooling times, with exact time integrals over an interval
 - Ranking by nuclide, mass chain, element, or gamma line, with any of them pinnable
 - Point-source gamma exposure and air kerma in R/h or Gy/h, at any distance

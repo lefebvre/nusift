@@ -199,6 +199,7 @@ bool rowToAtoms(const Zai& zai, double value, Quantity unit, const NuclearData& 
 struct DatedRow {
   Zai zai;
   double atoms = 0.0;
+  double atomsFromActivity = 0.0;
   double sigmaAtoms = 0.0;
   double dateSeconds = 0.0;
   bool dated = false;
@@ -262,7 +263,7 @@ DatedInventory groupRows(std::vector<DatedRow> rows, const std::string& sourceNa
       group.inventory.setProvenance(group.label);
       out.groups.push_back(std::move(group));
     }
-    out.groups.back().inventory.add(row.zai, row.atoms, row.sigmaAtoms);
+    out.groups.back().inventory.add(row.zai, row.atoms, row.sigmaAtoms, row.atomsFromActivity);
   }
   return out;
 }
@@ -350,6 +351,7 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
     if (!rowToAtoms(zai, value, unit, data, sourceName, lineNumber, options, row.atoms)) {
       continue;
     }
+    row.atomsFromActivity = isActivityQuantity(unit) ? row.atoms : 0.0;
     const std::string_view sigmaText = fieldAt(fields, columns.uncertainty);
     if (!sigmaText.empty()) {
       // Converted through the same call the quantity was, which is exactly right: toAtoms is
@@ -501,6 +503,7 @@ DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
     takeDate(assayedText, sourceName, row.line, row, firstDated, firstUndated);
 
     if (rowToAtoms(zai, value, unit, data, sourceName, row.line, options, row.atoms)) {
+      row.atomsFromActivity = isActivityQuantity(unit) ? row.atoms : 0.0;
       bool usable = true;
       if (!uncertaintyText.empty()) {
         const double sigma = parseUncertainty(uncertaintyText, value, sourceName, row.line);

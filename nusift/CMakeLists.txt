@@ -14,6 +14,7 @@ add_library(nusift
   engine/decay_engine.cpp
   engine/adjoint_engine.cpp
   engine/reconcile.cpp
+  engine/sensitivity.cpp
   nucdata/store_locator.cpp
   nucdata/fission_yield.cpp
   seed/seed_fission.cpp
@@ -101,6 +102,7 @@ if(NUSIFT_INSTALL)
     engine/decay_result.hpp
     engine/inventory.hpp
     engine/reconcile.hpp
+    engine/sensitivity.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/engine)
 
   install(FILES

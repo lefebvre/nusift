@@ -27,6 +27,7 @@
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/engine/inventory.hpp"
 #include "nusift/engine/reconcile.hpp"
+#include "nusift/engine/sensitivity.hpp"
 #include "nusift/exposure/air_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/io/inventory_io.hpp"
@@ -1340,6 +1341,59 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   return 0;
 }
 
+// --- what the EVALUATED data does to the answer --------------------------------
+
+struct SensitivityCliOptions {
+  int intervals = 1;
+  int maxRefinements = 30;
+};
+
+// The other parameter class from `uncertainty`. That one propagates what the assay said about
+// the inventory at fixed nuclear data; this one asks how much the answer rests on the half-lives
+// the evaluation supplied, at a fixed inventory. A complete error budget wants both, and they do
+// not overlap.
+int runSensitivity(const CommonOptions& options, const SensitivityCliOptions& extra,
+                   const char* argv0) {
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
+
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() != 1) {
+    throw InputError("time: a sensitivity is taken at ONE instant; give one --at");
+  }
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options);
+  spec.aggregate = Aggregate::Nuclide;
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = packs.resolved();
+  spec.geometry = geometryFrom(options);
+
+  SensitivityOptions sensitivity;
+  sensitivity.scheduleIntervals = extra.intervals;
+  sensitivity.maxEndRefinements = extra.maxRefinements;
+
+  const DecaySensitivities result = decaySensitivities(data, inventory, times.front(), spec,
+                                                       sensitivity, decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.stagedCount();
+  context.seedProvenance = inventory.provenance();
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+  context.pack = packs.describe();
+
+  OutputStream out(options.output);
+  writeDecaySensitivities(out.get(), result, context, format);
+  return 0;
+}
+
 // --- what the assay's uncertainty does to the answer ---------------------------
 
 // The one uncertainty question that needs no evaluated data. `attribute` prints the importance
@@ -2072,6 +2126,23 @@ int main(int argc, char** argv) {
                    "Relative tolerance for --refine (default 1e-6)")
       ->check(CLI::PositiveNumber);
 
+  CommonOptions sensitivityOptions;
+  SensitivityCliOptions sensitivityExtra;
+  CLI::App* sensitivityCmd =
+      app.add_subcommand("sensitivity", "How much the answer rests on the evaluated half-lives");
+  addCommonOptions(sensitivityCmd, sensitivityOptions, /*wantsTimes=*/true,
+                   /*wantsIntervals=*/false);
+  sensitivityCmd
+      ->add_option("--intervals", sensitivityExtra.intervals,
+                   "Schedule intervals for the quadrature. More resolve interior variation; "
+                   "they do NOT substitute for refinement, which is chosen automatically")
+      ->check(CLI::PositiveNumber);
+  sensitivityCmd
+      ->add_option("--max-refinements", sensitivityExtra.maxRefinements,
+                   "Ceiling on the automatic end refinement. Reported when it binds, because a "
+                   "capped run is under-refined and nothing in the numbers would show it")
+      ->check(CLI::PositiveNumber);
+
   CommonOptions uncertaintyOptions;
   CLI::App* uncertaintyCmd = app.add_subcommand(
       "uncertainty", "The error bar the assay's own uncertainties put on a response");
@@ -2216,6 +2287,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (sensitivityCmd->parsed()) {
+      return runSensitivity(sensitivityOptions, sensitivityExtra, argv0);
     }
     if (uncertaintyCmd->parsed()) {
       return runUncertainty(uncertaintyOptions, argv0);

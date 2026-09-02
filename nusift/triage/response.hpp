@@ -303,6 +303,20 @@ struct ResponseSpec {
 // Throws InputError for a spec the store cannot answer, on the same terms buildResponse does.
 std::vector<double> responseWeights(const NuclearData& data, const ResponseSpec& spec);
 
+// d(w_i)/d(lambda_i) over the store's WHOLE index space, parallel to responseWeights().
+//
+// This is the EXPLICIT half of dR/dlambda, and it exists because it cannot be assumed. cram's
+// adjoint holds the response weight fixed, so what it returns is the implicit term alone; but
+// every built-in NuSIFT weight IS lambda times something lambda-independent, so the total
+// derivative carries a second term that the adjoint never sees.
+//
+// For those metrics the answer is w_i/lambda_i. A coefficient pack is the exception and has to
+// be ASKED rather than assumed: an activity- or concentration-basis pack multiplies by lambda
+// and behaves like the built-ins, while an atoms- or mass-basis pack does not carry lambda at
+// all, and its weight does not move when a decay constant does. Reporting w/lambda for one of
+// those would invent a term that is not there.
+std::vector<double> weightDecayDerivatives(const NuclearData& data, const ResponseSpec& spec);
+
 // The caveats an exposure figure carries at ONE instant: how much of the emitted photon energy
 // sits in spectra NuSIFT does not model, how thick the air path was left uncorrected, and which
 // emitters carry the unmodelled continuum.
