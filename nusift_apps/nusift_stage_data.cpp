@@ -30,6 +30,7 @@
 #include <set>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "cram/chain.hpp"
@@ -56,6 +57,20 @@ struct ExtraData {
   std::vector<double> lineEnergyEv;
   std::vector<double> lineIntensity;
   std::vector<int> lineStyp;
+
+  // MT457's evaluated half-life, and the uncertainty on it. The VALUE is read here only to
+  // check it against the one cram returns: the two come from the same record through different
+  // parsers, so a disagreement means the two readers are not looking at the same nuclide and
+  // every sigma attached on that basis would be attached to the wrong one.
+  double halfLifeSeconds = 0.0;
+  double halfLifeUncertainty = 0.0;
+
+  // Branching uncertainties keyed by (RTYP, RFS) rather than held in tape order. cram builds
+  // its mode list from this same record and almost certainly preserves the order, but "almost
+  // certainly" is not a basis on which to attach an uncertainty to a decay mode -- a silent
+  // off-by-one here would put beta-minus's sigma on the alpha branch and nothing downstream
+  // could tell. Keyed lookup makes the assumption checkable, and unmatched modes stay zero.
+  std::map<std::pair<double, double>, double> branchingUncertainty;
 };
 
 std::int64_t keyFromZa(int za, int liso) {
@@ -84,6 +99,23 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
         keyFromZa(static_cast<int>(section.ZA()), static_cast<int>(section.LISO()));
     ExtraData extra;
     extra.awr = static_cast<double>(section.atomicWeightRatio());
+
+    // [T, dT]: the value and its 1-sigma, in that order, as every uncertain quantity in MT457
+    // is written.
+    const auto halfLife = section.halfLife();
+    if (halfLife.size() >= 2) {
+      extra.halfLifeSeconds = static_cast<double>(halfLife[0]);
+      extra.halfLifeUncertainty = static_cast<double>(halfLife[1]);
+    }
+
+    for (const auto& mode : section.decayModes().decayModes()) {
+      const auto branching = mode.branchingRatio();
+      if (branching.size() >= 2) {
+        extra.branchingUncertainty[{static_cast<double>(mode.RTYP()),
+                                    static_cast<double>(mode.RFS())}] =
+            static_cast<double>(branching[1]);
+      }
+    }
 
     const auto& energies = section.averageDecayEnergies();
     if (energies.numberDecayEnergies() >= 2) {
@@ -200,12 +232,69 @@ struct YieldSet {
   double energyEv = 0.0;
   std::vector<std::int64_t> productKey;
   std::vector<double> productYield;
+  std::vector<double> productYieldUncertainty;
 };
+
+// MT454's yield uncertainties, by incident energy and then by product. Read directly for the
+// same reason the photon lines are: cram's reader carries the yields and not the DFY column
+// beside them.
+//
+// Keyed by product rather than held in tape order, on the same argument the branching sigmas
+// are: cram de-duplicates and re-sorts the product list, so a positional pairing would attach
+// each uncertainty to whichever product happened to land in that slot.
+using YieldUncertainties = std::map<double, std::map<std::int64_t, double>>;
+
+YieldUncertainties readYieldUncertainties(const std::string& path) {
+  using namespace njoy::ENDFtk;
+
+  YieldUncertainties out;
+  auto tape = tree::fromFile(path);
+  for (const auto& material : tape.materials()) {
+    if (!material.hasSection(8, 454)) {
+      continue;
+    }
+    const auto section = material.section(8, 454).parse<8, 454>();
+    for (const auto& set : section.yields()) {
+      auto& byProduct = out[static_cast<double>(set.E())];
+      const auto identifiers = set.ZAFP();
+      const auto states = set.FPS();
+      const auto sigmas = set.DFY();
+      const std::size_t n =
+          static_cast<std::size_t>(std::distance(identifiers.begin(), identifiers.end()));
+      auto id = identifiers.begin();
+      auto state = states.begin();
+      auto sigma = sigmas.begin();
+      for (std::size_t k = 0; k < n; ++k, ++id, ++state, ++sigma) {
+        const double value = static_cast<double>(*sigma);
+        if (!(value > 0.0)) {
+          continue;
+        }
+        const std::int64_t key =
+            keyFromZa(static_cast<int>(std::lround(*id)), static_cast<int>(std::lround(*state)));
+        // Summed rather than overwritten: a tape listing a product twice in one set is listing
+        // two contributions to one yield, and cram sums the values, so the uncertainties have
+        // to combine the same way or they would describe a different number than the yield does.
+        double& held = byProduct[key];
+        held = std::hypot(held, value);
+      }
+    }
+  }
+  return out;
+}
 
 // Load one fission-yield tape and append its distinct energy sets. Returns the number kept,
 // or -1 if the tape could not be read.
-int appendYields(std::vector<YieldSet>& sets, const std::string& path, const cram::Zai& parent) {
+int appendYields(std::vector<YieldSet>& sets, const std::string& path, const cram::Zai& parent,
+                 int& withSigma, int& withoutSigma) {
   cram::DepletionChain scratch;
+  YieldUncertainties uncertainties;
+  try {
+    uncertainties = readYieldUncertainties(path);
+  } catch (const std::exception& e) {
+    // A tape whose uncertainties cannot be read still has usable yields. Reported, and the
+    // yields staged without sigmas rather than the whole tape dropped.
+    std::fprintf(stderr, "  warning: no yield uncertainties from %s: %s\n", path.c_str(), e.what());
+  }
   try {
     // Independent yields (MT454), never cumulative (MT459). The chain feeds precursors into
     // their daughters explicitly, so seeding with cumulative yields would count every
@@ -230,9 +319,37 @@ int appendYields(std::vector<YieldSet>& sets, const std::string& path, const cra
     set.energyEv = yields->energy;
     set.productKey.reserve(yields->products.size());
     set.productYield.reserve(yields->products.size());
+    set.productYieldUncertainty.reserve(yields->products.size());
+
+    // The energy cram reports came from this tape, so the exact match is the expected path;
+    // the tolerance is for a reader that rounded on the way through rather than for a guess
+    // about which set was meant.
+    const std::map<std::int64_t, double>* forEnergy = nullptr;
+    for (const auto& [energy, byProduct] : uncertainties) {
+      const double scale = std::max(std::abs(energy), std::abs(yields->energy));
+      if (std::abs(energy - yields->energy) <= std::max(1.0e-9, 1.0e-9 * scale)) {
+        forEnergy = &byProduct;
+        break;
+      }
+    }
+
     for (const auto& [zai, value] : yields->products) {
-      set.productKey.push_back(Zai{zai.z, zai.a, zai.i}.key());
+      const std::int64_t productKey = Zai{zai.z, zai.a, zai.i}.key();
+      set.productKey.push_back(productKey);
       set.productYield.push_back(value);
+      double sigma = 0.0;
+      if (forEnergy != nullptr) {
+        const auto found = forEnergy->find(productKey);
+        if (found != forEnergy->end()) {
+          sigma = found->second;
+        }
+      }
+      set.productYieldUncertainty.push_back(sigma);
+      if (sigma > 0.0) {
+        ++withSigma;
+      } else {
+        ++withoutSigma;
+      }
     }
     sets.push_back(std::move(set));
     ++kept;
@@ -325,8 +442,11 @@ int main(int argc, char** argv) {
     std::printf("read %d decay tape(s), %d skipped\n", tapesRead, tapesFailed);
 
     std::vector<YieldSet> yieldSets;
+    int yieldsWithSigma = 0;
+    int yieldsWithout = 0;
     for (const auto& [tape, z, a] : namedYieldTapes) {
-      const int kept = appendYields(yieldSets, tape, cram::Zai{z, a, 0});
+      const int kept =
+          appendYields(yieldSets, tape, cram::Zai{z, a, 0}, yieldsWithSigma, yieldsWithout);
       std::printf("  %s: %d energy set(s) for Z=%d A=%d\n", tape.c_str(), kept, z, a);
     }
     for (const std::string& directory : yieldDirs) {
@@ -341,7 +461,8 @@ int main(int argc, char** argv) {
                        entry.path().string().c_str());
           continue;
         }
-        if (appendYields(yieldSets, entry.path().string(), *parent) > 0) {
+        if (appendYields(yieldSets, entry.path().string(), *parent, yieldsWithSigma,
+                         yieldsWithout) > 0) {
           ++staged;
         }
       }
@@ -376,6 +497,10 @@ int main(int argc, char** argv) {
     arrays.modeOffset.push_back(0);
     arrays.lineOffset.push_back(0);
     int withLines = 0;
+    int withHalfLifeSigma = 0;
+    int withBranchingSigma = 0;
+    int unmatchedModes = 0;
+    int halfLifeMismatches = 0;
     for (const std::int64_t key : keys) {
       const Zai zai = Zai::fromKey(key);
       const cram::Zai cramZai{zai.z, zai.a, zai.i};
@@ -386,6 +511,29 @@ int main(int argc, char** argv) {
 
       const auto extra = extras.find(key);
       const bool haveExtra = extra != extras.end();
+
+      // The cross-check the sigma rests on. cram and the direct reader parse the same MT457
+      // record, so their half-lives must agree; if they do not, the two are not describing the
+      // same nuclide and every uncertainty attached on that basis would be attached to the
+      // wrong one. Reported per nuclide and the sigma withheld, rather than staged on a
+      // pairing that has just been shown to be wrong.
+      double halfLifeSigma = 0.0;
+      if (haveExtra && decay != nullptr && extra->second.halfLifeUncertainty > 0.0) {
+        const double fromCram = decay->halfLife;
+        const double fromTape = extra->second.halfLifeSeconds;
+        const double scale = std::max(std::abs(fromCram), std::abs(fromTape));
+        if (scale > 0.0 && std::abs(fromCram - fromTape) > 1.0e-6 * scale) {
+          std::fprintf(stderr,
+                       "  warning: %s half-life differs between readers (%g s vs %g s); its "
+                       "uncertainty is not staged\n",
+                       formatNuclideName(zai).c_str(), fromCram, fromTape);
+          ++halfLifeMismatches;
+        } else {
+          halfLifeSigma = extra->second.halfLifeUncertainty;
+          ++withHalfLifeSigma;
+        }
+      }
+      arrays.halfLifeUncertainty.push_back(halfLifeSigma);
       arrays.awr.push_back(haveExtra ? extra->second.awr : 0.0);
       arrays.emEnergyEv.push_back(haveExtra ? extra->second.emEnergyEv : 0.0);
       arrays.continuumPhotonEv.push_back(haveExtra ? extra->second.continuumPhotonEv : 0.0);
@@ -396,6 +544,20 @@ int main(int argc, char** argv) {
           arrays.modeBranching.push_back(mode.branching);
           arrays.modeFinalState.push_back(mode.finalState);
           arrays.modeIsFission.push_back(mode.isFission ? 1 : 0);
+          // Matched by (RTYP, RFS), never by position. A mode the tape's own list does not
+          // carry under that pair gets no sigma rather than its neighbour's.
+          double branchingSigma = 0.0;
+          if (haveExtra) {
+            const auto found = extra->second.branchingUncertainty.find(
+                {mode.rtyp, static_cast<double>(mode.finalState)});
+            if (found != extra->second.branchingUncertainty.end()) {
+              branchingSigma = found->second;
+              ++withBranchingSigma;
+            } else {
+              ++unmatchedModes;
+            }
+          }
+          arrays.modeBranchingUncertainty.push_back(branchingSigma);
         }
       }
       arrays.modeOffset.push_back(static_cast<int>(arrays.modeRtyp.size()));
@@ -418,6 +580,7 @@ int main(int argc, char** argv) {
       for (std::size_t k = 0; k < set.productKey.size(); ++k) {
         arrays.nfyProductKey.push_back(set.productKey[k]);
         arrays.nfyProductYield.push_back(set.productYield[k]);
+        arrays.nfyProductYieldUncertainty.push_back(set.productYieldUncertainty[k]);
       }
       arrays.nfySetOffset.push_back(static_cast<int>(arrays.nfyProductKey.size()));
     }
@@ -445,6 +608,24 @@ int main(int argc, char** argv) {
     std::printf("  %d nuclides, %d with photon lines (%zu lines total)\n", arrays.nuclideCount(),
                 withLines, arrays.lineEnergyEv.size());
     std::printf("  %zu fission-yield set(s)\n", yieldSets.size());
+    // The uncertainty census. Printed because how MUCH of an evaluation carries a sigma is the
+    // thing that decides whether an error budget built on it means anything, and a store that
+    // reported only that the columns exist would not say.
+    std::printf("  uncertainties: %d/%d half-lives, %d/%zu branchings, %d/%zu yields\n",
+                withHalfLifeSigma, arrays.nuclideCount(), withBranchingSigma,
+                arrays.modeBranching.size(), yieldsWithSigma, arrays.nfyProductYield.size());
+    if (unmatchedModes > 0) {
+      std::fprintf(stderr,
+                   "  warning: %d decay mode(s) had no (RTYP, RFS) match in the tape's own mode "
+                   "list, so they carry no branching uncertainty\n",
+                   unmatchedModes);
+    }
+    if (halfLifeMismatches > 0) {
+      std::fprintf(stderr,
+                   "  warning: %d nuclide(s) had disagreeing half-lives between the two readers "
+                   "and carry no half-life uncertainty\n",
+                   halfLifeMismatches);
+    }
   } catch (const std::exception& e) {
     std::fprintf(stderr, "nusift_stage_data: %s\n", e.what());
     return 1;

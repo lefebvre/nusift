@@ -32,6 +32,7 @@ struct NuclearData::Impl {
   // is precisely the stable-terminator behaviour they should have.
   std::vector<std::int64_t> keys;
   std::vector<double> halfLife;
+  std::vector<double> halfLifeUncertainty;
   std::vector<double> lambda;
   std::vector<double> molarMass;
   std::vector<double> emEnergy;
@@ -164,6 +165,7 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
   }
 
   impl.halfLife.assign(total, 0.0);
+  impl.halfLifeUncertainty.assign(total, 0.0);
   impl.lambda.assign(total, 0.0);
   impl.molarMass.assign(total, 0.0);
   impl.emEnergy.assign(total, 0.0);
@@ -172,6 +174,12 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
   impl.hasAwr = !a.awr.empty();
   for (int i = 0; i < staged; ++i) {
     impl.halfLife[i] = a.halfLife[i];
+    // Guarded because the column is optional: a store staged before it existed carries an empty
+    // vector rather than a short one, and reading past it would be the same silent corruption
+    // the loader's length check exists to prevent.
+    if (i < static_cast<int>(a.halfLifeUncertainty.size())) {
+      impl.halfLifeUncertainty[i] = a.halfLifeUncertainty[static_cast<std::size_t>(i)];
+    }
     impl.lambda[i] = units::decayConstant(a.halfLife[i]);
     if (impl.hasAwr) {
       impl.molarMass[i] = units::molarMassFromAwr(a.awr[i]);
@@ -236,6 +244,10 @@ Zai NuclearData::zaiAt(int index) const {
 
 std::span<const std::int64_t> NuclearData::nuclideKeys() const {
   return impl_->keys;
+}
+
+double NuclearData::halfLifeUncertainty(int index) const {
+  return impl_->halfLifeUncertainty[static_cast<std::size_t>(index)];
 }
 
 double NuclearData::halfLifeSeconds(int index) const {

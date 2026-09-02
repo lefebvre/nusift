@@ -79,6 +79,13 @@ public:
   // terminator with no removal rate, not an error and not an infinity.
   double halfLifeSeconds(int index) const;
 
+  // 1-sigma on the half-life [s], or 0 when the evaluation stated none. Zero and "known
+  // exactly" are the same encoding, as they are on an inventory row and for the same reason: no
+  // evaluated half-life is known exactly, so a zero here means the tape was silent. ENDF/B-VIII.1
+  // states one for 3270 of 3828 nuclides, which is the figure that decides what an error budget
+  // built on this can cover.
+  double halfLifeUncertainty(int index) const;
+
   // ln(2)/halfLife, or 0 for a stable nuclide. This is the per-nuclide weight the activity
   // metric multiplies by, so it is precomputed rather than derived at every use.
   double decayConstant(int index) const;
