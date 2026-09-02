@@ -1269,6 +1269,142 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
 
 namespace {
 
+void writeTaskPlanText(std::ostream& out, const TaskPlan& plan, const ReportContext& context) {
+  out << "NuSIFT task plan\n";
+  out << "  starting " << formatDuration(plan.startSeconds) << ", " << plan.legs.size()
+      << " legs over " << formatDuration(plan.elapsedSeconds) << " ("
+      << formatDuration(plan.exposedSeconds) << " in the field)\n";
+  out << "  total: " << sci(plan.total) << ' ' << unitName(plan.unit) << '\n';
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << '\n';
+
+  // "for 3 m" beside "at 4 m" is three minutes beside four metres, and the two columns cannot
+  // be told apart by eye. The distance is a bare number under a unit-bearing header instead.
+  out << "   leg                 starts   duration   dist/m     occ           "
+      << unitName(plan.unit) << "     frac       per h\n";
+  for (const LegResult& leg : plan.legs) {
+    out << "   " << std::left << std::setw(18) << leg.name << std::right << std::setw(9)
+        << formatDuration(leg.startSeconds) << std::setw(11)
+        << formatDuration(leg.endSeconds - leg.startSeconds);
+
+    if (leg.isBreak) {
+      // A break has no distance and no rate. Printing zeros in those columns would read as
+      // "standing at the source, receiving nothing", which is a different and untrue claim.
+      out << std::setw(9) << "--" << std::setw(8) << "break" << std::setw(14) << "--"
+          << std::setw(9) << "--" << std::setw(12) << "--" << '\n';
+      continue;
+    }
+    char distance[16];
+    std::snprintf(distance, sizeof(distance), "%.4g", leg.distanceM);
+    out << std::setw(9) << distance << std::setw(8) << percent(leg.occupancy) << std::setw(14)
+        << sci(leg.accrued) << std::setw(9) << percent(leg.fraction) << std::setw(12)
+        << sci(leg.meanRate * 3600.0) << '\n';
+  }
+
+  if (plan.budget > 0.0) {
+    out << "\n  budget: " << sci(plan.budget) << ' ' << unitName(plan.unit);
+    if (!plan.budgetSpent) {
+      out << "  -- the plan fits, with " << sci(plan.budget - plan.total) << " to spare\n";
+    } else if (plan.spentInLeg >= 0) {
+      const LegResult& leg = plan.legs[static_cast<std::size_t>(plan.spentInLeg)];
+      out << "  -- SPENT during \"" << leg.name << "\", "
+          << formatDuration(plan.spentAtSeconds - leg.startSeconds) << " into it\n";
+      out << "    the plan as written accrues " << sci(plan.total) << ", which is "
+          << percent(plan.total / plan.budget) << " of it\n";
+    }
+  }
+
+  out << "\n  ";
+  writeWrappedNote(out,
+                   "Each leg is an exact interval integral with its own geometry, summed. No leg "
+                   "is shielded -- every one is an unshielded point source in air -- so a leg "
+                   "behind a wall is overstated by an amount this cannot know.");
+  if (std::any_of(plan.legs.begin(), plan.legs.end(),
+                  [](const LegResult& leg) { return !leg.isBreak && leg.occupancy < 1.0; })) {
+    out << "  ";
+    writeWrappedNote(out,
+                     "An occupancy below 1 is applied as a factor, which assumes the presence is "
+                     "spread evenly over the leg. Exact for a leg short against the decay; for a "
+                     "long one, split it into the stretches actually spent there.");
+  }
+}
+
+void writeTaskPlanCsv(std::ostream& out, const TaskPlan& plan) {
+  out << "leg,start_s,end_s,distance_m,occupancy,accrued,unit,fraction,cumulative,mean_rate_per_s,"
+         "is_break\n";
+  for (const LegResult& leg : plan.legs) {
+    out << csvField(leg.name) << ',' << shortestRoundTrip(leg.startSeconds) << ','
+        << shortestRoundTrip(leg.endSeconds) << ',';
+    // Empty rather than zero for a break: a distance of 0 m is a real and very different claim.
+    if (!leg.isBreak) {
+      out << shortestRoundTrip(leg.distanceM);
+    }
+    out << ',' << shortestRoundTrip(leg.occupancy) << ',' << shortestRoundTrip(leg.accrued) << ','
+        << unitName(plan.unit) << ',' << shortestRoundTrip(leg.fraction) << ','
+        << shortestRoundTrip(leg.cumulative) << ',' << shortestRoundTrip(leg.meanRate) << ','
+        << (leg.isBreak ? "true" : "false") << '\n';
+  }
+}
+
+void writeTaskPlanJson(std::ostream& out, const TaskPlan& plan) {
+  out << "{\n";
+  out << "  \"unit\": \"" << unitName(plan.unit) << "\",\n";
+  out << "  \"start_s\": " << jsonNumber(plan.startSeconds) << ",\n";
+  out << "  \"end_s\": " << jsonNumber(plan.endSeconds) << ",\n";
+  out << "  \"total\": " << jsonNumber(plan.total) << ",\n";
+  out << "  \"elapsed_s\": " << jsonNumber(plan.elapsedSeconds) << ",\n";
+  out << "  \"exposed_s\": " << jsonNumber(plan.exposedSeconds) << ",\n";
+  if (plan.budget > 0.0) {
+    out << "  \"budget\": " << jsonNumber(plan.budget) << ",\n";
+    out << "  \"budget_spent\": " << (plan.budgetSpent ? "true" : "false") << ",\n";
+    // Null rather than -1 and 0: a parser reading an index of -1 as a leg would be reading the
+    // last one, and a time of zero as an instant would be reading the start of the run.
+    out << "  \"spent_in_leg\": "
+        << (plan.budgetSpent ? std::to_string(plan.spentInLeg) : std::string("null")) << ",\n";
+    out << "  \"spent_at_s\": "
+        << (plan.budgetSpent ? jsonNumber(plan.spentAtSeconds) : std::string("null")) << ",\n";
+  }
+  out << "  \"legs\": [\n";
+  for (std::size_t i = 0; i < plan.legs.size(); ++i) {
+    const LegResult& leg = plan.legs[i];
+    out << "    {\"name\": \"" << leg.name << "\", \"start_s\": " << jsonNumber(leg.startSeconds)
+        << ", \"end_s\": " << jsonNumber(leg.endSeconds)
+        << ", \"distance_m\": " << (leg.isBreak ? std::string("null") : jsonNumber(leg.distanceM))
+        << ", \"occupancy\": " << jsonNumber(leg.occupancy)
+        << ", \"accrued\": " << jsonNumber(leg.accrued)
+        << ", \"fraction\": " << jsonNumber(leg.fraction)
+        << ", \"cumulative\": " << jsonNumber(leg.cumulative)
+        << ", \"mean_rate_per_s\": " << jsonNumber(leg.meanRate)
+        << ", \"is_break\": " << (leg.isBreak ? "true" : "false") << "}"
+        << (i + 1 == plan.legs.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeTaskPlan(std::ostream& out, const TaskPlan& plan, const ReportContext& context,
+                   ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeTaskPlanText(out, plan, context);
+      return;
+    case ReportFormat::Csv:
+      writeTaskPlanCsv(out, plan);
+      return;
+    case ReportFormat::Json:
+      writeTaskPlanJson(out, plan);
+      return;
+  }
+}
+
+namespace {
+
 void writeTriageSetText(std::ostream& out, const TriageSet& set,
                         std::span<const CoverageRequirement> requirements,
                         const ReportContext& context) {
