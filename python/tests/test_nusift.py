@@ -1434,3 +1434,80 @@ def test_a_file_dates_every_row_or_none(data, tmp_path):
     undated.write_text("Cs-137,1.0e14,Bq\nSr-90,5.0e13,Bq\n")
     groups = nusift.read_assays(str(undated), data)
     assert len(groups) == 1
+
+
+# --- the robust triage set ---------------------------------------------------
+
+
+@needs_store
+def test_a_shortlist_holds_its_floor_at_every_time_and_metric(data, result):
+    _, res = result
+    tables = {
+        "activity": nusift.response(data, res, metric="activity", units="Bq"),
+        "exposure": nusift.response(data, res, metric="exposure", units="R/h"),
+    }
+    chosen = nusift.shortlist(tables, coverage=0.95)
+
+    assert len(chosen) == len(chosen.members)
+    assert chosen.constraints == 2 * len(tables["activity"].times)
+    assert not chosen.shortfalls
+
+    # Checked against the tables rather than against what the search reported: at every time of
+    # every requirement, the chosen columns hold the floor.
+    keep = {m.label for m in chosen.members}
+    for table in tables.values():
+        columns = [i for i, name in enumerate(table.labels) if name in keep]
+        for k, total in enumerate(table.totals):
+            if total > 0.0:
+                assert table.values[k][columns].sum() / total >= 0.95 - 1e-12
+
+    # The binding point is the honest headline: it says whether the set clears its floor
+    # comfortably or by a thousandth at one instant.
+    assert chosen.binding.achieved >= chosen.binding.required - 1e-12
+    assert chosen.binding.required == 0.95
+
+
+@needs_store
+def test_a_shortlist_beats_the_union_of_the_per_time_answers(data, result):
+    _, res = result
+    tables = {
+        "activity": nusift.response(data, res, metric="activity", units="Bq"),
+        "exposure": nusift.response(data, res, metric="exposure", units="R/h"),
+    }
+    chosen = nusift.shortlist(tables, coverage=0.95)
+
+    # What `rank --coverage 0.95` repeated at every time and every metric would give. It is not
+    # wrong -- it over-delivers -- but it is not minimal, and nothing about it was chosen.
+    union = set()
+    for table in tables.values():
+        for k, total in enumerate(table.totals):
+            if total <= 0.0:
+                continue
+            row = table.values[k]
+            order = np.argsort(-row)
+            cumulative = np.cumsum(row[order]) / total
+            union.update(order[: int(np.searchsorted(cumulative, 0.95)) + 1].tolist())
+
+    assert len(chosen.members) < len(union)
+
+
+@needs_store
+def test_a_shortlist_is_reproducible_and_refuses_what_it_cannot_answer(data, result):
+    _, res = result
+    table = nusift.response(data, res, metric="activity", units="Bq")
+
+    first = nusift.shortlist({"activity": table}, coverage=0.9)
+    second = nusift.shortlist({"activity": table}, coverage=0.9)
+    # A monitoring list that changed between runs would be worse than no list.
+    assert [m.label for m in first.members] == [m.label for m in second.members]
+
+    with pytest.raises(nusift.InputError):
+        nusift.shortlist({}, coverage=0.9)
+    with pytest.raises(nusift.InputError):
+        nusift.shortlist({"activity": table}, coverage=1.5)
+    # A nuclide column and a mass-chain column are not the same kind of thing.
+    with pytest.raises(nusift.InputError):
+        nusift.shortlist({
+            "by nuclide": table,
+            "by chain": nusift.response(data, res, metric="activity", units="Bq", by="mass-chain"),
+        })

@@ -46,6 +46,7 @@
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
 #include "nusift/triage/spectrum.hpp"
+#include "nusift/triage/triage_set.hpp"
 #include "nusift/version.hpp"
 
 namespace nb = nanobind;
@@ -1305,6 +1306,79 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
+
+  // --- the smallest list that works everywhere -------------------------------
+  //
+  // `rank(coverage=0.95)` is this question at one instant for one metric. This is the same
+  // question asked of every metric at every time simultaneously, which is a covering problem
+  // rather than a longer sort -- and the union of the per-time answers is not it.
+  nb::class_<SetMember>(m, "SetMember")
+      .def_ro("label", &SetMember::label)
+      .def_ro("order", &SetMember::order,
+              "When greedy chose it, from 1. NOT a ranking: the second member is whichever most "
+              "improved the constraints still unmet given the first.")
+      .def_ro("peak_fraction", &SetMember::peakFraction,
+              "The largest share of any requirement's total this member ever holds. A member at "
+              "0.1% is there to hold up one particular instant, not because it is ever large.")
+      .def_ro("closed_shortfall", &SetMember::closedShortfall)
+      .def("__repr__", [](const SetMember& s) {
+        return "<SetMember " + std::to_string(s.order) + " " + s.label + ">";
+      });
+
+  nb::class_<CoveragePoint>(m, "CoveragePoint")
+      .def_ro("requirement", &CoveragePoint::requirement)
+      .def_ro("time_s", &CoveragePoint::timeSeconds)
+      .def_ro("achieved", &CoveragePoint::achieved)
+      .def_ro("required", &CoveragePoint::required)
+      .def("__repr__", [](const CoveragePoint& p) {
+        return "<CoveragePoint " + p.requirement + " at " + formatDuration(p.timeSeconds) + ": " +
+               shortestRoundTrip(p.achieved) + " of " + shortestRoundTrip(p.required) + ">";
+      });
+
+  nb::class_<TriageSet>(m, "TriageSet", "The smallest set holding a floor everywhere at once.")
+      .def_ro("members", &TriageSet::members)
+      .def_ro("binding", &TriageSet::binding,
+              "Where the set is closest to failing. The number to read first: a list of twenty "
+              "says nothing about whether it is comfortable or exactly on the edge.")
+      .def_ro("shortfalls", &TriageSet::shortfalls,
+              "Constraints no set these tables can form would meet. Empty in the ordinary case.")
+      .def_ro("candidates", &TriageSet::candidateCount)
+      .def_ro("constraints", &TriageSet::constraintCount)
+      .def("__len__", [](const TriageSet& s) { return s.members.size(); })
+      .def("__repr__", [](const TriageSet& s) {
+        return "<TriageSet " + std::to_string(s.members.size()) + " of " +
+               std::to_string(s.candidateCount) + " contributors>";
+      });
+
+  m.def(
+      "shortlist",
+      [](const nb::dict& requirements, double coverage) {
+        std::vector<CoverageRequirement> specs;
+        // The tables are borrowed, not copied: the dict passed in owns them and is alive for
+        // the whole call, which is the only lifetime a raw pointer here needs.
+        for (const auto [key, value] : requirements) {
+          CoverageRequirement requirement;
+          requirement.label = nb::cast<std::string>(key);
+          requirement.fraction = coverage;
+          if (nb::isinstance<nb::tuple>(value)) {
+            const nb::tuple pair = nb::cast<nb::tuple>(value);
+            if (pair.size() != 2) {
+              throw InputError("shortlist: a requirement is a table, or a (table, fraction) pair");
+            }
+            requirement.table = &nb::cast<const ResponseTable&>(pair[0]);
+            requirement.fraction = nb::cast<double>(pair[1]);
+          } else {
+            requirement.table = &nb::cast<const ResponseTable&>(value);
+          }
+          specs.push_back(requirement);
+        }
+        return robustTriageSet(specs);
+      },
+      "requirements"_a, "coverage"_a = 0.95,
+      "The smallest set of contributors holding `coverage` of EVERY requirement at EVERY time. "
+      "`requirements` maps a name to a response table, or to a (table, fraction) pair when the "
+      "floors differ. Set cover is NP-hard and this is a deterministic greedy: a small set that "
+      "meets the floor, not a proof that none smaller exists.");
 
   // --- the source term -------------------------------------------------------
   //

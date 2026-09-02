@@ -64,6 +64,10 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 # (each sample is an exact interval integral, so this costs solves the rate curve does not)
 nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
 
+# The smallest monitoring list holding 95% of BOTH metrics at every time on the grid
+nusift shortlist --seed-fission U-235 --yield-kt 20 --times 1h:100y:log:40 \
+        --metrics activity,exposure --coverage 0.95
+
 # Three assay sheets from different dates, brought to one and merged
 nusift reconcile -i assays.csv --write merged.csv --write-units Bq
 
@@ -284,6 +288,7 @@ Implemented:
 - Dominance forecasting: who leads, and when that changes
 - Located events: crossings, turns, level windows, and when a fixed-length task fits a budget
 - Stay times: how long a stay beginning at a given time can run before it spends a dose budget
+- Robust triage sets: the smallest list holding a coverage floor across every metric and time
 - Seed attribution: which seeded nuclide a response is riding on, as an exact partition
 - A binned photon emission spectrum, written as an MCNP `SDEF` card or an OpenMC source
 - Python bindings, with zero-copy NumPy views

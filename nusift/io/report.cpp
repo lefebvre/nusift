@@ -1269,6 +1269,140 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
 
 namespace {
 
+void writeTriageSetText(std::ostream& out, const TriageSet& set,
+                        std::span<const CoverageRequirement> requirements,
+                        const ReportContext& context) {
+  out << "NuSIFT robust triage set\n";
+  out << "  " << set.members.size() << " of " << set.candidateCount << " contributors, holding "
+      << percent(set.binding.required) << " of every requirement at every time\n";
+  out << "  requirements:\n";
+  for (const CoverageRequirement& requirement : requirements) {
+    out << "    " << std::left << std::setw(28) << requirement.label << std::right
+        << percent(requirement.fraction) << " at each of " << requirement.table->timeCount()
+        << " times\n";
+  }
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << '\n';
+
+  // First, because it is the number that says whether the answer is comfortable. A reader who
+  // saw only the list would have no way to tell a set with room to spare from one that clears
+  // its floor by a thousandth at a single instant.
+  out << "  closest to failing: " << set.binding.requirement << " at "
+      << formatDuration(set.binding.timeSeconds) << " -- holds " << percent(set.binding.achieved)
+      << " against " << percent(set.binding.required) << '\n';
+  out << '\n';
+
+  out << "   #  contributor        peak share   closed\n";
+  for (const SetMember& member : set.members) {
+    out << "  " << std::setw(2) << member.order << "  " << std::left << std::setw(18)
+        << member.label << std::right << std::setw(10) << percent(member.peakFraction) << "   "
+        << sci(member.closedShortfall) << '\n';
+  }
+
+  out << "\n  The order is not a ranking. The second member is whichever most improved the\n"
+         "  constraints still unmet GIVEN the first, which is usually not the second largest\n"
+         "  contributor to anything -- a member with a small peak share is there to hold up one\n"
+         "  particular instant, and dropping it is what the floor forbids.\n";
+
+  if (!set.shortfalls.empty()) {
+    out << "\n  ! " << set.shortfalls.size()
+        << " constraints are not met by ANY set these tables can form:\n";
+    const std::size_t shown = std::min<std::size_t>(set.shortfalls.size(), 5);
+    for (std::size_t i = 0; i < shown; ++i) {
+      out << "      " << set.shortfalls[i].requirement << " at "
+          << formatDuration(set.shortfalls[i].timeSeconds) << ": "
+          << percent(set.shortfalls[i].achieved) << " of a required "
+          << percent(set.shortfalls[i].required) << '\n';
+    }
+    if (set.shortfalls.size() > shown) {
+      out << "      ... and " << (set.shortfalls.size() - shown) << " more\n";
+    }
+    out << "    ";
+    writeWrappedNote(out,
+                     "Every column together falls short, so the floor is above what the table can "
+                     "express -- a gamma-line total counts lines below the column threshold, "
+                     "which no column carries.");
+  }
+
+  out << "\n  ";
+  writeWrappedNote(out,
+                   "Set cover is NP-hard and this is a deterministic greedy: a small set that "
+                   "meets the floor, not a proof that none smaller exists.");
+}
+
+void writeTriageSetCsv(std::ostream& out, const TriageSet& set) {
+  out << "kind,order,contributor,peak_fraction,closed_shortfall,requirement,time_s,achieved,"
+         "required\n";
+  for (const SetMember& member : set.members) {
+    out << "member," << member.order << ',' << csvField(member.label) << ','
+        << shortestRoundTrip(member.peakFraction) << ','
+        << shortestRoundTrip(member.closedShortfall) << ",,,,\n";
+  }
+  out << "binding,,,,," << csvField(set.binding.requirement) << ','
+      << shortestRoundTrip(set.binding.timeSeconds) << ','
+      << shortestRoundTrip(set.binding.achieved) << ',' << shortestRoundTrip(set.binding.required)
+      << '\n';
+  for (const CoveragePoint& point : set.shortfalls) {
+    out << "shortfall,,,,," << csvField(point.requirement) << ','
+        << shortestRoundTrip(point.timeSeconds) << ',' << shortestRoundTrip(point.achieved) << ','
+        << shortestRoundTrip(point.required) << '\n';
+  }
+}
+
+void writeTriageSetJson(std::ostream& out, const TriageSet& set) {
+  out << "{\n";
+  out << "  \"candidates\": " << set.candidateCount << ",\n";
+  out << "  \"constraints\": " << set.constraintCount << ",\n";
+  out << "  \"members\": [\n";
+  for (std::size_t i = 0; i < set.members.size(); ++i) {
+    const SetMember& member = set.members[i];
+    out << "    {\"order\": " << member.order << ", \"contributor\": \"" << member.label
+        << "\", \"peak_fraction\": " << jsonNumber(member.peakFraction)
+        << ", \"closed_shortfall\": " << jsonNumber(member.closedShortfall) << "}"
+        << (i + 1 == set.members.size() ? "\n" : ",\n");
+  }
+  out << "  ],\n";
+  out << "  \"binding\": {\"requirement\": \"" << set.binding.requirement
+      << "\", \"time_s\": " << jsonNumber(set.binding.timeSeconds)
+      << ", \"achieved\": " << jsonNumber(set.binding.achieved)
+      << ", \"required\": " << jsonNumber(set.binding.required) << "},\n";
+  out << "  \"shortfalls\": [\n";
+  for (std::size_t i = 0; i < set.shortfalls.size(); ++i) {
+    const CoveragePoint& point = set.shortfalls[i];
+    out << "    {\"requirement\": \"" << point.requirement
+        << "\", \"time_s\": " << jsonNumber(point.timeSeconds)
+        << ", \"achieved\": " << jsonNumber(point.achieved)
+        << ", \"required\": " << jsonNumber(point.required) << "}"
+        << (i + 1 == set.shortfalls.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeTriageSet(std::ostream& out, const TriageSet& set,
+                    std::span<const CoverageRequirement> requirements, const ReportContext& context,
+                    ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeTriageSetText(out, set, requirements, context);
+      return;
+    case ReportFormat::Csv:
+      writeTriageSetCsv(out, set);
+      return;
+    case ReportFormat::Json:
+      writeTriageSetJson(out, set);
+      return;
+  }
+}
+
+namespace {
+
 // Said in every format that has room for words, because it is the one thing about a merged
 // inventory that no column in it can show.
 constexpr const char* kCarryNote =

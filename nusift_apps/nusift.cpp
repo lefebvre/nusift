@@ -45,6 +45,7 @@
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
 #include "nusift/triage/spectrum.hpp"
+#include "nusift/triage/triage_set.hpp"
 #include "nusift/version.hpp"
 
 namespace {
@@ -1327,6 +1328,105 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   return 0;
 }
 
+// --- the smallest list that works everywhere -----------------------------------
+
+struct ShortlistOptions {
+  // Comma-separated, because several metrics at once is the point: a list chosen for activity
+  // alone guarantees nothing about the exposure floor at a later time. Empty takes --metric.
+  std::string metrics;
+};
+
+// `rank --coverage 0.95` is this question at one instant for one metric. This is the same
+// question asked of every metric at every time simultaneously, which is a covering problem
+// rather than a longer sort -- and the union of the per-time answers is not it.
+int runShortlist(const CommonOptions& options, const ShortlistOptions& shortlist,
+                 const char* argv0) {
+  const double fraction = options.coverage > 0.0 ? options.coverage : 0.95;
+
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
+
+  const std::vector<double> times = timesFrom(options);
+  const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
+
+  // Which metrics to be good for. A pack is one of them like any other, which is what makes
+  // "hold 95% of the activity AND of the A2 index, always" a single question.
+  std::vector<std::string> names;
+  if (shortlist.metrics.empty()) {
+    names.push_back(options.metric);
+  } else {
+    std::string field;
+    for (const char c : shortlist.metrics) {
+      if (c == ',') {
+        names.push_back(trimmedText(field));
+        field.clear();
+      } else {
+        field += c;
+      }
+    }
+    names.push_back(trimmedText(field));
+  }
+  if (!options.packPath.empty() && shortlist.metrics.empty()) {
+    names.clear();
+  }
+
+  // The tables outlive the requirements that point at them, which is why they are held here
+  // rather than built inside the loop that fills the requirement list.
+  std::vector<ResponseTable> tables;
+  std::vector<CoverageRequirement> requirements;
+  const Aggregate aggregate = aggregateFrom(options.aggregate);
+  tables.reserve(names.size() + 1);
+
+  for (const std::string& name : names) {
+    ResponseSpec spec;
+    spec.metric = metricFrom(name);
+    spec.aggregate = aggregate;
+    spec.unit = requireUnit("", spec.metric, Domain::Instant);
+    spec.geometry = geometryFrom(options);
+    tables.push_back(buildResponse(data, result, spec));
+    CoverageRequirement requirement;
+    requirement.fraction = fraction;
+    requirement.label = std::string(metricName(spec.metric)) + " (" + unitName(spec.unit) + ")";
+    requirements.push_back(requirement);
+  }
+  if (packs.resolved() != nullptr) {
+    ResponseSpec spec;
+    spec.metric = Metric::Pack;
+    spec.aggregate = aggregate;
+    spec.unit = Unit::PackDefined;
+    spec.pack = packs.resolved();
+    spec.geometry = geometryFrom(options);
+    tables.push_back(buildResponse(data, result, spec));
+    CoverageRequirement requirement;
+    requirement.fraction = fraction;
+    requirement.label = packs.resolved()->pack->provenance().name;
+    requirements.push_back(requirement);
+  }
+  if (requirements.empty()) {
+    throw InputError("shortlist: name at least one metric with --metrics or --pack");
+  }
+  // Filled after the vector has stopped growing: a pointer taken before a reallocation would
+  // outlive the table it named.
+  for (std::size_t i = 0; i < requirements.size(); ++i) {
+    requirements[i].table = &tables[i];
+  }
+
+  const TriageSet set = robustTriageSet(requirements);
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context = contextFor(data, storePath, inventory, tables.front(), packs);
+  context.geometry = describeGeometry(
+      options, requirements.size() == 1 ? metricFrom(names.front()) : Metric::Exposure,
+      tables.front().unit);
+
+  OutputStream out(options.output);
+  writeTriageSet(out.get(), set, requirements, context, format);
+  return 0;
+}
+
 // --- bringing several assays to one date --------------------------------------
 
 struct ReconcileOptions {
@@ -1745,6 +1845,15 @@ int main(int argc, char** argv) {
                    "Relative tolerance for --refine (default 1e-6)")
       ->check(CLI::PositiveNumber);
 
+  CommonOptions shortlistOptions;
+  ShortlistOptions shortlistExtra;
+  CLI::App* shortlistCmd = app.add_subcommand(
+      "shortlist", "The smallest set of contributors holding a coverage floor at every time");
+  addCommonOptions(shortlistCmd, shortlistOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  shortlistCmd->add_option("--metrics", shortlistExtra.metrics,
+                           "Be good for all of these at once, comma separated "
+                           "(e.g. activity,exposure,photon). Defaults to --metric");
+
   CommonOptions reconcileOptions;
   ReconcileOptions reconcileExtra;
   CLI::App* reconcileCmd = app.add_subcommand(
@@ -1860,6 +1969,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (shortlistCmd->parsed()) {
+      return runShortlist(shortlistOptions, shortlistExtra, argv0);
     }
     if (reconcileCmd->parsed()) {
       return runReconcile(reconcileOptions, reconcileExtra, argv0);
