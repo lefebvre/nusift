@@ -1807,3 +1807,27 @@ def test_decay_sensitivity_refuses_what_it_cannot_answer(data):
     # cram's own ceiling on end refinements, named here rather than surfacing from inside it.
     with pytest.raises(nusift.InputError):
         nusift.decay_sensitivity(data, inv, at="30d", max_refinements=99)
+
+
+@needs_store
+def test_the_sum_to_one_constraint_is_derived_not_imported(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    s = nusift.decay_sensitivity(data, inv, at="30d")
+
+    # Cs-137 has two beta- branches: 5.3% to stable Ba-137 and 94.7% to Ba-137m. ENDF states the
+    # SAME sigma for both, which is what the constraint requires of a forced pair and is
+    # independent confirmation that imposing it is the right model rather than an imposition.
+    branches = [b for b in s.branchings if b.parent == "Cs-137"]
+    assert len(branches) == 2
+    assert branches[0].sigma == pytest.approx(branches[1].sigma, rel=1e-9)
+    assert {b.daughter for b in branches} == {"Ba-137", "Ba-137m"}
+
+    (block,) = [b for b in s.branching_blocks if b.parent == "Cs-137"]
+    # Ba-137 ground is stable and carries no activity, so only one branch reaches the response.
+    # A perturbation must move both together, which halves the variance exactly.
+    assert block.constrained_variance == pytest.approx(block.diagonal_variance / 2.0, rel=1e-6)
+    assert s.branching_norm == pytest.approx(s.branching_norm_diagonal / math.sqrt(2.0), rel=1e-6)
+
+    # Ba-137m has a single mode, so its branching is 1 by construction and forms no block at all.
+    assert not any(b.parent == "Ba-137m" for b in s.branching_blocks)

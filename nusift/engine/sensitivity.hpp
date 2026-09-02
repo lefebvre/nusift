@@ -82,6 +82,37 @@ struct DecaySensitivity {
   double sigmaContribution = 0.0;
 };
 
+// One decay mode's branching fraction, and what the response does when it moves.
+struct BranchingSensitivity {
+  std::int64_t parentKey = 0;
+  std::string parent;
+  std::string daughter;
+  std::string mode;  // the ENDF RTYP, spelled
+
+  double branching = 0.0;
+  double sigma = 0.0;  // absolute 1-sigma on the branching, or 0 when none is evaluated
+
+  double total = 0.0;       // dR/db, in the response's unit
+  double elasticity = 0.0;  // b * (dR/db) / R
+};
+
+// What the branchings of ONE nuclide contribute to the variance, both ways.
+//
+// The constraint is per nuclide -- a nuclide's modes sum to one, and nothing couples two
+// nuclides' branchings -- so the covariance is block diagonal with one small block each, and
+// the contraction is exact rather than approximated.
+struct BranchingBlock {
+  std::int64_t parentKey = 0;
+  std::string parent;
+  int modes = 0;
+
+  // Sum over modes of (dR/db_i * sigma_i)^2: what a DIAGONAL treatment would report. Kept so the
+  // report can show what the constraint changes rather than asserting that it matters.
+  double diagonalVariance = 0.0;
+  // e^T C e with C the constrained covariance. This is the honest figure.
+  double constrainedVariance = 0.0;
+};
+
 struct DecaySensitivities {
   double time = 0.0;
   double response = 0.0;  // R, from the same forward march the quadrature used
@@ -100,6 +131,31 @@ struct DecaySensitivities {
   int withoutUncertainty = 0;
 
   // What the quadrature actually did, because its cost and its correctness are the same knob.
+  // --- branchings, and the one correlation that is derivable -----------------
+  //
+  // ENDF carries no covariance for decay data at all: the tapes hold MF1 and MF8 and nothing
+  // else. But a nuclide's branching fractions SUM TO ONE, and that constraint is a fact about
+  // the data model rather than an evaluated quantity -- so the correlation it induces can be
+  // derived rather than imported. Imposing it on the stated sigmas gives
+  //
+  //     C = D - (D u u^T D) / (u^T D u),      D = diag(sigma^2),  u = (1, 1, ... 1)
+  //
+  // the nearest covariance consistent with both, and C u = 0 exactly, so a perturbation can
+  // never take the branchings off the simplex they live on.
+  //
+  // Two consequences are worth expecting. A nuclide with ONE mode has b = 1 by construction and
+  // contributes exactly nothing, whatever sigma the evaluation states for it -- a diagonal
+  // treatment credits it with a variance it cannot have. And a nuclide with TWO modes is forced
+  // entirely: db_1 = -db_2, so the two sigmas must be equal and the correlation is exactly -1,
+  // which the projection recovers rather than assumes.
+  std::vector<BranchingSensitivity> branchings;
+  std::vector<BranchingBlock> branchingBlocks;
+  // sqrt(sum of constrained variances) / R, and the same with the constraint ignored. Both are
+  // reported because the difference between them IS the result: it says what treating the
+  // branchings as independent would have cost.
+  double branchingNorm = 0.0;
+  double branchingNormDiagonal = 0.0;
+
   int endRefinements = 0;
   int solves = 0;
   // True when the refinement rule asked for more than `maxEndRefinements` allowed. The answer is

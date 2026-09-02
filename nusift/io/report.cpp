@@ -1300,13 +1300,31 @@ void writeDecaySensitivitiesText(std::ostream& out, const DecaySensitivities& s,
     out << "   ... and " << (s.nuclides.size() - shown) << " more\n";
   }
 
-  out << "\n  root-sum-square: " << percent(s.relativeNorm) << " of R\n";
+  out << "\n  half-lives, root-sum-square: " << percent(s.relativeNorm) << " of R\n";
+
+  // The branching half, and the one correlation that is derivable. Both figures are shown
+  // because the DIFFERENCE between them is the result: it says what treating a nuclide's
+  // branchings as independent would have cost, and the constraint that removes it is a fact
+  // about the data model rather than an assumption about the evaluation.
+  if (!s.branchingBlocks.empty()) {
+    out << "  branchings:                  " << percent(s.branchingNorm) << " of R   ("
+        << percent(s.branchingNormDiagonal) << " if taken independent)\n";
+    out << "    over " << s.branchingBlocks.size()
+        << " nuclide(s) with more than one evaluated branch; a single-mode nuclide has b = 1 by\n"
+           "    construction and contributes nothing, whatever sigma is stated for it\n";
+  } else {
+    out << "  branchings:                  nothing to contribute -- every reachable nuclide is\n"
+           "    single-mode, so its branching is 1 by construction\n";
+  }
+
   out << "  ";
   writeWrappedNote(out,
-                   "This is a sensitivity NORM and not an error budget. It takes Sigma diagonal, "
-                   "and evaluated half-lives are not independent of the branchings and yields "
-                   "fitted alongside them -- off-diagonal terms move it in either direction. "
-                   "attribution.md section 6 has the argument.");
+                   "The half-life figure takes Sigma diagonal and is a sensitivity NORM rather "
+                   "than an error budget: ENDF carries no covariance for decay data, and "
+                   "evaluated half-lives are not independent of the yields fitted alongside "
+                   "them. The branching figure does NOT assume independence -- the modes of one "
+                   "nuclide sum to one, and that constraint is derived rather than imported. "
+                   "Fission yields are neither, and are not in either figure.");
   if (s.withoutUncertainty > 0) {
     out << "  ! ";
     writeWrappedNote(out, percent(s.coveredFraction) +
