@@ -48,6 +48,7 @@ add_executable(nusift_unit_tests
   unit/test_reconcile.cpp
   unit/test_report.cpp
   unit/test_seed_fission.cpp
+  unit/test_sensitivity.cpp
   unit/test_spectrum.cpp
   unit/test_nuclide.cpp
   unit/test_nuclide_name.cpp

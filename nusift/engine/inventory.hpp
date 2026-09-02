@@ -49,6 +49,11 @@ bool parseQuantity(std::string_view text, Quantity& out);
 // Canonical spelling, for round-tripping an inventory back out.
 const char* quantityName(Quantity quantity);
 
+// Whether a quantity is an ACTIVITY -- becquerel or curie and their multiples. Named because
+// what it decides is not a conversion but a derivative: a row given this way fixes A0 rather
+// than n0, so its atom count moves when a decay constant does.
+bool isActivityQuantity(Quantity quantity);
+
 struct InventoryEntry {
   std::int64_t zaiKey = 0;
   double atoms = 0.0;
@@ -64,6 +69,17 @@ struct InventoryEntry {
   // inventory would be a lie -- reconcile() drops it rather than propagating it, and
   // triage/uncertainty.hpp reaches back to the assays instead.
   double sigmaAtoms = 0.0;
+
+  // How many of `atoms` came from a row written as an ACTIVITY. Zero for a row given in atoms,
+  // moles or a mass unit, and equal to `atoms` for one given in becquerel or curie.
+  //
+  // Carried because a derivative with respect to a decay constant needs it and nothing else
+  // does. A row measured in atoms fixes n0, and lambda may move without it; a row measured in
+  // becquerel fixes A0, so n0 = A0/lambda MOVES with lambda and dR/dlambda gains a third term
+  // dR/dn0 * (-n0/lambda). Held as an amount rather than as a basis enum so that two rows of one
+  // nuclide given in different units -- a drum weighed and a source counted -- carry the right
+  // split instead of one overwriting the other's basis.
+  double atomsFromActivity = 0.0;
 };
 
 // A set of nuclides and their atom counts, merged by nuclide and kept sorted by key so that
@@ -83,8 +99,9 @@ public:
   // A sigma is held to the same standard and to no more than that -- in particular one LARGER
   // than its own quantity is accepted, because that is what a measurement near a detection
   // limit honestly reports.
-  void add(const Zai& zai, double atoms, double sigmaAtoms = 0.0);
-  void addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms = 0.0);
+  void add(const Zai& zai, double atoms, double sigmaAtoms = 0.0, double atomsFromActivity = 0.0);
+  void addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms = 0.0,
+              double atomsFromActivity = 0.0);
 
   // Whether any row carries an uncertainty. What decides if an error bar can be offered at all.
   bool hasUncertainties() const;

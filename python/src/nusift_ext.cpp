@@ -29,6 +29,7 @@
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/engine/inventory.hpp"
 #include "nusift/engine/reconcile.hpp"
+#include "nusift/engine/sensitivity.hpp"
 #include "nusift/exposure/dose_coefficients.hpp"
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/number_format.hpp"
@@ -1312,6 +1313,95 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
+
+  // --- what the EVALUATED data does to the answer ----------------------------
+  //
+  // The other parameter class. `uncertainty` propagates what the assay said at fixed nuclear
+  // data; this asks how much the answer rests on the half-lives the evaluation supplied, at a
+  // fixed inventory. A complete error budget wants both and they do not overlap.
+  nb::class_<DecaySensitivity>(m, "DecaySensitivity")
+      .def_ro("label", &DecaySensitivity::label)
+      .def_ro("half_life_s", &DecaySensitivity::halfLifeSeconds)
+      .def_ro("implicit", &DecaySensitivity::implicit,
+              "The response moving because the decay MATRIX moved. cram's adjoint returns this "
+              "term alone.")
+      .def_ro("explicit_weight", &DecaySensitivity::explicitWeight,
+              "... because the WEIGHT moved, since every built-in weight is lambda times "
+              "something lambda-independent.")
+      .def_ro("basis", &DecaySensitivity::basis,
+              "... because the SEED moved, for whatever part of the row was given as an "
+              "activity: n0 = A0/lambda.")
+      .def_ro("total", &DecaySensitivity::total)
+      .def_ro("elasticity", &DecaySensitivity::elasticity,
+              "lambda * (dR/dlambda) / R. THE number to read: dimensionless, and it stays "
+              "interpretable where the terms cancel and the total does not.")
+      .def_prop_ro(
+          "relative_uncertainty",
+          [](const DecaySensitivity& d) -> nb::object {
+            return d.relativeUncertainty > 0.0 ? nb::cast(d.relativeUncertainty) : nb::none();
+          },
+          "Evaluated 1-sigma on the half-life as a fraction, or None when none is staged.")
+      .def_ro("sigma_contribution", &DecaySensitivity::sigmaContribution)
+      .def("__repr__", [](const DecaySensitivity& d) {
+        return "<DecaySensitivity " + d.label + " elasticity " + shortestRoundTrip(d.elasticity) +
+               ">";
+      });
+
+  nb::class_<DecaySensitivities>(m, "DecaySensitivities",
+                                 "How much a response rests on the evaluated half-lives.")
+      .def_ro("time", &DecaySensitivities::time)
+      .def_ro("response", &DecaySensitivities::response)
+      .def_ro("nuclides", &DecaySensitivities::nuclides)
+      .def_ro("relative_norm", &DecaySensitivities::relativeNorm,
+              "Root-sum-square of the contributions, as a fraction of R. A sensitivity NORM and "
+              "not an error budget: it takes Sigma diagonal, and evaluated half-lives are not "
+              "independent of the branchings and yields fitted alongside them.")
+      .def_ro("covered_fraction", &DecaySensitivities::coveredFraction)
+      .def_ro("with_uncertainty", &DecaySensitivities::withUncertainty)
+      .def_ro("without_uncertainty", &DecaySensitivities::withoutUncertainty)
+      .def_ro("end_refinements", &DecaySensitivities::endRefinements)
+      .def_ro("refinement_capped", &DecaySensitivities::refinementCapped,
+              "True when the cap bound before the smallest quadrature piece reached the shortest "
+              "removal time. The answer is then UNDER-REFINED by cram's own criterion and may be "
+              "wrong by tens of percent, with nothing in the numbers to show it.")
+      .def_ro("solves", &DecaySensitivities::solves)
+      .def_ro("shortest_removal_s", &DecaySensitivities::shortestRemovalSeconds)
+      .def("__len__", [](const DecaySensitivities& d) { return d.nuclides.size(); })
+      .def("__repr__", [](const DecaySensitivities& d) {
+        return "<DecaySensitivities " + std::to_string(d.nuclides.size()) + " nuclides, norm " +
+               shortestRoundTrip(d.relativeNorm) + ">";
+      });
+
+  m.def(
+      "decay_sensitivity",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& at,
+         const std::string& metric, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, const ResolvedPack* pack, int intervals,
+         int max_refinements, int threads, bool prune, int cram_order) {
+        ResponseSpec spec;
+        spec.metric = pack != nullptr ? Metric::Pack : metricFrom(metric);
+        spec.aggregate = Aggregate::Nuclide;
+        spec.unit = requireUnit(units, spec.metric, Domain::Instant);
+        spec.geometry = geometry;
+        spec.pack = pack;
+        SensitivityOptions sensitivity;
+        sensitivity.scheduleIntervals = intervals;
+        sensitivity.maxEndRefinements = max_refinements;
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        const double time = timeFrom(at);
+        const nb::gil_scoped_release release;
+        return decaySensitivities(data, inventory, time, spec, sensitivity, options);
+      },
+      "data"_a, "inventory"_a, "at"_a, "metric"_a = "activity", "units"_a = "",
+      "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(), "intervals"_a = 1,
+      "max_refinements"_a = 30, "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
+      "dR/dlambda for every nuclide the seed reaches. Costs quadrature over the forward and "
+      "adjoint trajectories -- hundreds of solves where a ranking costs one -- and the "
+      "refinement is chosen automatically from the shortest removal time, because cram's "
+      "defaults are silently wrong by tens of percent on a decay chain.");
 
   // --- the error bar the assay puts on the answer ----------------------------
   //

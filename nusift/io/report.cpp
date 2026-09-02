@@ -1269,6 +1269,135 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
 
 namespace {
 
+void writeDecaySensitivitiesText(std::ostream& out, const DecaySensitivities& s,
+                                 const ReportContext& context) {
+  out << "NuSIFT decay-constant sensitivity\n";
+  out << "  t = " << formatDuration(s.time) << "    R = " << sci(s.response) << '\n';
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << "  quadrature: " << s.endRefinements << " end refinements for a "
+      << formatDuration(s.shortestRemovalSeconds) << " removal time, " << s.solves << " solves\n";
+  out << '\n';
+
+  out << "   nuclide        elasticity     T half sigma      of sigma_R   implicit+explicit\n";
+  const std::size_t shown = std::min<std::size_t>(s.nuclides.size(), 12);
+  for (std::size_t i = 0; i < shown; ++i) {
+    const DecaySensitivity& one = s.nuclides[i];
+    char terms[64];
+    std::snprintf(terms, sizeof(terms), "%9.2e %+9.2e", one.implicit, one.explicitWeight);
+    out << "   " << std::left << std::setw(12) << one.label << std::right << std::setw(13)
+        << sci(one.elasticity) << std::setw(14)
+        << (one.relativeUncertainty > 0.0 ? percent(one.relativeUncertainty) : std::string("none"))
+        << std::setw(15)
+        << (one.relativeUncertainty > 0.0 ? percent(one.sigmaContribution) : std::string("--"))
+        << "   " << terms << '\n';
+  }
+  if (s.nuclides.size() > shown) {
+    out << "   ... and " << (s.nuclides.size() - shown) << " more\n";
+  }
+
+  out << "\n  root-sum-square: " << percent(s.relativeNorm) << " of R\n";
+  out << "  ";
+  writeWrappedNote(out,
+                   "This is a sensitivity NORM and not an error budget. It takes Sigma diagonal, "
+                   "and evaluated half-lives are not independent of the branchings and yields "
+                   "fitted alongside them -- off-diagonal terms move it in either direction. "
+                   "attribution.md section 6 has the argument.");
+  if (s.withoutUncertainty > 0) {
+    out << "  ! ";
+    writeWrappedNote(out, percent(s.coveredFraction) +
+                              " of the total sensitivity sits on nuclides whose half-life "
+                              "uncertainty IS evaluated; " +
+                              std::to_string(s.withoutUncertainty) +
+                              " carry none and contribute nothing to the figure above.");
+  }
+  if (s.refinementCapped) {
+    out << "  ! ";
+    writeWrappedNote(out,
+                     "The refinement cap bound before the smallest quadrature piece reached the "
+                     "shortest removal time, so this is UNDER-REFINED by cram's own criterion "
+                     "and may be wrong by tens of percent. Nothing in the numbers would show it. "
+                     "Raise the cap, or ask about a shorter time.");
+  }
+  out << "  ";
+  writeWrappedNote(out,
+                   "The two terms are printed because their SUM is what cancels: at secular "
+                   "equilibrium they annihilate across orders of magnitude, and a small total "
+                   "beside two large terms is a pinned nuclide rather than an unimportant one.");
+}
+
+void writeDecaySensitivitiesCsv(std::ostream& out, const DecaySensitivities& s) {
+  out << "nuclide,half_life_s,decay_constant,implicit,explicit,basis,total,elasticity,"
+         "relative_uncertainty,sigma_contribution\n";
+  for (const DecaySensitivity& one : s.nuclides) {
+    out << csvField(one.label) << ',' << shortestRoundTrip(one.halfLifeSeconds) << ','
+        << shortestRoundTrip(one.decayConstant) << ',' << shortestRoundTrip(one.implicit) << ','
+        << shortestRoundTrip(one.explicitWeight) << ',' << shortestRoundTrip(one.basis) << ','
+        << shortestRoundTrip(one.total) << ',' << shortestRoundTrip(one.elasticity) << ',';
+    // Empty rather than zero: an evaluation that stated no uncertainty has said nothing, which
+    // is not the same claim as an uncertainty of zero.
+    if (one.relativeUncertainty > 0.0) {
+      out << shortestRoundTrip(one.relativeUncertainty) << ','
+          << shortestRoundTrip(one.sigmaContribution);
+    } else {
+      out << ',';
+    }
+    out << '\n';
+  }
+}
+
+void writeDecaySensitivitiesJson(std::ostream& out, const DecaySensitivities& s) {
+  out << "{\n";
+  out << "  \"time_s\": " << jsonNumber(s.time) << ",\n";
+  out << "  \"response\": " << jsonNumber(s.response) << ",\n";
+  out << "  \"relative_norm\": " << jsonNumber(s.relativeNorm) << ",\n";
+  out << "  \"covered_fraction\": " << jsonNumber(s.coveredFraction) << ",\n";
+  out << "  \"with_uncertainty\": " << s.withUncertainty << ",\n";
+  out << "  \"without_uncertainty\": " << s.withoutUncertainty << ",\n";
+  out << "  \"end_refinements\": " << s.endRefinements << ",\n";
+  out << "  \"refinement_capped\": " << (s.refinementCapped ? "true" : "false") << ",\n";
+  out << "  \"solves\": " << s.solves << ",\n";
+  out << "  \"nuclides\": [\n";
+  for (std::size_t i = 0; i < s.nuclides.size(); ++i) {
+    const DecaySensitivity& one = s.nuclides[i];
+    out << "    {\"nuclide\": \"" << one.label
+        << "\", \"half_life_s\": " << jsonNumber(one.halfLifeSeconds)
+        << ", \"implicit\": " << jsonNumber(one.implicit)
+        << ", \"explicit\": " << jsonNumber(one.explicitWeight)
+        << ", \"basis\": " << jsonNumber(one.basis) << ", \"total\": " << jsonNumber(one.total)
+        << ", \"elasticity\": " << jsonNumber(one.elasticity) << ", \"relative_uncertainty\": "
+        << (one.relativeUncertainty > 0.0 ? jsonNumber(one.relativeUncertainty)
+                                          : std::string("null"))
+        << ", \"sigma_contribution\": "
+        << (one.relativeUncertainty > 0.0 ? jsonNumber(one.sigmaContribution) : std::string("null"))
+        << "}" << (i + 1 == s.nuclides.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeDecaySensitivities(std::ostream& out, const DecaySensitivities& sensitivities,
+                             const ReportContext& context, ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeDecaySensitivitiesText(out, sensitivities, context);
+      return;
+    case ReportFormat::Csv:
+      writeDecaySensitivitiesCsv(out, sensitivities);
+      return;
+    case ReportFormat::Json:
+      writeDecaySensitivitiesJson(out, sensitivities);
+      return;
+  }
+}
+
+namespace {
+
 void writeUncertaintyText(std::ostream& out, const ResponseUncertainty& u,
                           const ReportContext& context) {
   out << "NuSIFT " << metricName(u.metric) << " uncertainty from the assay\n";

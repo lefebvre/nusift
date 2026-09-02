@@ -121,7 +121,8 @@ const char* quantityName(Quantity quantity) {
   return "?";
 }
 
-void Inventory::addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms) {
+void Inventory::addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms,
+                       double atomsFromActivity) {
   // A count of atoms is non-negative and finite by definition. Refused here rather than
   // downstream because the failure a bad count causes is silent: a negative seed decays into
   // negative activities that rank as the smallest contributors and vanish off the bottom of
@@ -145,12 +146,13 @@ void Inventory::addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms) {
       [](const InventoryEntry& entry, std::int64_t key) { return entry.zaiKey < key; });
   if (it != entries_.end() && it->zaiKey == zaiKey) {
     it->atoms += atoms;
+    it->atomsFromActivity += atomsFromActivity;
     // In quadrature: two rows of one nuclide are two measurements, and two independent
     // measurements add in variance rather than in standard deviation.
     it->sigmaAtoms = std::hypot(it->sigmaAtoms, sigmaAtoms);
     return;
   }
-  entries_.insert(it, InventoryEntry{zaiKey, atoms, sigmaAtoms});
+  entries_.insert(it, InventoryEntry{zaiKey, atoms, sigmaAtoms, atomsFromActivity});
 }
 
 bool Inventory::hasUncertainties() const {
@@ -158,8 +160,8 @@ bool Inventory::hasUncertainties() const {
                      [](const InventoryEntry& entry) { return entry.sigmaAtoms > 0.0; });
 }
 
-void Inventory::add(const Zai& zai, double atoms, double sigmaAtoms) {
-  addKey(zai.key(), atoms, sigmaAtoms);
+void Inventory::add(const Zai& zai, double atoms, double sigmaAtoms, double atomsFromActivity) {
+  addKey(zai.key(), atoms, sigmaAtoms, atomsFromActivity);
 }
 
 double Inventory::atomsOf(const Zai& zai) const {
@@ -176,6 +178,10 @@ double Inventory::totalAtoms() const {
     total += entry.atoms;
   }
   return total;
+}
+
+bool isActivityQuantity(Quantity quantity) {
+  return becquerelPer(quantity) > 0.0;
 }
 
 double toAtoms(double value, Quantity quantity, int index, const NuclearData& data) {

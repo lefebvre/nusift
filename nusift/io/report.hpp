@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "nusift/engine/reconcile.hpp"
+#include "nusift/engine/sensitivity.hpp"
 #include "nusift/triage/allowable.hpp"
 #include "nusift/triage/attribution.hpp"
 #include "nusift/triage/events.hpp"
@@ -157,6 +158,20 @@ void writeStayTimes(std::ostream& out, const StayReport& report, const ReportCon
 void writeReconciliation(std::ostream& out, const Reconciliation& reconciled,
                          const NuclearData& data, const ReportContext& context,
                          ReportFormat format);
+
+// Render decay-constant sensitivities: which evaluated half-lives the answer rests on.
+//
+// The elasticity column leads, not the derivative. At secular equilibrium the two terms of
+// dR/dlambda cancel across seven orders of magnitude, so the derivative's magnitude says more
+// about the units it is in than about the physics; the elasticity is a fractional response to a
+// fractional perturbation and stays readable through that.
+//
+// The root-sum-square is printed as a NORM and never as an error bar. Half-lives are not
+// independent of the branchings and yields fitted alongside them, so a diagonal combination is a
+// sensitivity figure, not an uncertainty -- said in the report because the number looks exactly
+// like an error bar otherwise.
+void writeDecaySensitivities(std::ostream& out, const DecaySensitivities& sensitivities,
+                             const ReportContext& context, ReportFormat format);
 
 // Render an error bar and what it rests on: sigma_R, and which assay row dominates it.
 //

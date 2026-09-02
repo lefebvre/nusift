@@ -1,9 +1,17 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
+
+#include "nusift/engine/sensitivity.hpp"
+
 #include <cmath>
 #include <string>
 
+#include <algorithm>
+
 #include "nusift/core/nuclide_name.hpp"
+#include "nusift/engine/sensitivity.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/units.hpp"
@@ -138,6 +146,63 @@ TEST(PublishedConstants, SpecificActivitiesMatchPublishedTables) {
     EXPECT_NEAR(perGram, c.curiePerGram, c.curiePerGram * 0.02)
         << c.name << ": computed " << perGram << " Ci/g, tabulated " << c.curiePerGram;
   }
+}
+
+// --- decay-constant sensitivity against known physics ------------------------
+
+// Ba-137m at secular equilibrium is the case attribution.md section 6 records: its activity is
+// pinned by Cs-137's feed rate, so moving its OWN half-life barely moves the response. The two
+// terms of dR/dlambda are therefore large and nearly equal and opposite, and their sum is orders
+// of magnitude below either.
+//
+// This is a physics claim rather than an arithmetic one -- the pinning is what secular
+// equilibrium means -- and it is the sharpest available check that both terms are present and
+// correctly signed. A calculation carrying only cram's implicit term would report Ba-137m as the
+// most sensitive nuclide in the problem rather than nearly the least.
+TEST(PublishedConstants, Barium137mIsPinnedByItsParentAndSaysSo) {
+  Inventory inv;
+  inv.add(Zai{55, 137, 0}, 1.0e20);
+
+  ResponseSpec spec;
+  const DecaySensitivities s = decaySensitivities(committedStore(), inv, 30.0 * 86400.0, spec);
+
+  const auto find = [&s](const char* label) {
+    const auto it =
+        std::find_if(s.nuclides.begin(), s.nuclides.end(),
+                     [label](const DecaySensitivity& one) { return one.label == label; });
+    EXPECT_NE(it, s.nuclides.end()) << label;
+    return *it;
+  };
+  const DecaySensitivity ba = find("Ba-137m");
+  const DecaySensitivity cs = find("Cs-137");
+
+  EXPECT_GT(std::abs(ba.implicit), 0.0);
+  EXPECT_NEAR(ba.implicit, -ba.explicitWeight, std::abs(ba.explicitWeight) * 1.0e-3);
+  EXPECT_LT(std::abs(ba.total), std::abs(ba.implicit) * 1.0e-4)
+      << "a pinned nuclide's own half-life barely moves the response";
+
+  // And the pinning is the point: the parent that sets the feed rate matters far more than the
+  // daughter that does the emitting.
+  EXPECT_GT(std::abs(cs.elasticity), std::abs(ba.elasticity) * 100.0);
+}
+
+// The refinement rule earning its place. cram's default of 6 end refinements is for a thermal
+// pin; this problem's shortest removal time is Ba-137m's ~221 s, and a 30-day interval in four
+// pieces needs twelve to reach it. Under-refining is silently wrong rather than noisy, so what
+// is checked is that the rule ASKS for enough -- the spike measured the 37% error that follows
+// when it does not.
+TEST(PublishedConstants, TheRefinementRuleReachesTheShortestRemovalTime) {
+  Inventory inv;
+  inv.add(Zai{55, 137, 0}, 1.0e20);
+
+  ResponseSpec spec;
+  const DecaySensitivities s = decaySensitivities(committedStore(), inv, 30.0 * 86400.0, spec);
+
+  EXPECT_FALSE(s.refinementCapped) << "this problem is refinable within cram's limit";
+  EXPECT_GT(s.endRefinements, 6) << "cram's default is not enough for a decay chain";
+  EXPECT_NEAR(s.shortestRemovalSeconds, 221.0, 5.0) << "Ba-137m's mean lifetime, 153 s / ln 2";
+  const double smallest = (30.0 * 86400.0 / 4.0) / std::pow(2.0, s.endRefinements);
+  EXPECT_LT(smallest, s.shortestRemovalSeconds) << "cram's own criterion, met";
 }
 
 }  // namespace

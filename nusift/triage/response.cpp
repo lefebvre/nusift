@@ -1061,6 +1061,30 @@ std::vector<double> responseWeights(const NuclearData& data, const ResponseSpec&
   return weight;
 }
 
+std::vector<double> weightDecayDerivatives(const NuclearData& data, const ResponseSpec& spec) {
+  const std::vector<double> weights = responseWeights(data, spec);
+  std::vector<double> derivatives(weights.size(), 0.0);
+
+  // Whether this spec's weight carries lambda at all. Every built-in does; a pack does only on
+  // the two bases whose coefficient multiplies an activity.
+  bool scalesWithLambda = true;
+  if (spec.metric == Metric::Pack) {
+    const PackBasis basis = spec.pack->pack->provenance().basis;
+    scalesWithLambda = basis == PackBasis::Activity || basis == PackBasis::Concentration;
+  }
+  if (!scalesWithLambda) {
+    return derivatives;
+  }
+
+  for (std::size_t i = 0; i < weights.size(); ++i) {
+    const double lambda = data.decayConstant(static_cast<int>(i));
+    if (lambda > 0.0) {
+      derivatives[i] = weights[i] / lambda;
+    }
+  }
+  return derivatives;
+}
+
 ExposureCaveats exposureCaveats(const NuclearData& data, std::span<const std::int64_t> keys,
                                 std::span<const double> atoms, const ResponseSpec& spec) {
   ExposureCaveats out;

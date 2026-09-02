@@ -1729,3 +1729,81 @@ def test_uncertainty_refuses_a_question_it_cannot_answer(data, tmp_path):
     dated = nusift.read_assays(str(dated_path), data)
     with pytest.raises(nusift.InputError):
         nusift.uncertainty(data, dated, at="30d", epoch="2000-01-01")
+
+
+# --- what the evaluated data does to the answer ------------------------------
+
+
+@needs_store
+def test_decay_sensitivity_carries_all_three_terms(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    s = nusift.decay_sensitivity(data, inv, at="30d")
+
+    by_name = {n.label: n for n in s.nuclides}
+    ba, cs = by_name["Ba-137m"], by_name["Cs-137"]
+
+    # Ba-137m is pinned by its parent's feed rate, so its two terms are large and nearly equal
+    # and opposite. A calculation carrying only cram's implicit term would rank it the most
+    # sensitive nuclide here rather than nearly the least.
+    assert ba.implicit == pytest.approx(-ba.explicit_weight, rel=1e-3)
+    assert abs(ba.total) < abs(ba.implicit) * 1e-4
+    assert abs(cs.elasticity) > abs(ba.elasticity) * 100
+
+    # An atoms-specified seed has no basis term at all.
+    assert cs.basis == 0.0
+    assert s.relative_norm > 0.0
+    assert not s.refinement_capped
+
+
+@needs_store
+def test_an_activity_specified_row_gains_the_basis_term(data, tmp_path):
+    path = tmp_path / "bq.csv"
+    path.write_text("Cs-137,1.0e14,Bq\n")
+    by_activity = nusift.read_inventory(str(path), data)
+
+    atoms = nusift.Inventory()
+    atoms.add("Cs-137", by_activity.atoms[0])
+
+    a = nusift.decay_sensitivity(data, atoms, at="30d")
+    b = nusift.decay_sensitivity(data, by_activity, at="30d")
+
+    cs_a = next(n for n in a.nuclides if n.label == "Cs-137")
+    cs_b = next(n for n in b.nuclides if n.label == "Cs-137")
+
+    # The same material, so the same response -- but a row that fixes A0 rather than n0 moves
+    # its own seed when lambda does, and only that one carries the third term.
+    assert a.response == pytest.approx(b.response, rel=1e-9)
+    assert cs_a.basis == 0.0
+    assert cs_b.basis < 0.0
+    assert cs_b.elasticity < cs_a.elasticity
+
+
+@needs_store
+def test_the_refinement_is_chosen_not_defaulted(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+    s = nusift.decay_sensitivity(data, inv, at="30d")
+
+    # cram's default of 6 suits a thermal pin. This problem's shortest removal time is
+    # Ba-137m's ~221 s, and the rule asks for twelve to reach it.
+    assert s.end_refinements > 6
+    assert s.shortest_removal_s == pytest.approx(221.0, abs=5.0)
+    assert (30 * 86400 / 4) / 2**s.end_refinements < s.shortest_removal_s
+    assert s.solves > 100
+
+
+@needs_store
+def test_decay_sensitivity_refuses_what_it_cannot_answer(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e20)
+
+    # At t = 0 the response is the seed and no half-life has acted on it.
+    with pytest.raises(nusift.InputError):
+        nusift.decay_sensitivity(data, inv, at=0.0)
+    # The shares are instantaneous, as everywhere the adjoint is involved.
+    with pytest.raises(nusift.InputError):
+        nusift.decay_sensitivity(data, inv, at="30d", units="decays")
+    # cram's own ceiling on end refinements, named here rather than surfacing from inside it.
+    with pytest.raises(nusift.InputError):
+        nusift.decay_sensitivity(data, inv, at="30d", max_refinements=99)
