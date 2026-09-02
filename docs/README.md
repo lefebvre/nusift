@@ -9,7 +9,7 @@ that produced the number you are looking at.
 | # | Stage | What it decides |
 | --- | --- | --- |
 | 1 | [Nuclear data](nuclear-data.md) | What the store holds, how ENDF becomes a chain, and why whole photon spectra are persisted rather than one constant per nuclide |
-| 2 | [Inventory and seeding](inventory.md) | Every route to a starting atom count — a file in any unit, or a fission source sized three ways |
+| 2 | [Inventory and seeding](inventory.md) | Every route to a starting atom count — a file in any unit, assays from several dates reconciled to one, or a fission source sized three ways |
 | 3 | [The decay solve](decay-solve.md) | The matrix, CRAM, the forward-closure pruning, time grids, threads, and determinism |
 | 4 | [Interval integration](interval-integration.md) | Time-integrated answers in closed form, and the cancellation guard |
 | 5 | [Exposure](exposure.md) | The photon transport model: lines, air attenuation, air kerma, ICRP 116 effective dose, and what it excludes |

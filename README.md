@@ -64,6 +64,9 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 # (each sample is an exact interval integral, so this costs solves the rate curve does not)
 nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
 
+# Three assay sheets from different dates, brought to one and merged
+nusift reconcile -i assays.csv --write merged.csv --write-units Bq
+
 # And the converse: going in at 30 d, how long may someone stay on a dose budget?
 nusift stay -i inventory.csv --at 30d --at 1y --at 30y --metric exposure \
         --units Sv --budget 0.02 --distance 2
@@ -269,6 +272,7 @@ installed header, so a consumer calling the NuSIFT API never compiles an Eigen t
 Implemented:
 
 - Inventory input in atoms, moles, mass, or activity units
+- Assays dated per row, reconciled to a common epoch and merged -- forward only, by refusal
 - Decay to a set of cooling times, with exact time integrals over an interval
 - Ranking by nuclide, mass chain, element, or gamma line, with any of them pinnable
 - Point-source gamma exposure and air kerma in R/h or Gy/h, at any distance

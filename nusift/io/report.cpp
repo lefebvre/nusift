@@ -9,8 +9,10 @@
 #include <string>
 
 #include "nusift/core/error.hpp"
+#include "nusift/core/nuclide_name.hpp"
 #include "nusift/io/number_format.hpp"
 #include "nusift/io/time_spec.hpp"
+#include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/triage/response.hpp"
 
 namespace nusift {
@@ -76,6 +78,29 @@ std::string csvField(const std::string& text) {
   }
   out += '"';
   return out;
+}
+
+// Wrap a long note under a "  ! " marker, aligned under it on continuation lines. Most notes
+// here are short enough to hand-break; the ones that are not should not be re-flowed by hand
+// every time a word changes.
+void writeWrappedNote(std::ostream& out, const std::string& text, std::size_t width = 84) {
+  std::size_t start = 0;
+  bool first = true;
+  while (start < text.size()) {
+    std::size_t take = std::min(width, text.size() - start);
+    if (start + take < text.size()) {
+      const std::size_t space = text.rfind(' ', start + take);
+      if (space != std::string::npos && space > start) {
+        take = space - start;
+      }
+    }
+    out << (first ? "" : "    ") << text.substr(start, take) << "\n";
+    first = false;
+    start += take;
+    while (start < text.size() && text[start] == ' ') {
+      ++start;
+    }
+  }
 }
 
 std::string percent(double fraction) {
@@ -1238,6 +1263,136 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
       return;
     case ReportFormat::Json:
       writeEventsJson(out, report);
+      return;
+  }
+}
+
+namespace {
+
+// Said in every format that has room for words, because it is the one thing about a merged
+// inventory that no column in it can show.
+constexpr const char* kCarryNote =
+    "Reconciliation propagates what a sheet MEASURED. A daughter that grew in during the carry "
+    "is modelled and appears here; a daughter that was present at an assay and not written down "
+    "is not recovered by anything. So the merged rows mix measured and modelled amounts, and "
+    "which a row is depends on how far its assay was carried.";
+
+void writeReconciliationText(std::ostream& out, const Reconciliation& reconciled,
+                             const NuclearData& data, const ReportContext& context) {
+  out << "NuSIFT inventory reconciliation\n";
+  out << "  epoch: " << formatCalendarDate(reconciled.epochSeconds)
+      << "   -- every assay carried forward to it, none carried back\n";
+  if (reconciled.spanSeconds > 0.0) {
+    out << "  span:  " << formatDuration(reconciled.spanSeconds)
+        << " between the earliest and latest assay\n";
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  if (!context.storeLibrary.empty()) {
+    out << "  store: " << context.storeLibrary << " (" << context.storeNuclideCount
+        << " nuclides, staged " << context.storeCreatedUtc << ")\n";
+  }
+  out << '\n';
+
+  out << "   assayed              carried   nuclides    atoms at assay    atoms at epoch\n";
+  for (const AssayContribution& one : reconciled.contributions) {
+    out << "   " << std::left << std::setw(20) << formatCalendarDate(one.dateSeconds) << std::right
+        << std::setw(9)
+        << (one.carriedSeconds > 0.0 ? formatDuration(one.carriedSeconds) : std::string("--"))
+        << "   " << std::setw(8) << one.nuclides << "    " << std::setw(14) << sci(one.atomsAtAssay)
+        << "    " << std::setw(14) << sci(one.atomsAtEpoch) << '\n';
+  }
+  out << '\n';
+  out << "  merged: " << reconciled.inventory.size() << " nuclides, "
+      << sci(reconciled.inventory.totalAtoms()) << " atoms\n";
+
+  // The largest rows of the result, so the reader sees what they are about to seed a run with
+  // rather than only how it was assembled.
+  std::vector<InventoryEntry> rows(reconciled.inventory.entries().begin(),
+                                   reconciled.inventory.entries().end());
+  std::sort(rows.begin(), rows.end(),
+            [](const InventoryEntry& a, const InventoryEntry& b) { return a.atoms > b.atoms; });
+  const std::size_t shown = std::min<std::size_t>(rows.size(), 10);
+  out << '\n';
+  out << "   nuclide             atoms            Bq\n";
+  for (std::size_t i = 0; i < shown; ++i) {
+    const Zai zai = Zai::fromKey(rows[i].zaiKey);
+    const int index = data.indexOf(zai);
+    const double activity = index >= 0 ? data.decayConstant(index) * rows[i].atoms : 0.0;
+    out << "   " << std::left << std::setw(12) << formatNuclideName(zai) << std::right
+        << std::setw(14) << sci(rows[i].atoms) << "    " << std::setw(10)
+        << (activity > 0.0 ? sci(activity) : std::string("stable")) << '\n';
+  }
+  if (rows.size() > shown) {
+    out << "   ... and " << (rows.size() - shown) << " more\n";
+  }
+
+  out << "\n  ! ";
+  writeWrappedNote(out, kCarryNote);
+}
+
+void writeReconciliationCsv(std::ostream& out, const Reconciliation& reconciled,
+                            const NuclearData& data) {
+  // Two tables would not be a CSV, so the assays and the merged rows share one under a `kind`
+  // column -- the same shape writeEventsCsv() uses for events and windows.
+  out << "kind,label,assayed,carried_s,nuclide,atoms,atoms_at_assay,atoms_at_epoch\n";
+  for (const AssayContribution& one : reconciled.contributions) {
+    out << "assay," << csvField(one.label) << ',' << formatCalendarDate(one.dateSeconds) << ','
+        << shortestRoundTrip(one.carriedSeconds) << ",," << ','
+        << shortestRoundTrip(one.atomsAtAssay) << ',' << shortestRoundTrip(one.atomsAtEpoch)
+        << '\n';
+  }
+  for (const InventoryEntry& entry : reconciled.inventory.entries()) {
+    out << "merged,," << formatCalendarDate(reconciled.epochSeconds) << ",,"
+        << formatNuclideName(Zai::fromKey(entry.zaiKey)) << ',' << shortestRoundTrip(entry.atoms)
+        << ",,\n";
+  }
+  (void)data;
+}
+
+void writeReconciliationJson(std::ostream& out, const Reconciliation& reconciled) {
+  out << "{\n";
+  out << "  \"epoch\": \"" << formatCalendarDate(reconciled.epochSeconds) << "\",\n";
+  out << "  \"epoch_s\": " << jsonNumber(reconciled.epochSeconds) << ",\n";
+  out << "  \"span_s\": " << jsonNumber(reconciled.spanSeconds) << ",\n";
+  out << "  \"note\": \"" << kCarryNote << "\",\n";
+  out << "  \"assays\": [\n";
+  for (std::size_t i = 0; i < reconciled.contributions.size(); ++i) {
+    const AssayContribution& one = reconciled.contributions[i];
+    out << "    {\"label\": \"" << one.label << "\", \"assayed\": \""
+        << formatCalendarDate(one.dateSeconds)
+        << "\", \"carried_s\": " << jsonNumber(one.carriedSeconds)
+        << ", \"nuclides\": " << one.nuclides
+        << ", \"atoms_at_assay\": " << jsonNumber(one.atomsAtAssay)
+        << ", \"atoms_at_epoch\": " << jsonNumber(one.atomsAtEpoch) << "}"
+        << (i + 1 == reconciled.contributions.size() ? "\n" : ",\n");
+  }
+  out << "  ],\n";
+  out << "  \"merged\": [\n";
+  const std::span<const InventoryEntry> entries = reconciled.inventory.entries();
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    out << "    {\"nuclide\": \"" << formatNuclideName(Zai::fromKey(entries[i].zaiKey))
+        << "\", \"atoms\": " << jsonNumber(entries[i].atoms) << "}"
+        << (i + 1 == entries.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeReconciliation(std::ostream& out, const Reconciliation& reconciled,
+                         const NuclearData& data, const ReportContext& context,
+                         ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeReconciliationText(out, reconciled, data, context);
+      return;
+    case ReportFormat::Csv:
+      writeReconciliationCsv(out, reconciled, data);
+      return;
+    case ReportFormat::Json:
+      writeReconciliationJson(out, reconciled);
       return;
   }
 }

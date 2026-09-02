@@ -28,6 +28,7 @@
 #include "nusift/core/nuclide_name.hpp"
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/engine/inventory.hpp"
+#include "nusift/engine/reconcile.hpp"
 #include "nusift/exposure/dose_coefficients.hpp"
 #include "nusift/io/inventory_io.hpp"
 #include "nusift/io/number_format.hpp"
@@ -465,7 +466,106 @@ NB_MODULE(_core, m) {
         options.ignoreUnknown = ignore_unknown;
         return readInventory(path, data, options);
       },
-      "path"_a, "data"_a, "ignore_unknown"_a = false, "Read an inventory CSV or JSON.");
+      "path"_a, "data"_a, "ignore_unknown"_a = false,
+      "Read an inventory CSV or JSON. A file whose rows carry assay dates is reconciled to its "
+      "latest one on the way back, so what returns always describes the material at a single "
+      "instant -- see read_assays() to see the reconciliation instead of only its result.");
+
+  // --- assays taken on different dates ---------------------------------------
+  //
+  // An Inventory is atoms at ONE instant, which is what makes every answer built from it well
+  // posed. Sheets from different dates are not addable until they are brought to a common one,
+  // and bringing them there is a decay solve rather than a bookkeeping step.
+  m.def("parse_date", &parseCalendarDate, "text"_a,
+        "Seconds since 1970-01-01T00:00:00Z from an ISO date: '2024-03-15', or "
+        "'2024-03-15T09:30:00Z'. UTC only -- every other spelling is ambiguous somewhere.");
+  m.def("format_date", &formatCalendarDate, "seconds"_a, "The inverse of parse_date.");
+
+  nb::class_<AssayGroup>(m, "AssayGroup", "One assay: what was measured, and when.")
+      .def(nb::init<>())
+      .def(
+          "__init__",
+          [](AssayGroup* self, const nb::object& date, const Inventory& inventory,
+             const std::string& label) {
+            // A date given as a string is parsed the way the file reader parses one, so a
+            // notebook and a spreadsheet cannot disagree about which day "2024-03-15" is.
+            const double seconds = nb::isinstance<nb::str>(date)
+                                       ? parseCalendarDate(nb::cast<std::string>(date))
+                                       : nb::cast<double>(date);
+            new (self) AssayGroup{seconds, inventory, label};
+          },
+          "date"_a, "inventory"_a, "label"_a = "")
+      .def_prop_ro("date", [](const AssayGroup& g) { return formatCalendarDate(g.dateSeconds); })
+      .def_ro("date_s", &AssayGroup::dateSeconds)
+      .def_ro("inventory", &AssayGroup::inventory)
+      .def_ro("label", &AssayGroup::label)
+      .def("__repr__", [](const AssayGroup& g) {
+        return "<AssayGroup " + formatCalendarDate(g.dateSeconds) + ", " +
+               std::to_string(g.inventory.size()) + " nuclides>";
+      });
+
+  nb::class_<AssayContribution>(m, "AssayContribution", "What one assay contributed.")
+      .def_prop_ro("date",
+                   [](const AssayContribution& c) { return formatCalendarDate(c.dateSeconds); })
+      .def_ro("date_s", &AssayContribution::dateSeconds)
+      .def_ro("label", &AssayContribution::label)
+      .def_ro("carried_s", &AssayContribution::carriedSeconds,
+              "How far this assay was carried to reach the epoch. Zero for the one defining it.")
+      .def_ro("nuclides", &AssayContribution::nuclides)
+      .def_ro("atoms_at_assay", &AssayContribution::atomsAtAssay)
+      .def_ro("atoms_at_epoch", &AssayContribution::atomsAtEpoch);
+
+  nb::class_<Reconciliation>(m, "Reconciliation", "Assays carried to one epoch and merged.")
+      .def_ro("inventory", &Reconciliation::inventory,
+              "The merged result: an ordinary Inventory, because at the epoch there is only "
+              "one date left.")
+      .def_prop_ro("epoch",
+                   [](const Reconciliation& r) { return formatCalendarDate(r.epochSeconds); })
+      .def_ro("epoch_s", &Reconciliation::epochSeconds)
+      .def_ro("contributions", &Reconciliation::contributions)
+      .def_ro("span_s", &Reconciliation::spanSeconds,
+              "Between the earliest and latest assay. A wide span means an old measurement was "
+              "carried a long way on nothing but the decay model.")
+      .def("__repr__", [](const Reconciliation& r) {
+        return "<Reconciliation " + std::to_string(r.contributions.size()) + " assays to " +
+               formatCalendarDate(r.epochSeconds) + ">";
+      });
+
+  m.def(
+      "read_assays",
+      [](const std::string& path, const NuclearData& data, bool ignore_unknown) {
+        InventoryReadOptions options;
+        options.ignoreUnknown = ignore_unknown;
+        const DatedInventory dated = readInventoryDated(path, data, options);
+        // The `dated` flag is not returned separately: a file with no dates has exactly one
+        // group, and asking whether a list has more than one entry is the same question without
+        // a second thing to keep in step.
+        return dated.groups;
+      },
+      "path"_a, "data"_a, "ignore_unknown"_a = false,
+      "The assays a file describes, before anything is carried anywhere. One group for a file "
+      "that names no dates.");
+
+  m.def(
+      "reconcile",
+      [](const NuclearData& data, const std::vector<AssayGroup>& groups, const nb::object& epoch,
+         int threads, bool prune, int cram_order) {
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        const double at = epoch.is_none() ? latestAssayDate(groups)
+                          : nb::isinstance<nb::str>(epoch)
+                              ? parseCalendarDate(nb::cast<std::string>(epoch))
+                              : nb::cast<double>(epoch);
+        const nb::gil_scoped_release release;
+        return reconcile(data, groups, at, options);
+      },
+      "data"_a, "groups"_a, "epoch"_a = nb::none(), "threads"_a = 0, "prune"_a = true,
+      "cram_order"_a = 48,
+      "Carry every assay to `epoch` and merge. Defaults to the LATEST assay date, the only "
+      "choice that carries every assay forward and none backward. An earlier epoch is refused: "
+      "un-growing a daughter is an inverse problem with no unique answer, not a decay solve.");
 
   m.def(
       "seed_fission",

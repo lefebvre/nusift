@@ -64,6 +64,73 @@ anything else CSV.
 skip, because a silently dropped row understates every ranking that follows with nothing in the
 output to say so.
 
+## 2a. Rows measured on different dates
+
+A fourth column carries **when the row was measured**, which is what a real assay sheet has and
+what makes several sheets combinable:
+
+```
+nuclide, quantity, unit, assayed
+Cs-137,  1.2e14,   Bq,   2024-03-15
+Co-60,   2.0e13,   Bq,   2024-03-15
+Sr-90,   5.0e13,   Bq,   2023-01-10
+```
+
+Rows sharing a date are one **assay**. An `Inventory` is atoms at *one* instant — that is not an
+accident of the type, it is what makes every answer built from it well posed — so assays taken on
+different dates are not addable until they are brought to a common one, and bringing them there
+is a decay solve rather than a bookkeeping step:
+
+```
+n(epoch) = Σ over assays a of  decay(n_a, epoch − date_a)
+```
+
+Exact, because the decay operator is linear. Reading such a file reconciles it automatically,
+whatever the command, because a date the tool silently ignored would be worse than one it
+refused; `nusift reconcile` is the command that *shows* the work and can write the merged
+inventory out as an ordinary undated one for the next run to seed from.
+
+### Forward only, and this is the load-bearing rule
+
+Carrying an assay **forward** is well posed: the atoms present later are determined by the atoms
+present now. Carrying one **backward** is not. The daughters measured at an assay have two
+indistinguishable histories — present from the start, or grown in since — and no measurement of
+the mixture at one instant separates them. Inverting the decay operator yields a vector that
+reproduces the measurement and is not the composition that existed, and it acquires negative atom
+counts as soon as the data has any noise in it.
+
+So the default epoch is the **latest** assay date, the only choice that carries every assay
+forward and none backward, and an earlier one is **refused** rather than caveated. A caveat on a
+number nobody can check is a disclaimer, not a warning.
+
+### What reconciliation cannot do
+
+It propagates what a sheet **measured**. A daughter that grew in during the carry is modelled and
+appears; a daughter that was present at an assay and simply not written down is not recovered by
+anything. So the merged rows mix measured and modelled amounts, and which a given row is depends
+on how far its assay was carried — the Sr-90 sheet above arrives with Y-90 beside it because the
+model grew it in, while the Cs-137 sheet arrives with no Ba-137m because the sheet did not list
+any and the epoch gave the model no time to make some. No column can show that, so the report says
+it.
+
+### A file dates every row or none
+
+A **mixed** file is refused, naming both lines. There is no reading of an undated row among dated
+ones that is not a guess: treating it as measured at the epoch silently ages it by however far the
+others were carried, and treating it as measured at the earliest date silently does the opposite.
+Neither is visible in any answer.
+
+Dates are **ISO-8601, UTC only** — `2024-03-15`, or `2024-03-15T09:30:00Z`. Every other spelling
+is ambiguous somewhere: `03/04/2024` is two different days depending on the reader's country, and
+a local time is a different instant depending on where it was written down. An inventory
+reconciling two assays a day apart cannot afford either. A date that does not exist (`2023-02-29`)
+is rejected rather than rolled forward, because a rolled date moves an assay by a day and nothing
+downstream could tell.
+
+A dated file is reconciled with **default** solver options rather than the caller's, so that one
+file means one inventory whichever command reads it. An undated file reaches no solver at all and
+is bit-for-bit what it was before dates existed.
+
 ## 3. Converting to atoms
 
 | Input | Conversion | Needs |
@@ -197,5 +264,8 @@ command with `--mev-per-fission recoverable` seeds 11% fewer.
 | [`nusift/engine/inventory.hpp`](../nusift/engine/inventory.hpp) | The `Inventory` type and the quantity enumeration |
 | [`nusift/engine/inventory.cpp`](../nusift/engine/inventory.cpp) | `toAtoms`, `fromAtoms`, unit parsing, and the validity check |
 | [`nusift/io/inventory_io.cpp`](../nusift/io/inventory_io.cpp) | The tolerant CSV reader, the JSON reader, and both writers |
+| [`nusift/engine/reconcile.hpp`](../nusift/engine/reconcile.hpp) | `AssayGroup`, `Reconciliation`, and the argument for forward-only |
+| [`nusift/engine/reconcile.cpp`](../nusift/engine/reconcile.cpp) | `reconcile`, `latestAssayDate`, and the backward refusal |
+| [`nusift/io/time_spec.cpp`](../nusift/io/time_spec.cpp) | `parseCalendarDate` / `formatCalendarDate`, and the civil-date arithmetic |
 | [`nusift/seed/seed_fission.cpp`](../nusift/seed/seed_fission.cpp) | Yield-set selection, seeding, and the provenance line |
 | [`nusift/seed/fission_energy.hpp`](../nusift/seed/fission_energy.hpp) | kt ↔ joules ↔ fissions, and the 180/200 MeV choice |

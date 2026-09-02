@@ -231,4 +231,165 @@ std::string formatDuration(double seconds) {
   return buffer;
 }
 
+namespace {
+
+constexpr const char* kDateModule = "date";
+
+[[noreturn]] void badDate(std::string_view text, const std::string& why) {
+  throw InputError(tagged(kDateModule, "cannot read date \"" + std::string(text) + "\": " + why));
+}
+
+bool isLeap(long long y) {
+  return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+}
+
+int daysInMonth(long long y, int m) {
+  static constexpr int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  if (m == 2 && isLeap(y)) {
+    return 29;
+  }
+  return kDays[m - 1];
+}
+
+// Days since 1970-01-01 in the proleptic Gregorian calendar -- Howard Hinnant's civil-date
+// algorithm, which is exact over the whole range of a signed 64-bit day count and needs no
+// library, no locale and no timezone database. Written out rather than delegated to
+// std::chrono's calendar because the arithmetic is ten lines and the dependency is not.
+long long daysFromCivil(long long y, int m, int d) {
+  y -= m <= 2 ? 1 : 0;
+  const long long era = (y >= 0 ? y : y - 399) / 400;
+  const long long yoe = y - era * 400;                                   // [0, 399]
+  const long long doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;  // [0, 365]
+  const long long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;           // [0, 146096]
+  return era * 146097 + doe - 719468;
+}
+
+void civilFromDays(long long z, long long& y, int& m, int& d) {
+  z += 719468;
+  const long long era = (z >= 0 ? z : z - 146096) / 146097;
+  const long long doe = z - era * 146097;                                       // [0, 146096]
+  const long long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;  // [0, 399]
+  const long long yr = yoe + era * 400;
+  const long long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);  // [0, 365]
+  const long long mp = (5 * doy + 2) / 153;                       // [0, 11]
+  d = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);             // [1, 31]
+  m = static_cast<int>(mp + (mp < 10 ? 3 : -9));                  // [1, 12]
+  y = yr + (m <= 2 ? 1 : 0);
+}
+
+// Exactly `width` digits, no sign, no spaces. from_chars would accept "+5" and " 5" and stop
+// early on "2024-03", none of which is a field of a fixed-width date.
+bool digits(std::string_view text, std::size_t at, std::size_t width, long long& out) {
+  if (at + width > text.size()) {
+    return false;
+  }
+  long long value = 0;
+  for (std::size_t i = 0; i < width; ++i) {
+    const unsigned char c = static_cast<unsigned char>(text[at + i]);
+    if (std::isdigit(c) == 0) {
+      return false;
+    }
+    value = value * 10 + (c - '0');
+  }
+  out = value;
+  return true;
+}
+
+}  // namespace
+
+bool looksLikeCalendarDate(std::string_view text) {
+  const std::string_view t = trim(text);
+  long long ignored = 0;
+  return t.size() >= 10 && digits(t, 0, 4, ignored) && t[4] == '-' && digits(t, 5, 2, ignored) &&
+         t[7] == '-' && digits(t, 8, 2, ignored);
+}
+
+double parseCalendarDate(std::string_view text) {
+  const std::string_view t = trim(text);
+  long long year = 0;
+  long long month = 0;
+  long long day = 0;
+  if (t.size() < 10 || !digits(t, 0, 4, year) || t[4] != '-' || !digits(t, 5, 2, month) ||
+      t[7] != '-' || !digits(t, 8, 2, day)) {
+    badDate(text, "expected YYYY-MM-DD, optionally followed by Thh:mm:ss");
+  }
+  if (month < 1 || month > 12) {
+    badDate(text, "there is no month " + std::to_string(month));
+  }
+  const int lastDay = daysInMonth(year, static_cast<int>(month));
+  if (day < 1 || day > lastDay) {
+    badDate(text, std::to_string(year) + "-" + (month < 10 ? "0" : "") + std::to_string(month) +
+                      " has " + std::to_string(lastDay) + " days");
+  }
+
+  long long hour = 0;
+  long long minute = 0;
+  long long second = 0;
+  if (t.size() > 10) {
+    std::string_view rest = t.substr(10);
+    // A trailing Z is accepted and means what the whole format already means. Any other
+    // offset is refused rather than ignored: silently reading +05:00 as UTC would move the
+    // assay by five hours, and an inventory reconciled across two of them would be wrong by
+    // exactly that much.
+    if (!rest.empty() && (rest.back() == 'Z' || rest.back() == 'z')) {
+      rest.remove_suffix(1);
+    }
+    if (rest.empty()) {
+      badDate(text, "a date ending in Z still needs its time, as Thh:mm:ss");
+    }
+    if (rest.front() != 'T' && rest.front() != 't' && rest.front() != ' ') {
+      badDate(text, "the time is separated from the date by T");
+    }
+    rest.remove_prefix(1);
+    if (rest.size() != 8 || !digits(rest, 0, 2, hour) || rest[2] != ':' ||
+        !digits(rest, 3, 2, minute) || rest[5] != ':' || !digits(rest, 6, 2, second)) {
+      badDate(text, "expected a time as hh:mm:ss");
+    }
+    // 60 is a leap second, and NuSIFT does not model them; 61 is nothing at all.
+    if (hour > 23 || minute > 59 || second > 59) {
+      badDate(text, "there is no time " + std::string(rest));
+    }
+  }
+
+  const long long days = daysFromCivil(year, static_cast<int>(month), static_cast<int>(day));
+  return static_cast<double>(days) * units::kSecondsPerDay +
+         static_cast<double>(hour * 3600 + minute * 60 + second);
+}
+
+std::string formatCalendarDate(double secondsSinceEpoch) {
+  // Floor rather than truncate, so a date before 1970 lands on the day that contains it
+  // rather than on the one after.
+  const double dayCount = std::floor(secondsSinceEpoch / units::kSecondsPerDay);
+  long long days = static_cast<long long>(dayCount);
+  int within = static_cast<int>(std::llround(secondsSinceEpoch - dayCount * units::kSecondsPerDay));
+  // Rounding an instant a fraction of a second before midnight lands on 86400, which is not a
+  // time of day. Carrying it into the next date is the truthful reading; clamping it to
+  // 23:59:59 would move the instant backwards by a whole day's worth of naming.
+  if (within >= 86400) {
+    within -= 86400;
+    ++days;
+  }
+  if (within < 0) {
+    within = 0;
+  }
+
+  long long year = 0;
+  int month = 0;
+  int day = 0;
+  civilFromDays(days, year, month, day);
+
+  const int hour = within / 3600;
+  const int minute = (within / 60) % 60;
+  const int second = within % 60;
+
+  char buffer[96];
+  if (within == 0) {
+    std::snprintf(buffer, sizeof(buffer), "%04lld-%02d-%02d", year, month, day);
+  } else {
+    std::snprintf(buffer, sizeof(buffer), "%04lld-%02d-%02dT%02d:%02d:%02dZ", year, month, day,
+                  hour, minute, second);
+  }
+  return buffer;
+}
+
 }  // namespace nusift
