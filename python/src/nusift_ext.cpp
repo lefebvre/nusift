@@ -46,6 +46,7 @@
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
 #include "nusift/triage/spectrum.hpp"
+#include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
 #include "nusift/version.hpp"
 
@@ -1306,6 +1307,111 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
+
+  // --- a job with a shape ----------------------------------------------------
+  //
+  // task_series treats a job as one window at one distance. A real job is legs at different
+  // distances, and the dose is not distributed the way the durations are -- which is the
+  // question a plan answers and a single interval cannot.
+  nb::class_<PlanLeg>(m, "PlanLeg", "One stretch of a job.")
+      .def(
+          "__init__",
+          [](PlanLeg* self, const std::string& name, const nb::object& duration, double distance_m,
+             double occupancy, const exposure::PointSourceGeometry& geometry) {
+            PlanLeg leg;
+            leg.name = name;
+            leg.durationSeconds = timeFrom(duration);
+            leg.occupancy = occupancy;
+            leg.geometry = geometry;
+            // distance_m overrides whatever the geometry carried, because the distance is the
+            // thing a plan varies and passing a whole geometry to change one number is friction.
+            if (distance_m > 0.0) {
+              leg.geometry.distanceM = distance_m;
+            }
+            new (self) PlanLeg(std::move(leg));
+          },
+          "name"_a, "duration"_a, "distance_m"_a = 0.0, "occupancy"_a = 1.0,
+          "geometry"_a = exposure::PointSourceGeometry{})
+      .def_ro("name", &PlanLeg::name)
+      .def_ro("duration_s", &PlanLeg::durationSeconds)
+      .def_ro("occupancy", &PlanLeg::occupancy,
+              "Fraction of the leg actually spent in the field. Zero makes it a BREAK: the clock "
+              "runs, nothing accrues, and no solve is spent.")
+      .def("__repr__", [](const PlanLeg& leg) {
+        return "<PlanLeg " + leg.name + " " + formatDuration(leg.durationSeconds) + ">";
+      });
+
+  nb::class_<LegResult>(m, "LegResult")
+      .def_ro("name", &LegResult::name)
+      .def_ro("start_s", &LegResult::startSeconds)
+      .def_ro("end_s", &LegResult::endSeconds)
+      .def_ro("occupancy", &LegResult::occupancy)
+      .def_ro("distance_m", &LegResult::distanceM)
+      .def_ro("accrued", &LegResult::accrued, "In the plan's unit, already scaled by occupancy.")
+      .def_ro("fraction", &LegResult::fraction)
+      .def_ro("cumulative", &LegResult::cumulative)
+      .def_ro("cumulative_fraction", &LegResult::cumulativeFraction)
+      .def_ro("mean_rate", &LegResult::meanRate,
+              "Accrued per second actually spent there. What separates a leg that is expensive "
+              "because it is long from one that is expensive because it is close.")
+      .def_ro("is_break", &LegResult::isBreak)
+      .def("__repr__", [](const LegResult& leg) {
+        return "<LegResult " + leg.name + " " + shortestRoundTrip(leg.accrued) + ">";
+      });
+
+  nb::class_<TaskPlan>(m, "TaskPlan", "A job as a sequence of legs, each with its own geometry.")
+      .def_prop_ro("unit", [](const TaskPlan& p) { return std::string(unitName(p.unit)); })
+      .def_ro("start_s", &TaskPlan::startSeconds)
+      .def_ro("end_s", &TaskPlan::endSeconds)
+      .def_ro("total", &TaskPlan::total)
+      .def_ro("elapsed_s", &TaskPlan::elapsedSeconds, "Wall clock, breaks included.")
+      .def_ro("exposed_s", &TaskPlan::exposedSeconds,
+              "Sum of duration times occupancy -- the time that earns the dose.")
+      .def_ro("legs", &TaskPlan::legs)
+      .def_ro("budget", &TaskPlan::budget)
+      .def_ro("budget_spent", &TaskPlan::budgetSpent)
+      .def_prop_ro(
+          "spent_in_leg",
+          [](const TaskPlan& p) -> nb::object {
+            // None rather than -1: a parser reading -1 as an index would be reading the last leg.
+            return p.budgetSpent ? nb::cast(p.spentInLeg) : nb::none();
+          },
+          "Index of the leg the budget runs out in, or None.")
+      .def_prop_ro(
+          "spent_at_s",
+          [](const TaskPlan& p) -> nb::object {
+            return p.budgetSpent ? nb::cast(p.spentAtSeconds) : nb::none();
+          },
+          "When it runs out, located by the same root-find stay_time uses.")
+      .def("__len__", [](const TaskPlan& p) { return p.legs.size(); })
+      .def("__repr__", [](const TaskPlan& p) {
+        return "<TaskPlan " + std::to_string(p.legs.size()) + " legs, " +
+               shortestRoundTrip(p.total) + " " + unitName(p.unit) + ">";
+      });
+
+  m.def(
+      "task_plan",
+      [](const NuclearData& data, const Inventory& inventory, const nb::object& at,
+         const std::vector<PlanLeg>& legs, const std::string& metric, const std::string& units,
+         double budget, int threads, bool prune, int cram_order) {
+        ResponseSpec spec;
+        spec.metric = metricFrom(metric);
+        spec.aggregate = Aggregate::Nuclide;
+        spec.unit = requireUnit(units, spec.metric, Domain::Interval);
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        const double start = timeFrom(at);
+        const nb::gil_scoped_release release;
+        return runTaskPlan(data, inventory, spec, start, legs, budget, options);
+      },
+      "data"_a, "inventory"_a, "at"_a, "legs"_a, "metric"_a = "activity", "units"_a = "",
+      "budget"_a = 0.0, "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
+      "What a job costs leg by leg, starting at `at`. Legs follow one another with no gap, so a "
+      "wait between them is a break leg rather than an implied silence. The units are interval "
+      "units, because a leg accrues a total rather than holding a rate. Pass `budget` to have "
+      "the plan say where it runs out. No leg is shielded.");
 
   // --- the smallest list that works everywhere -------------------------------
   //

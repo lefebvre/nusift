@@ -23,6 +23,7 @@
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
+#include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
 
 namespace nusift {
@@ -155,6 +156,14 @@ void writeStayTimes(std::ostream& out, const StayReport& report, const ReportCon
 void writeReconciliation(std::ostream& out, const Reconciliation& reconciled,
                          const NuclearData& data, const ReportContext& context,
                          ReportFormat format);
+
+// Render a task plan: what each leg costs, and where a budget runs out.
+//
+// The mean-rate column is what makes the table worth breaking a job into legs for. Two legs with
+// the same dose are different problems when one is twenty minutes at arm's length and the other
+// is two hours across the room, and only the rate separates them.
+void writeTaskPlan(std::ostream& out, const TaskPlan& plan, const ReportContext& context,
+                   ReportFormat format);
 
 // Render a robust triage set: the list, the order it was built in, and where it is closest to
 // failing.

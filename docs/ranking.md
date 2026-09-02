@@ -693,12 +693,68 @@ tolerance of 1e-6 takes four to seven of them in practice. More than any single 
 than a task curve. The `located to` column is the width the root was narrowed to, not the tolerance
 that was asked for, on the same terms every other located event reports its bracket.
 
+### A job with a shape
+
+Both inversions above treat a job as one window at one distance. A real job is not one: walk in,
+spend twenty minutes at arm's length from the thing that matters, step back to wait on a tool,
+walk out. Those legs are at different distances, so the dose is **not distributed the way the
+durations are** — and which leg costs the dose is the question a plan answers and a single window
+cannot.
+
+`runTaskPlan()` is the interval integral applied leg by leg and summed:
+
+```
+accrued = Σ over legs k of  occupancy_k · w(geometry_k) · ∫ over [t_k, t_k+D_k]
+```
+
+Exact on the same terms as everything else built on that integral. The atom-seconds over a leg's
+window are **geometry-independent**, so a leg at 0.8 m and a leg at 3 m cost one solve each rather
+than one model each — the geometry is a fixed weight post-multiplied on top, as it is everywhere
+else in this file. Since [item 1](exposure.md#6-units) that weight can be an effective-dose kernel,
+so this is a worker-*dose* plan rather than an exposure plan the day it is built.
+
+```
+   leg                 starts   duration   dist/m     occ           Sv     frac       per h
+   approach               30 d        3 m        4  100.0%    2.8103e-02     0.5%  5.6206e-01
+   valve work             30 d       20 m      0.8  100.0%    4.8291e+00    80.4%  1.4487e+01
+   break               30.02 d       10 m       --   break            --       --          --
+   reassemble          30.02 d       15 m      1.2   70.0%    1.1225e+00    18.7%  6.4141e+00
+   retreat             30.03 d        3 m        4  100.0%    2.8103e-02     0.5%  5.6206e-01
+
+  budget: 2.0000e+00 Sv  -- SPENT during "valve work", 8.167 m into it
+```
+
+The **mean rate** column is what earns the breakdown. Two legs with the same dose are different
+problems when one is twenty minutes at arm's length and the other two hours across the room, and
+only the rate separates them. A break is a leg with occupancy zero: the clock runs, nothing
+accrues, and no solve is spent on it — which is not an optimisation but the definition, since a
+window nobody is standing in contributes nothing whatever the source is doing. Its distance and
+rate print as `--` rather than as zeros, because "0 m" is a real and very different claim.
+
+With a budget, the plan says not merely that it does not fit but **where to stop**, located by the
+same root-find `stayTime()` runs, on that leg's own window.
+
+### What a plan does not model
+
+Two things, and both matter more here than in a screening answer:
+
+- **No shielding.** Every leg is an unshielded point source in air. A plan whose middle leg is
+  behind a wall cannot say so, and that leg is overstated by an amount this cannot know. That is
+  the shielding item, not this one.
+- **Occupancy is a factor**, and multiplying by it assumes the presence is spread *evenly* over the
+  leg. Over a leg short against the decay time constant that is exact to floating point; over a
+  long one it is not, and the truth lies between "all of it at the start" and "all of it at the
+  end". The exact alternative needs no new machinery — split the leg into the stretches actually
+  spent there, which a plan already expresses.
+
 ### Reaching it
 
 The engine is reachable from all three front ends: `nusift when` on the command line,
-`nusift stay` for the duration inversion, `ResponseTable.crossings` / `.extrema` /
-`.windows_above` / `.windows_below`, `nusift.task_series` and `nusift.stay_time` from Python, and
-`writeEvents()` / `writeStayTimes()` in the report writers. Each carries the
+`nusift stay` for the duration inversion, `nusift plan` for a job with legs,
+`ResponseTable.crossings` / `.extrema` /
+`.windows_above` / `.windows_below`, `nusift.task_series`, `nusift.stay_time` and
+`nusift.task_plan` from Python, and `writeEvents()` / `writeStayTimes()` / `writeTaskPlan()` in
+the report writers. Each carries the
 bracket, because an instant without one claims a precision the sampling does not support.
 
 Refinement is **opt in**, because it is solves: `--refine` on `when` and on `forecast`,
@@ -881,6 +937,8 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/events.hpp`](../nusift/triage/events.hpp) | `EventSeries`, `TrajectoryEvent`, `LevelWindow`, and the missed-event semantics |
 | [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `crossings`, `extrema`, `windowsAbove`/`windowsBelow`, Illinois and golden-section refinement, and the table-backed series |
 | [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `taskSeries` and `stayTime` — the two inversions of the interval integral, and the unbounded case |
+| [`nusift/triage/task_plan.hpp`](../nusift/triage/task_plan.hpp) | `PlanLeg`, `TaskPlan`, and what a plan does not model |
+| [`nusift/triage/task_plan.cpp`](../nusift/triage/task_plan.cpp) | Per-leg integrals with per-leg geometry, breaks, and where a budget runs out |
 | [`nusift/triage/allowable.hpp`](../nusift/triage/allowable.hpp) | `Criterion`, `CriterionHeadroom`, `AllowableScale`, and what the rule layer above them owns |
 | [`nusift/triage/allowable.cpp`](../nusift/triage/allowable.cpp) | `allowableScale`, the binding-criterion minimum, unbounded semantics, and `scaleSeries` |
 | [`nusift/triage/intervention.hpp`](../nusift/triage/intervention.hpp) | `Removal`, `Intervention`, `InterventionStudy`, and what removing a parent does and does not do |

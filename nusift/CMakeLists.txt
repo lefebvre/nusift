@@ -29,6 +29,7 @@ add_library(nusift
   triage/intervention.cpp
   triage/spectrum.cpp
   triage/triage_set.cpp
+  triage/task_plan.cpp
   io/time_spec.cpp
   io/inventory_io.cpp
   io/report.cpp
@@ -116,6 +117,7 @@ if(NUSIFT_INSTALL)
     triage/ranking.hpp
     triage/response.hpp
     triage/spectrum.hpp
+    triage/task_plan.hpp
     triage/triage_set.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/triage)
 

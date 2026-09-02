@@ -1511,3 +1511,97 @@ def test_a_shortlist_is_reproducible_and_refuses_what_it_cannot_answer(data, res
             "by nuclide": table,
             "by chain": nusift.response(data, res, metric="activity", units="Bq", by="mass-chain"),
         })
+
+
+# --- a job with a shape ------------------------------------------------------
+
+
+@needs_store
+def test_a_plan_partitions_its_total_across_the_legs(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e16)
+    legs = [
+        nusift.PlanLeg("approach", "3m", distance_m=4.0),
+        nusift.PlanLeg("valve work", "20m", distance_m=0.8),
+        nusift.PlanLeg("break", "10m", occupancy=0.0),
+        nusift.PlanLeg("retreat", "3m", distance_m=4.0),
+    ]
+    plan = nusift.task_plan(data, inv, at="30d", legs=legs, metric="exposure", units="Sv")
+
+    assert len(plan) == 4
+    assert sum(leg.accrued for leg in plan.legs) == pytest.approx(plan.total, rel=1e-12)
+    assert sum(leg.fraction for leg in plan.legs) == pytest.approx(1.0, rel=1e-12)
+    # The clock runs through the break; the time that earns the dose does not.
+    assert plan.elapsed_s == 36 * 60
+    assert plan.exposed_s == 26 * 60
+    assert plan.legs[2].is_break
+    assert plan.legs[2].accrued == 0.0
+    # The legs abut: no gap the plan did not name.
+    for before, after in zip(plan.legs, plan.legs[1:]):
+        assert after.start_s == before.end_s
+
+
+@needs_store
+def test_the_close_leg_is_the_expensive_one_even_when_it_is_short(data):
+    inv = nusift.Inventory()
+    inv.add("Co-60", 1.0e15)
+    legs = [
+        nusift.PlanLeg("far and long", "60m", distance_m=5.0),
+        nusift.PlanLeg("near and short", "5m", distance_m=0.5),
+    ]
+    plan = nusift.task_plan(data, inv, at="1y", legs=legs, metric="exposure", units="Sv")
+
+    long_leg, short_leg = plan.legs
+    # Twelve times the time at ten times the distance: inverse square wins, and the mean-rate
+    # column is what says so. This is the whole reason to break a job into legs.
+    assert short_leg.accrued > long_leg.accrued
+    assert short_leg.mean_rate > long_leg.mean_rate * 50
+
+
+@needs_store
+def test_a_plan_says_where_a_budget_runs_out(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e16)
+    legs = [
+        nusift.PlanLeg("a", "10m", distance_m=1.0),
+        nusift.PlanLeg("b", "10m", distance_m=1.0),
+        nusift.PlanLeg("c", "10m", distance_m=1.0),
+    ]
+    whole = nusift.task_plan(data, inv, at="30d", legs=legs, metric="exposure", units="Sv")
+    budget = whole.legs[0].accrued + 0.5 * whole.legs[1].accrued
+
+    plan = nusift.task_plan(
+        data, inv, at="30d", legs=legs, metric="exposure", units="Sv", budget=budget,
+    )
+    assert plan.budget_spent
+    assert plan.spent_in_leg == 1
+    # Cs-137 barely decays over ten minutes, so half the leg's dose is half the leg's time.
+    assert plan.spent_at_s == pytest.approx(plan.legs[1].start_s + 300.0, abs=5.0)
+
+    fits = nusift.task_plan(
+        data, inv, at="30d", legs=legs, metric="exposure", units="Sv", budget=whole.total * 10,
+    )
+    assert not fits.budget_spent
+    # None rather than -1: a parser reading -1 as an index would be reading the last leg.
+    assert fits.spent_in_leg is None
+    assert fits.spent_at_s is None
+
+
+@needs_store
+def test_a_plan_refuses_a_leg_that_is_not_one(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e16)
+    good = nusift.PlanLeg("a", "10m", distance_m=1.0)
+
+    with pytest.raises(nusift.InputError):
+        nusift.task_plan(data, inv, at="30d", legs=[], metric="exposure", units="Sv")
+    with pytest.raises(nusift.InputError):
+        nusift.task_plan(data, inv, at="30d", legs=[nusift.PlanLeg("", "10m", distance_m=1.0)],
+                         metric="exposure", units="Sv")
+    with pytest.raises(nusift.InputError):
+        nusift.task_plan(data, inv, at="30d",
+                         legs=[nusift.PlanLeg("a", "10m", distance_m=1.0, occupancy=1.5)],
+                         metric="exposure", units="Sv")
+    # A leg accrues a total, so a rate unit is the wrong dimension for it.
+    with pytest.raises(nusift.InputError):
+        nusift.task_plan(data, inv, at="30d", legs=[good], metric="exposure", units="Sv/h")

@@ -45,6 +45,7 @@
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/response.hpp"
 #include "nusift/triage/spectrum.hpp"
+#include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
 #include "nusift/version.hpp"
 
@@ -1328,6 +1329,151 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   return 0;
 }
 
+// --- a job with a shape --------------------------------------------------------
+
+struct PlanOptions {
+  std::vector<std::string> legs;
+  double budget = 0.0;
+};
+
+// "name,duration,distance[,occupancy]", or "name,duration" for a break. Positional rather than
+// keyed because a leg has exactly these parts and every one of them is required to say what the
+// leg IS -- a keyword form would let a distance be forgotten, and a forgotten distance would
+// silently take the default.
+PlanLeg parseLeg(const std::string& text, const CommonOptions& options, bool isBreak) {
+  std::vector<std::string> fields;
+  std::string field;
+  for (const char c : text) {
+    if (c == ',') {
+      fields.push_back(trimmedText(field));
+      field.clear();
+    } else {
+      field += c;
+    }
+  }
+  fields.push_back(trimmedText(field));
+
+  PlanLeg leg;
+  // A break needs no distance and is spelled as just a duration, since the whole point of it is
+  // that nowhere is where you are.
+  if (isBreak) {
+    if (fields.size() == 1) {
+      leg.name = "break";
+      leg.durationSeconds = parseDuration(fields[0]);
+    } else if (fields.size() == 2) {
+      leg.name = fields[0];
+      leg.durationSeconds = parseDuration(fields[1]);
+    } else {
+      throw InputError("plan: a break is \"duration\" or \"name,duration\", got \"" + text + "\"");
+    }
+    leg.occupancy = 0.0;
+    return leg;
+  }
+
+  if (fields.size() < 3 || fields.size() > 4) {
+    throw InputError(
+        "plan: a leg is \"name,duration,distance\" with an optional occupancy "
+        "(e.g. \"valve work,20m,0.8,0.6\"), got \"" +
+        text + "\"");
+  }
+  leg.name = fields[0];
+  if (leg.name.empty()) {
+    throw InputError(
+        "plan: a leg needs a name; \"leg 3 costs 60% of your dose\" is not an "
+        "answer anybody can act on");
+  }
+  leg.durationSeconds = parseDuration(fields[1]);
+
+  leg.geometry = geometryFrom(options);
+  try {
+    std::size_t used = 0;
+    leg.geometry.distanceM = std::stod(fields[2], &used);
+    if (used != fields[2].size()) {
+      throw std::invalid_argument("trailing");
+    }
+  } catch (const std::exception&) {
+    throw InputError("plan: \"" + fields[2] + "\" is not a distance in metres");
+  }
+  if (!(leg.geometry.distanceM > 0.0)) {
+    throw InputError("plan: leg \"" + leg.name + "\" needs a positive distance");
+  }
+  if (fields.size() == 4) {
+    try {
+      std::size_t used = 0;
+      leg.occupancy = std::stod(fields[3], &used);
+      if (used != fields[3].size()) {
+        throw std::invalid_argument("trailing");
+      }
+    } catch (const std::exception&) {
+      throw InputError("plan: \"" + fields[3] + "\" is not an occupancy fraction");
+    }
+  }
+  return leg;
+}
+
+// A job as it is actually done, rather than as one window at one distance. Which LEG costs the
+// dose is the question a plan answers and a single interval cannot, because the dose is not
+// distributed the way the durations are.
+int runPlan(const CommonOptions& options, const PlanOptions& planOptions, const char* argv0) {
+  if (planOptions.legs.empty()) {
+    throw InputError("plan: give at least one --leg name,duration,distance");
+  }
+
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const Inventory inventory = loadInventory(options, data);
+  const PackHolder packs(options, data, inventory);
+
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() != 1) {
+    throw InputError("time: a plan starts at one instant; give one --at");
+  }
+
+  // Legs are stored with their order marker stripped, in the order given: the sequence IS the
+  // plan, so sorting or de-duplicating them would be rewriting the job.
+  std::vector<PlanLeg> legs;
+  for (const std::string& text : planOptions.legs) {
+    const bool isBreak = text.rfind("break:", 0) == 0;
+    legs.push_back(parseLeg(isBreak ? text.substr(6) : text, options, isBreak));
+  }
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options);
+  spec.aggregate = Aggregate::Nuclide;
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Interval);
+  spec.pack = packs.resolved();
+
+  const TaskPlan plan = runTaskPlan(data, inventory, spec, times.front(), legs, planOptions.budget,
+                                    decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.stagedCount();
+  context.seedProvenance = inventory.provenance();
+  // The distance is per leg and is in the table, so the model line names everything else the
+  // geometry carries and deliberately not a distance that would be wrong for most rows.
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+  const std::size_t at = context.geometry.find("point source at");
+  if (at != std::string::npos) {
+    context.geometry.replace(at, std::string("point source at").size(),
+                             "point source, distance per leg;");
+    const std::size_t metres = context.geometry.find(" m,", at);
+    if (metres != std::string::npos) {
+      context.geometry.erase(
+          at + std::string("point source, distance per leg;").size(),
+          metres + 3 - at - std::string("point source, distance per leg;").size());
+    }
+  }
+
+  OutputStream out(options.output);
+  writeTaskPlan(out.get(), plan, context, format);
+  return 0;
+}
+
 // --- the smallest list that works everywhere -----------------------------------
 
 struct ShortlistOptions {
@@ -1845,6 +1991,20 @@ int main(int argc, char** argv) {
                    "Relative tolerance for --refine (default 1e-6)")
       ->check(CLI::PositiveNumber);
 
+  CommonOptions planOptions;
+  PlanOptions planExtra;
+  CLI::App* planCmd = app.add_subcommand(
+      "plan", "What a job costs leg by leg, each with its own distance and occupancy");
+  addCommonOptions(planCmd, planOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  planCmd->add_option("--leg", planExtra.legs,
+                      "A stretch of the job: name,duration,distance[,occupancy]. Repeatable, and "
+                      "the ORDER is the plan (e.g. \"valve work,20m,0.8,0.6\"). A break is "
+                      "\"break:15m\" -- spelled as a leg so it keeps its place in the sequence");
+  planCmd
+      ->add_option("--budget", planExtra.budget,
+                   "Say whether the plan fits this, and where it runs out if not")
+      ->check(CLI::PositiveNumber);
+
   CommonOptions shortlistOptions;
   ShortlistOptions shortlistExtra;
   CLI::App* shortlistCmd = app.add_subcommand(
@@ -1969,6 +2129,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (planCmd->parsed()) {
+      return runPlan(planOptions, planExtra, argv0);
     }
     if (shortlistCmd->parsed()) {
       return runShortlist(shortlistOptions, shortlistExtra, argv0);
