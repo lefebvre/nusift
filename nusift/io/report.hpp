@@ -23,6 +23,7 @@
 #include "nusift/triage/forecast.hpp"
 #include "nusift/triage/intervention.hpp"
 #include "nusift/triage/ranking.hpp"
+#include "nusift/triage/triage_set.hpp"
 
 namespace nusift {
 
@@ -154,6 +155,16 @@ void writeStayTimes(std::ostream& out, const StayReport& report, const ReportCon
 void writeReconciliation(std::ostream& out, const Reconciliation& reconciled,
                          const NuclearData& data, const ReportContext& context,
                          ReportFormat format);
+
+// Render a robust triage set: the list, the order it was built in, and where it is closest to
+// failing.
+//
+// The binding point leads the report rather than closing it. A list of twenty nuclides tells a
+// reader nothing about whether it is comfortable or exactly on the edge, and the margin at the
+// worst (requirement, time) is the only number that does.
+void writeTriageSet(std::ostream& out, const TriageSet& set,
+                    std::span<const CoverageRequirement> requirements, const ReportContext& context,
+                    ReportFormat format);
 
 // Render the maximum allowable scale over time: what binds, what it permits, and which
 // contributors drive it.

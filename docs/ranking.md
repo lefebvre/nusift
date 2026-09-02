@@ -164,6 +164,70 @@ One loss is inherent and is stated rather than mitigated: bin totals are exact, 
 lines inside a bin cannot be recovered from the bin. A detector-resolution question wants the line
 list of §3, not this.
 
+## 3b. The smallest list that works everywhere
+
+`--coverage 0.95` on a ranking answers *which nuclides are 95% of this, **here***: one metric, one
+instant. A monitoring list poses a different question — which nuclides are 95% of it
+***everywhere***, across every metric that matters and every time on the grid, as one list — and
+the second is not obtainable by repeating the first.
+
+The union of each time's 95% prefix is a set nobody chose. It is as large as the worst time makes
+it, it carries whatever the other times happened to rank highly, and nothing about it is minimal.
+Worse, a union of *per-metric* lists guarantees nothing about the metrics jointly: a nuclide
+dropped from the activity list because it ranked eleventh there may be the one holding up the
+exposure floor two decades later.
+
+So it is a covering problem over the values matrices that already exist:
+
+```
+choose S minimising |S|   subject to   Σ_{c ∈ S} value(r, t, c) ≥ f_r · total(r, t)
+                                       for every requirement r and every time t
+```
+
+`robustTriageSet()` runs a deterministic greedy over it — `nusift shortlist`, and
+`nusift.shortlist` from Python. On a 20 kt U-235 fission source over 1 h to 100 y, 40 points,
+holding 95% of **both** activity and exposure at every one of the 80 constrained points:
+
+| | nuclides |
+| --- | --- |
+| union of the per-time 95% prefixes, both metrics | 86 |
+| the covering answer | **73** |
+| candidates it chose from | 1045 |
+
+The union is not *wrong* — it over-delivers, holding 97.1% at its worst point rather than the 95%
+asked for. It is simply not minimal, and it was not chosen. Adding the exposure requirement to the
+activity one costs exactly **one** further nuclide (72 → 73), which is the sort of thing only a
+joint answer can tell you.
+
+### What the report leads with
+
+Not the list. A list of seventy-three says nothing about whether it is comfortable or exactly on
+the edge, so the **binding point** comes first — the (requirement, time) where the achieved
+coverage is closest to the floor:
+
+```
+closest to failing: exposure (R/h) at 1 h -- holds 95.1% against 95.0%
+```
+
+The order members are listed in is **not a ranking**, and the report says so. The second member is
+whichever most improved the constraints still unmet *given* the first, which is usually not the
+second largest contributor to anything. A member with a peak share of 0.8% is there to hold up one
+particular instant; dropping it is exactly what the floor forbids.
+
+### What it does not claim
+
+Set cover is NP-hard and greedy is not exact. What comes back is a small set that meets the floor,
+**not a proof that none smaller exists** — stated in the report rather than left to be assumed,
+because "the smallest set" is what a reader will otherwise hear. Greedy is within a `ln n` factor
+and in practice much closer, and an exact solver over ten thousand gamma lines would buy a nuclide
+or two at a cost nobody asked for.
+
+Two boundary cases are answered rather than thrown. A time where the metric is identically zero —
+exposure from a fresh inventory of pure beta emitters — constrains nothing, and *nothing to cover
+is covered*. And a floor above what a table can express is reported as a **shortfall** rather than
+an error: a gamma-line total counts lines below the column threshold, so even every column
+together can fall short of 100%, and the set returned is still the best one available.
+
 ## 4. What a ranking guarantees
 
 ```
@@ -811,6 +875,8 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | [`nusift/triage/response.hpp`](../nusift/triage/response.hpp) | `Metric`, `Domain`, `Aggregate`, `Unit`, the pairing rules, and `ResponseTable` |
 | [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `unitScale`, `domainScale`, `assemble`, `assembleLines`, the unmodelled-energy accounting, and `requirePin` |
 | [`nusift/triage/ranking.cpp`](../nusift/triage/ranking.cpp) | Sorting, stop conditions, coverage, the omitted count, and the pinned tail |
+| [`nusift/triage/triage_set.hpp`](../nusift/triage/triage_set.hpp) | `CoverageRequirement`, `TriageSet`, and what greedy does and does not claim |
+| [`nusift/triage/triage_set.cpp`](../nusift/triage/triage_set.cpp) | The shared contributor space, the capped-gain greedy, and the binding point |
 | [`nusift/triage/forecast.cpp`](../nusift/triage/forecast.cpp) | `dominanceWindows`, crossing interpolation, `unionTopN`, `persistentTopN` |
 | [`nusift/triage/events.hpp`](../nusift/triage/events.hpp) | `EventSeries`, `TrajectoryEvent`, `LevelWindow`, and the missed-event semantics |
 | [`nusift/triage/events.cpp`](../nusift/triage/events.cpp) | `crossings`, `extrema`, `windowsAbove`/`windowsBelow`, Illinois and golden-section refinement, and the table-backed series |
