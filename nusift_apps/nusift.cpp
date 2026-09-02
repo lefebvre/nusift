@@ -1052,7 +1052,17 @@ int runDataNuclide(const std::string& storePath, const std::vector<std::string>&
     std::printf("%s   Z=%d A=%d I=%d   key=%lld\n", formatNuclideName(zai).c_str(), zai.z, zai.a,
                 zai.i, static_cast<long long>(zai.key()));
     if (halfLife > 0.0) {
-      std::printf("  half-life        %s\n", formatDuration(halfLife).c_str());
+      const double sigma = data.halfLifeUncertainty(index);
+      if (sigma > 0.0) {
+        // Printed as a relative figure beside the value, because that is the form the
+        // sensitivity work consumes and the form a reader can compare between nuclides: an
+        // absolute sigma in seconds is incomparable across a range from microseconds to aeons.
+        std::printf("  half-life        %s  +/- %.2g%%\n", formatDuration(halfLife).c_str(),
+                    100.0 * sigma / halfLife);
+      } else {
+        std::printf("  half-life        %s  (no uncertainty evaluated)\n",
+                    formatDuration(halfLife).c_str());
+      }
       std::printf("  decay constant   %.6g /s\n", data.decayConstant(index));
     } else {
       std::printf("  half-life        stable\n");

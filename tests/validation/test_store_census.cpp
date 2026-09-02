@@ -111,6 +111,78 @@ TEST(StoreCensus, TheKnownCoverageGapsAreUnchanged) {
   EXPECT_EQ(c.sfWithoutYields, 103) << "spontaneous-fission branches with no yield set";
 }
 
+// The uncertainty census. How MUCH of an evaluation carries a sigma is what decides whether an
+// error budget built on it means anything, so the coverage is pinned like every other coverage
+// figure here rather than discovered later by whoever first tries to use it.
+//
+// ENDF/B-VIII.1 states a half-life uncertainty for 85% of staged nuclides and a branching
+// uncertainty for every decay mode it carries. The gap is real and is mostly the short-lived
+// exotics, whose half-lives are themselves estimates.
+TEST(StoreCensus, HalfLifeUncertaintyCoverageIsUnchanged) {
+  const NuclearData& store = committedStore();
+  int stated = 0;
+  int unstable = 0;
+  for (int i = 0; i < store.stagedCount(); ++i) {
+    if (!(store.halfLifeSeconds(i) > 0.0)) {
+      continue;
+    }
+    ++unstable;
+    if (store.halfLifeUncertainty(i) > 0.0) {
+      ++stated;
+    }
+  }
+  EXPECT_EQ(unstable, 3562);
+  EXPECT_EQ(stated, 3270) << "nuclides whose evaluated half-life carries a stated uncertainty";
+}
+
+// Sanity on the VALUES, not merely on the count. A sigma LARGER than the half-life it qualifies
+// would be nonsense and would be the signature of a mispairing; one exactly EQUAL to it is not,
+// and three nuclides genuinely carry that.
+//
+// Kr-100 is evaluated at 7 ms +/- 7 ms -- the two numbers sit side by side in the same MT457
+// record -- which is an evaluator saying the value is known to within about a factor of two.
+// Mt-266m and Mt-269 say the same thing. Pinned at three so a restage that changed it surfaces
+// here rather than in whatever first divides by one of them.
+TEST(StoreCensus, NoStatedHalfLifeUncertaintyExceedsItsHalfLife) {
+  const NuclearData& store = committedStore();
+  int checked = 0;
+  int fullyUncertain = 0;
+  for (int i = 0; i < store.stagedCount(); ++i) {
+    const double halfLife = store.halfLifeSeconds(i);
+    const double sigma = store.halfLifeUncertainty(i);
+    if (!(halfLife > 0.0) || !(sigma > 0.0)) {
+      continue;
+    }
+    ++checked;
+    EXPECT_LE(sigma, halfLife) << formatNuclideName(store.zaiAt(i))
+                               << " has an uncertainty larger than its half-life";
+    if (sigma >= halfLife) {
+      ++fullyUncertain;
+    }
+  }
+  EXPECT_GT(checked, 3000);
+  EXPECT_EQ(fullyUncertain, 3) << "nuclides evaluated at 100% uncertainty on their half-life";
+}
+
+// Against values published outside NuSIFT, which is what makes this a validation test rather
+// than a round-trip. ENDF/B-VIII.1 evaluates Cs-137 at 30.08(9) y and Co-60 at 5.2711(4) y, so
+// the relative uncertainties are 0.30% and 0.0076%; a store that had paired the sigma column
+// with the wrong nuclide would land nowhere near either.
+TEST(StoreCensus, StagedHalfLifeUncertaintiesMatchTheirEvaluations) {
+  const NuclearData& store = committedStore();
+  struct Expected {
+    Zai zai;
+    double relative;
+  };
+  for (const Expected& one :
+       {Expected{Zai{55, 137, 0}, 0.0030}, Expected{Zai{27, 60, 0}, 7.6e-5}}) {
+    const int index = store.indexOf(one.zai);
+    ASSERT_GE(index, 0) << formatNuclideName(one.zai);
+    const double relative = store.halfLifeUncertainty(index) / store.halfLifeSeconds(index);
+    EXPECT_NEAR(relative, one.relative, one.relative * 0.1) << formatNuclideName(one.zai);
+  }
+}
+
 // Every one of those is a heavy nuclide, and decay only ever lowers A, so nothing a
 // fission-product source produces can reach one. That is the fact behind `data info`
 // calling the gap negligible for such a source, and it is checked rather than assumed.

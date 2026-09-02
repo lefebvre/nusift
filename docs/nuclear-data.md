@@ -152,6 +152,38 @@ The same packing carries decay modes, photon lines, fission yields, and the one-
 cross sections that are reserved in schema v1 and written empty — so adding activation later
 forces neither a schema bump nor a restage of everything else.
 
+### Evaluated uncertainties
+
+The store carries the 1-sigma uncertainty beside three of its values, read from the same records
+the values come from:
+
+| Field | ENDF source | Coverage in ENDF/B-VIII.1 |
+| --- | --- | --- |
+| half-life | MT457, the `[T, DT]` pair | 3270 of 3562 unstable nuclides |
+| mode branching | MT457, `DecayMode`'s `[BR, DBR]` | 5212 of 5212 modes |
+| independent yield | MT454, the `DFY` column | 63126 of 73264 entries |
+
+**Matched by identity, never by position.** cram builds its decay-mode list from the same MT457
+record and almost certainly preserves its order — but "almost certainly" is not a basis on which
+to attach an uncertainty to a decay mode. A silent off-by-one would put β⁻'s σ on the α branch
+and nothing downstream could tell. So branchings are keyed by `(RTYP, RFS)` and yields by
+`(ZAFP, FPS)`, unmatched entries stay zero, and the count of them is reported. Staging
+ENDF/B-VIII.1 leaves none unmatched, which is the check being worth running rather than a
+foregone conclusion.
+
+The half-life *value* is read twice on purpose — once through cram, once directly — and the two
+are **compared**. They come from one record through different parsers, so a disagreement means
+the readers are not looking at the same nuclide, and every σ attached on that basis would be
+attached to the wrong one. A mismatch withholds that σ and is reported per nuclide.
+
+**Zero means the evaluation was silent**, not that the value is exact. No evaluated half-life is
+known exactly, so the two are not distinguishable in the data and the encoding does not pretend
+otherwise; what consumes a σ reports how much of an answer rests on values carrying none.
+
+Three nuclides — Kr-100, Mt-266m, Mt-269 — are evaluated at **100% uncertainty**, their `T` and
+`DT` written identically in the same record. That is an evaluator saying the half-life is known
+to within about a factor of two, and it is staged as written.
+
 ### Provenance is per field, not per file
 
 ```
