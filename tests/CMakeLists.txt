@@ -56,6 +56,7 @@ add_executable(nusift_unit_tests
   unit/test_time_spec.cpp
   unit/test_triage.cpp
   unit/test_triage_set.cpp
+  unit/test_uncertainty.cpp
   unit/test_units.cpp)
 
 # Test helpers are included by path relative to unit/, so the directory has to be on the

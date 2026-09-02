@@ -9,12 +9,12 @@ that produced the number you are looking at.
 | # | Stage | What it decides |
 | --- | --- | --- |
 | 1 | [Nuclear data](nuclear-data.md) | What the store holds, how ENDF becomes a chain, and why whole photon spectra are persisted rather than one constant per nuclide |
-| 2 | [Inventory and seeding](inventory.md) | Every route to a starting atom count — a file in any unit, assays from several dates reconciled to one, or a fission source sized three ways |
+| 2 | [Inventory and seeding](inventory.md) | Every route to a starting atom count — a file in any unit with its uncertainties, assays from several dates reconciled to one, or a fission source sized three ways |
 | 3 | [The decay solve](decay-solve.md) | The matrix, CRAM, the forward-closure pruning, time grids, threads, and determinism |
 | 4 | [Interval integration](interval-integration.md) | Time-integrated answers in closed form, and the cancellation guard |
 | 5 | [Exposure](exposure.md) | The photon transport model: lines, air attenuation, air kerma, ICRP 116 effective dose, and what it excludes |
 | 6 | [Ranking and forecasting](ranking.md) | Weights, aggregation, the binned source term, coverage, robust triage sets, dominance windows, piecewise task plans, located events, maximum allowable scale, counterfactual interventions, and how a report states its own limits |
-| 7 | [Seed attribution](attribution.md) | The other attribution of the same number: which seeded nuclide a response is riding on, from one adjoint solve |
+| 7 | [Seed attribution](attribution.md) | The other attribution of the same number: which seeded nuclide a response is riding on, from one adjoint solve — and the error bar its uncertainties put on the answer |
 
 ## The one design decision everything follows from
 

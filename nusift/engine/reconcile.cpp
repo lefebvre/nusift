@@ -41,6 +41,16 @@ Reconciliation reconcile(const NuclearData& data, std::span<const AssayGroup> gr
       throw InputError(tagged(kModule, "the assay dated " + formatCalendarDate(group.dateSeconds) +
                                            " has no rows, so there is nothing to carry forward"));
     }
+    // An undated sheet has no date to carry FROM. Refused rather than carried from zero,
+    // because the alternative is silent and large: taking the placeholder at face value would
+    // age an undated 2024 sheet by fifty-four years and report the result as an inventory.
+    if (!group.dated && epochSeconds != 0.0) {
+      throw InputError(tagged(
+          kModule, "the assay \"" + group.label + "\" states no date, so it cannot be carried to " +
+                       formatCalendarDate(epochSeconds) +
+                       ". Give its rows an `assayed` column, or reconcile to no epoch "
+                       "at all"));
+    }
     // The refusal the header argues for, named per assay rather than once for the set: which
     // assay is in the future of the epoch is the thing the caller has to fix.
     if (group.dateSeconds > epochSeconds) {
@@ -68,6 +78,12 @@ Reconciliation reconcile(const NuclearData& data, std::span<const AssayGroup> gr
     contribution.nuclides = group->inventory.size();
     contribution.atomsAtAssay = group->inventory.totalAtoms();
 
+    // Row uncertainties are DROPPED rather than carried, here and in the branch below. A
+    // diagonal covariance at assay becomes D Sigma D^T at the epoch and D is not diagonal, so a
+    // per-row sigma on a merged inventory would be a lie -- addKey's default of zero is the
+    // right behaviour and is named here so it reads as a decision rather than an omission.
+    // Propagating assay uncertainty is triage/uncertainty.hpp's job, and it reaches back to the
+    // assays instead of forward from the merge.
     if (contribution.carriedSeconds == 0.0) {
       // Already at the epoch. Not solved for, because a solve over a zero interval is the
       // identity and paying for one would only add floating-point noise to numbers a user

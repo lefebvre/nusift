@@ -51,6 +51,13 @@ struct AssayGroup {
   // Where this assay came from, for the report. A reconciliation that cannot say which sheet
   // contributed what has merged away the only thing making it auditable.
   std::string label;
+
+  // Whether the file actually stated a date. An undated sheet gets dateSeconds = 0, which is a
+  // PLACEHOLDER and not a measurement -- so carrying it to any epoch but zero would be carrying
+  // it from a date nobody supplied. Without this flag that mistake is silent and large: an
+  // undated sheet reconciled to 2024 would be aged fifty-four years, and every number after it
+  // would be wrong with nothing to show why.
+  bool dated = false;
 };
 
 // What one assay contributed to the merged inventory.

@@ -101,6 +101,66 @@ from the inventory it multiplies.
 - **Gamma lines.** A photon line has no seed. Rank by line to see which lines carry the dose;
   attribute by nuclide to see which seeds carry them.
 
+## 5a. The error bar the assay puts on the answer
+
+`dR/dn₀` is a derivative, and the seed is a thing somebody measured. Multiply the two and the
+importance column stops being a diagnostic and becomes an error bar:
+
+```
+σ_R² = gᵀ Σ g
+```
+
+**Exact, not first order.** `R` is linear in `n₀`, so there is no expansion, no small-error
+assumption and no derivative that had to be estimated — the same linearity that makes the shares
+a partition rather than an estimate. A single seeded nuclide therefore turns a 5% assay into a 5%
+answer at *every* time and to every digit, whatever the chain beneath it, which is what the test
+asserts rather than a tolerance chosen to pass.
+
+What it buys is the assay-planning question the importance column could only hint at. Ordering by
+**variance fraction** rather than by share answers *which measurement to improve*, and the two
+orderings differ:
+
+```
+   seed          of variance    1-sigma on R      row sigma     share of R
+   Sr-90             94.0%      2.4949e+13     1.6384e+22          31.7%
+   Cs-137             5.1%      5.8299e+12     4.1084e+21          61.7%
+```
+
+Cs-137 is most of the answer and almost none of its uncertainty; Sr-90 is the reverse. Change the
+metric and it reorders again — under photon dose the same two rows drop to nothing and Co-60
+takes 90% of the variance, because importance is in the product and importance is what the metric
+decides.
+
+### Two units problems that turned out not to be problems
+
+**The measurement basis does not need to be retained.** `toAtoms()` is `value · k` in every
+branch — 1 for atoms, `N_A` for moles, `N_A·g/M` for a mass, `1/λ` for an activity — so it is
+strictly linear with no offset, and the same call converts a σ as correctly as it converts a
+quantity. The basis *is* needed for `dR/dλ` below, where `n₀ = A₀/λ` moves with the parameter
+being differentiated. Those are different questions and only one of them needs it.
+
+**Assays on different dates need no new machinery.** A σ cannot ride on a reconciled inventory —
+a diagonal `Σ` at assay becomes `DΣDᵀ` at the epoch and `D` is not diagonal — so the propagation
+has to reach back to assay time. But the carry and the response interval share one decay matrix,
+so their exponentials commute:
+
+```
+R = ⟨w, e^{AT} Σ_a e^{Aτ_a} n_a⟩ = Σ_a ⟨e^{Aᵀ(T + τ_a)} w, n_a⟩
+```
+
+The importance of an assay carried forward by `τ` is just the ordinary adjoint run for `T + τ`.
+One existing solve per assay, and `R = Σ_a ⟨g_a, n_a⟩` is an identity a test checks against the
+ordinary ranking total.
+
+### What it assumes, and says
+
+A per-row σ is the **diagonal** of `Σ`, which asserts the assay errors are independent. Aliquots
+counted on one detector against one standard are not; rows fitted to a total are not. Off-diagonal
+terms move `σ_R` in either direction and nothing here can detect them. The report also states what
+share of the response came from rows that stated an uncertainty at all — an error bar propagated
+from rows holding half the answer is not an error bar on the answer — and that the nuclear data is
+taken as exact, which is the next section's subject.
+
 ## 6. Not implemented: parameter sensitivities
 
 `dR/dn₀` is a sensitivity to the *seed*. The related question — how much the answer depends on
@@ -129,6 +189,10 @@ shape what a future feature would have to do:
    refinement chosen from the shortest removal time in the pruned set — cram's own documented
    rule — not a finer schedule, which costs four times as much and does worse.
 
+This is the **other** parameter class from §5a, and the two do not overlap: that one propagates
+what the assay said about the inventory at fixed nuclear data, this one would propagate what the
+evaluation says about the nuclear data at a fixed inventory. A complete error budget wants both.
+
 Uncertainty propagation on top of any of this additionally needs evaluated σ's, which the store
 reserves (`nuclide_half_life_uncertainty`, `mode_branching_uncertainty`,
 `nfy_product_yield_uncertainty`) and does not yet stage. Measured elasticities are near-equal
@@ -155,5 +219,7 @@ staging problem than the σ's alone.
 | [`nusift/engine/adjoint_engine.cpp`](../nusift/engine/adjoint_engine.cpp) | The transposed solve, and the `t = 0` shortcut |
 | [`nusift/engine/decay_engine_internal.hpp`](../nusift/engine/decay_engine_internal.hpp) | The `prepare()` the forward and adjoint paths share, so their index spaces cannot diverge |
 | [`nusift/triage/attribution.cpp`](../nusift/triage/attribution.cpp) | Shares, ordering, coverage, the pinned tail, and `requireSeedPin` |
+| [`nusift/triage/uncertainty.hpp`](../nusift/triage/uncertainty.hpp) | Why `gᵀΣg` is exact, why the basis is not needed, and why a dated assay needs no new solve |
+| [`nusift/triage/uncertainty.cpp`](../nusift/triage/uncertainty.cpp) | The per-assay adjoint at `T + τ`, and the variance ordering |
 | [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `responseWeights`, which hands the adjoint the same metric definition the forward path uses |
 | [`tests/spike/sensitivity_spike.cpp`](../tests/spike/sensitivity_spike.cpp) | The parameter-sensitivity measurements behind §6 |

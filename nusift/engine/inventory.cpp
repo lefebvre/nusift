@@ -121,7 +121,7 @@ const char* quantityName(Quantity quantity) {
   return "?";
 }
 
-void Inventory::addKey(std::int64_t zaiKey, double atoms) {
+void Inventory::addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms) {
   // A count of atoms is non-negative and finite by definition. Refused here rather than
   // downstream because the failure a bad count causes is silent: a negative seed decays into
   // negative activities that rank as the smallest contributors and vanish off the bottom of
@@ -132,18 +132,34 @@ void Inventory::addKey(std::int64_t zaiKey, double atoms) {
                                          " must be non-negative and finite; got " +
                                          std::to_string(atoms)));
   }
+  // Held to the same standard, and to no more than that: a sigma larger than its own quantity
+  // is what a measurement near a detection limit honestly reports, and refusing it would refuse
+  // exactly the rows an error bar is most wanted for.
+  if (!std::isfinite(sigmaAtoms) || sigmaAtoms < 0.0) {
+    throw InputError(
+        tagged(kModule, "the uncertainty on " + formatNuclideName(Zai::fromKey(zaiKey)) +
+                            " must be non-negative and finite; got " + std::to_string(sigmaAtoms)));
+  }
   const auto it = std::lower_bound(
       entries_.begin(), entries_.end(), zaiKey,
       [](const InventoryEntry& entry, std::int64_t key) { return entry.zaiKey < key; });
   if (it != entries_.end() && it->zaiKey == zaiKey) {
     it->atoms += atoms;
+    // In quadrature: two rows of one nuclide are two measurements, and two independent
+    // measurements add in variance rather than in standard deviation.
+    it->sigmaAtoms = std::hypot(it->sigmaAtoms, sigmaAtoms);
     return;
   }
-  entries_.insert(it, InventoryEntry{zaiKey, atoms});
+  entries_.insert(it, InventoryEntry{zaiKey, atoms, sigmaAtoms});
 }
 
-void Inventory::add(const Zai& zai, double atoms) {
-  addKey(zai.key(), atoms);
+bool Inventory::hasUncertainties() const {
+  return std::any_of(entries_.begin(), entries_.end(),
+                     [](const InventoryEntry& entry) { return entry.sigmaAtoms > 0.0; });
+}
+
+void Inventory::add(const Zai& zai, double atoms, double sigmaAtoms) {
+  addKey(zai.key(), atoms, sigmaAtoms);
 }
 
 double Inventory::atomsOf(const Zai& zai) const {
