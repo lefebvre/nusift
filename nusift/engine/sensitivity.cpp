@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 
+#include <optional>
 #include "cram/adjoint.hpp"
+
 #include "cram/chain.hpp"
 #include "nusift/core/error.hpp"
 #include "nusift/core/nuclide.hpp"
@@ -48,6 +50,63 @@ std::vector<double> logSchedule(double time, int intervals) {
     previous = edge;
   }
   return widths;
+}
+
+// The ENDF RTYP, spelled. Only the leading digit is named: a multi-step mode like 1.5 is a
+// beta-minus followed by an alpha, and naming the first step is what identifies the branch a
+// reader is looking at without inventing a vocabulary for every sequence.
+std::string modeName(double rtyp) {
+  switch (static_cast<int>(rtyp)) {
+    case 0:
+      return "gamma";
+    case 1:
+      return "beta-";
+    case 2:
+      return "beta+/EC";
+    case 3:
+      return "IT";
+    case 4:
+      return "alpha";
+    case 5:
+      return "neutron";
+    case 6:
+      return "SF";
+    case 7:
+      return "proton";
+    default:
+      break;
+  }
+  return "rtyp " + std::to_string(rtyp);
+}
+
+// The constrained covariance of one nuclide's branchings, contracted against its sensitivities.
+//
+//     C = D - (D u u^T D) / (u^T D u)
+//
+// so e^T C e = sum(e_i^2 d_i) - (sum(e_i d_i))^2 / sum(d_i) with d_i = sigma_i^2. Written in
+// that reduced form rather than by forming C: the block is small, but the identity makes the
+// two limits visible -- one mode gives exactly zero, and two modes give (e_1 - e_2)^2 times the
+// harmonic-ish combination the constraint forces.
+double constrainedVariance(const std::vector<double>& sensitivities,
+                           const std::vector<double>& sigmas) {
+  double weighted = 0.0;  // sum e_i^2 d_i
+  double crossed = 0.0;   // sum e_i d_i
+  double total = 0.0;     // sum d_i
+  for (std::size_t i = 0; i < sensitivities.size(); ++i) {
+    const double d = sigmas[i] * sigmas[i];
+    weighted += sensitivities[i] * sensitivities[i] * d;
+    crossed += sensitivities[i] * d;
+    total += d;
+  }
+  if (!(total > 0.0)) {
+    return 0.0;
+  }
+  // Clamped at zero: the expression is a variance and cannot be negative, but it is a difference
+  // of two numbers much larger than the result whenever the sensitivities are close -- which the
+  // constraint makes the common case, since equal sensitivities give exactly zero. Two or three
+  // digits go there, which is immaterial to a variance quoted to two and is the same cancellation
+  // the lambda terms show, met again in the algebra that makes the block cheap.
+  return std::max(0.0, weighted - crossed * crossed / total);
 }
 
 }  // namespace
@@ -226,6 +285,101 @@ DecaySensitivities decaySensitivities(const NuclearData& data, const Inventory& 
     }
     result.nuclides.push_back(std::move(one));
   }
+
+  // --- branchings ------------------------------------------------------------
+  //
+  // cram contracts S against dA/dlambda for us and has no counterpart for branchings, but the
+  // pattern is simpler: A(d, j) carries +lambda_j * b_m for mode m of nuclide j, and the
+  // diagonal A(j, j) = -lambda_j does NOT move with b, because the modes sum to one and the
+  // total removal rate is lambda whatever the split. So dA/db_m is a single entry and
+  //
+  //     dR/db_m = lambda_j * sum over intervals of S_k(daughter, j)
+  //
+  // The daughter comes from cram's own decayDaughter(), which is public precisely so a caller
+  // contracting over the decay topology sees the same product the matrix was built with.
+  Eigen::SparseMatrix<double> summed(chainSize, chainSize);
+  for (const Eigen::SparseMatrix<double>& piece : scattered) {
+    summed += piece;
+  }
+
+  double branchingVariance = 0.0;
+  double branchingDiagonal = 0.0;
+  for (int k = 0; k < kept; ++k) {
+    const int index = prepared.keep[static_cast<std::size_t>(k)];
+    const double lambda = data.decayConstant(index);
+    if (!(lambda > 0.0)) {
+      continue;
+    }
+    const Zai parent = Zai::fromKey(prepared.keys[static_cast<std::size_t>(k)]);
+    const cram::DecayData* decay = chain.decay(toCram(parent));
+    if (decay == nullptr || decay->modes.size() < 1) {
+      continue;
+    }
+
+    BranchingBlock block;
+    block.parentKey = parent.key();
+    block.parent = formatNuclideName(parent);
+    block.modes = static_cast<int>(decay->modes.size());
+
+    std::vector<double> sensitivities;
+    std::vector<double> sigmas;
+    for (std::size_t m = 0; m < decay->modes.size(); ++m) {
+      const cram::DecayMode& mode = decay->modes[m];
+      BranchingSensitivity one;
+      one.parentKey = parent.key();
+      one.parent = block.parent;
+      one.mode = modeName(mode.rtyp);
+      one.branching = mode.branching;
+      one.sigma = data.modeBranchingUncertainty(index, static_cast<int>(m));
+
+      // Spontaneous fission produces from the yield table rather than a single daughter, so its
+      // branching moves a whole column. Left out of this contraction rather than approximated by
+      // one product: it belongs with the yield covariance, which is the next piece of work.
+      const std::optional<cram::Zai> daughter =
+          cram::DepletionChain::decayDaughter(toCram(parent), mode);
+      if (!daughter.has_value()) {
+        one.daughter = mode.isFission ? "fission products" : "(none tracked)";
+        result.branchings.push_back(std::move(one));
+        continue;
+      }
+      const Zai product = fromCram(*daughter);
+      one.daughter = formatNuclideName(product);
+      const int productIndex = data.indexOfKey(product.key());
+      if (productIndex >= 0) {
+        one.total = lambda * summed.coeff(productIndex, index);
+        one.elasticity = result.response != 0.0 ? one.branching * one.total / result.response : 0.0;
+      }
+
+      if (one.sigma > 0.0) {
+        sensitivities.push_back(one.total);
+        sigmas.push_back(one.sigma);
+      }
+      result.branchings.push_back(std::move(one));
+    }
+
+    if (!sensitivities.empty()) {
+      for (std::size_t i = 0; i < sensitivities.size(); ++i) {
+        const double term = sensitivities[i] * sigmas[i];
+        block.diagonalVariance += term * term;
+      }
+      block.constrainedVariance = constrainedVariance(sensitivities, sigmas);
+      branchingVariance += block.constrainedVariance;
+      branchingDiagonal += block.diagonalVariance;
+      result.branchingBlocks.push_back(std::move(block));
+    }
+  }
+
+  result.branchingNorm =
+      result.response != 0.0 ? std::sqrt(branchingVariance) / std::abs(result.response) : 0.0;
+  result.branchingNormDiagonal =
+      result.response != 0.0 ? std::sqrt(branchingDiagonal) / std::abs(result.response) : 0.0;
+  std::sort(result.branchingBlocks.begin(), result.branchingBlocks.end(),
+            [](const BranchingBlock& a, const BranchingBlock& b) {
+              if (a.constrainedVariance != b.constrainedVariance) {
+                return a.constrainedVariance > b.constrainedVariance;
+              }
+              return a.parentKey < b.parentKey;
+            });
 
   result.relativeNorm = std::sqrt(variance);
   result.coveredFraction = totalMagnitude > 0.0 ? covered / totalMagnitude : 0.0;

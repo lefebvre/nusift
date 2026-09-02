@@ -155,6 +155,66 @@ TEST(DecaySensitivity, ChoosesRefinementFromTheShortestRemovalTime) {
   EXPECT_EQ(chooseEndRefinements(0.0, 4, 1.0, 40), 0);
 }
 
+// --- the constraint-derived branching covariance ------------------------------
+
+// A nuclide with ONE mode has b = 1 by construction: there is no freedom for a perturbation to
+// use, so it contributes exactly nothing however large a sigma the evaluation states. A diagonal
+// treatment credits it with a variance it cannot have, and most nuclides are single-mode.
+TEST(BranchingCovariance, ASingleModeNuclideContributesNothing) {
+  const NuclearData data = lone();
+  Inventory inv;
+  inv.add(kParent, 1.0e20);
+
+  ResponseSpec spec;
+  const DecaySensitivities s = decaySensitivities(data, inv, 1.0e6, spec);
+
+  // The synthetic chain's only unstable nuclide has one beta-minus branch at 100%.
+  EXPECT_TRUE(s.branchingBlocks.empty())
+      << "a nuclide whose branchings cannot move forms no block at all";
+  EXPECT_DOUBLE_EQ(s.branchingNorm, 0.0);
+  ASSERT_FALSE(s.branchings.empty());
+  EXPECT_EQ(s.branchings.front().parent, "Sn-100");
+  EXPECT_EQ(s.branchings.front().daughter, "Sb-100");
+  EXPECT_DOUBLE_EQ(s.branchings.front().branching, 1.0);
+}
+
+// Two modes are FORCED entirely: db_1 = -db_2, so the sigmas must be equal and the correlation
+// is exactly -1. The constrained variance collapses to a closed form,
+//
+//     e^T C e = d_1 d_2 (e_1 - e_2)^2 / (d_1 + d_2),     d_i = sigma_i^2
+//
+// which the reduced contraction has to reproduce. Checked directly rather than through a solve,
+// because it is the algebra that carries the claim.
+TEST(BranchingCovariance, TwoModesAreForcedAndCollapseToAClosedForm) {
+  // Exercised through the same reduced expression the engine uses, on values chosen so the
+  // closed form and the naive diagonal differ by a lot.
+  const double e1 = 3.0;
+  const double e2 = 2.0;
+  const double s1 = 0.02;
+  const double s2 = 0.01;
+  const double d1 = s1 * s1;
+  const double d2 = s2 * s2;
+
+  const double weighted = e1 * e1 * d1 + e2 * e2 * d2;
+  const double crossed = e1 * d1 + e2 * d2;
+  const double totalD = d1 + d2;
+  const double constrained = weighted - crossed * crossed / totalD;
+
+  // Relative, because the reduced form is a difference of two numbers some fifty times the
+  // result and loses a couple of digits doing it -- the same cancellation the lambda terms show,
+  // met again in the algebra that makes the block cheap.
+  const double closed = d1 * d2 * (e1 - e2) * (e1 - e2) / (d1 + d2);
+  EXPECT_NEAR(constrained, closed, closed * 1.0e-12);
+  // And the constraint bites: taking them independent overstates the variance several-fold.
+  EXPECT_LT(constrained, weighted * 0.2);
+
+  // Equal sensitivities cannot move the response at all, because the constraint means any
+  // increase in one branch is exactly the decrease in the other.
+  const double equalWeighted = e1 * e1 * d1 + e1 * e1 * d2;
+  const double equalCrossed = e1 * d1 + e1 * d2;
+  EXPECT_NEAR(equalWeighted - equalCrossed * equalCrossed / totalD, 0.0, equalWeighted * 1.0e-12);
+}
+
 TEST(DecaySensitivity, RefusesAQuestionItCannotAnswer) {
   const NuclearData data = lone();
   Inventory inv;

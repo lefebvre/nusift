@@ -86,6 +86,12 @@ public:
   // built on this can cover.
   double halfLifeUncertainty(int index) const;
 
+  // 1-sigma on the branching of mode `mode` of nuclide `index`, absolute, or 0 when the
+  // evaluation states none. The mode ordering is the store's, which is the tape's.
+  // ENDF/B-VIII.1 states one for every mode it carries.
+  double modeBranchingUncertainty(int index, int mode) const;
+  int modeCount(int index) const;
+
   // ln(2)/halfLife, or 0 for a stable nuclide. This is the per-nuclide weight the activity
   // metric multiplies by, so it is precomputed rather than derived at every use.
   double decayConstant(int index) const;

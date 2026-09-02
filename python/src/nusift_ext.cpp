@@ -1347,6 +1347,31 @@ NB_MODULE(_core, m) {
                ">";
       });
 
+  nb::class_<BranchingSensitivity>(m, "BranchingSensitivity")
+      .def_ro("parent", &BranchingSensitivity::parent)
+      .def_ro("daughter", &BranchingSensitivity::daughter)
+      .def_ro("mode", &BranchingSensitivity::mode)
+      .def_ro("branching", &BranchingSensitivity::branching)
+      .def_ro("sigma", &BranchingSensitivity::sigma)
+      .def_ro("total", &BranchingSensitivity::total)
+      .def_ro("elasticity", &BranchingSensitivity::elasticity)
+      .def("__repr__", [](const BranchingSensitivity& b) {
+        return "<BranchingSensitivity " + b.parent + " " + b.mode + " -> " + b.daughter + ">";
+      });
+
+  nb::class_<BranchingBlock>(m, "BranchingBlock",
+                             "One nuclide's branchings, whose modes sum to one.")
+      .def_ro("parent", &BranchingBlock::parent)
+      .def_ro("modes", &BranchingBlock::modes)
+      .def_ro("diagonal_variance", &BranchingBlock::diagonalVariance,
+              "What a diagonal treatment would report. Kept so the constraint's effect is "
+              "visible rather than asserted.")
+      .def_ro("constrained_variance", &BranchingBlock::constrainedVariance,
+              "e^T C e with C the covariance the sum-to-one constraint forces. The honest one.")
+      .def("__repr__", [](const BranchingBlock& b) {
+        return "<BranchingBlock " + b.parent + " " + std::to_string(b.modes) + " modes>";
+      });
+
   nb::class_<DecaySensitivities>(m, "DecaySensitivities",
                                  "How much a response rests on the evaluated half-lives.")
       .def_ro("time", &DecaySensitivities::time)
@@ -1357,6 +1382,15 @@ NB_MODULE(_core, m) {
               "not an error budget: it takes Sigma diagonal, and evaluated half-lives are not "
               "independent of the branchings and yields fitted alongside them.")
       .def_ro("covered_fraction", &DecaySensitivities::coveredFraction)
+      .def_ro("branchings", &DecaySensitivities::branchings)
+      .def_ro("branching_blocks", &DecaySensitivities::branchingBlocks)
+      .def_ro("branching_norm", &DecaySensitivities::branchingNorm,
+              "Branching contribution as a fraction of R, with the sum-to-one constraint "
+              "imposed. NOT a diagonal figure: the correlation is derived from the constraint "
+              "rather than imported, because ENDF carries no covariance for decay data.")
+      .def_ro("branching_norm_diagonal", &DecaySensitivities::branchingNormDiagonal,
+              "The same taking the branchings as independent. The DIFFERENCE from the above is "
+              "the result: it says what ignoring the constraint would have cost.")
       .def_ro("with_uncertainty", &DecaySensitivities::withUncertainty)
       .def_ro("without_uncertainty", &DecaySensitivities::withoutUncertainty)
       .def_ro("end_refinements", &DecaySensitivities::endRefinements)

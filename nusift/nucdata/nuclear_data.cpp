@@ -33,6 +33,8 @@ struct NuclearData::Impl {
   std::vector<std::int64_t> keys;
   std::vector<double> halfLife;
   std::vector<double> halfLifeUncertainty;
+  std::vector<int> modeOffset;
+  std::vector<double> modeBranchingUncertainty;
   std::vector<double> lambda;
   std::vector<double> molarMass;
   std::vector<double> emEnergy;
@@ -166,6 +168,12 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
 
   impl.halfLife.assign(total, 0.0);
   impl.halfLifeUncertainty.assign(total, 0.0);
+  // CSR over the STAGED nuclides only; closure-added daughters carry no modes and so no
+  // offsets. Copied wholesale because the mode ordering has to stay the tape's -- a sigma
+  // matched to the wrong mode is the failure the staging tool keys by (RTYP, RFS) to avoid,
+  // and re-sorting here would undo it.
+  impl.modeOffset.assign(static_cast<std::size_t>(total) + 1, 0);
+  impl.modeBranchingUncertainty = a.modeBranchingUncertainty;
   impl.lambda.assign(total, 0.0);
   impl.molarMass.assign(total, 0.0);
   impl.emEnergy.assign(total, 0.0);
@@ -179,6 +187,11 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
     // the loader's length check exists to prevent.
     if (i < static_cast<int>(a.halfLifeUncertainty.size())) {
       impl.halfLifeUncertainty[i] = a.halfLifeUncertainty[static_cast<std::size_t>(i)];
+    }
+    if (i + 1 < static_cast<int>(a.modeOffset.size())) {
+      impl.modeOffset[static_cast<std::size_t>(i)] = a.modeOffset[static_cast<std::size_t>(i)];
+      impl.modeOffset[static_cast<std::size_t>(i) + 1] =
+          a.modeOffset[static_cast<std::size_t>(i) + 1];
     }
     impl.lambda[i] = units::decayConstant(a.halfLife[i]);
     if (impl.hasAwr) {
@@ -244,6 +257,25 @@ Zai NuclearData::zaiAt(int index) const {
 
 std::span<const std::int64_t> NuclearData::nuclideKeys() const {
   return impl_->keys;
+}
+
+int NuclearData::modeCount(int index) const {
+  const std::size_t i = static_cast<std::size_t>(index);
+  if (i + 1 >= impl_->modeOffset.size()) {
+    return 0;
+  }
+  return impl_->modeOffset[i + 1] - impl_->modeOffset[i];
+}
+
+double NuclearData::modeBranchingUncertainty(int index, int mode) const {
+  const std::size_t i = static_cast<std::size_t>(index);
+  if (i + 1 >= impl_->modeOffset.size() || mode < 0 || mode >= modeCount(index)) {
+    return 0.0;
+  }
+  const std::size_t at = static_cast<std::size_t>(impl_->modeOffset[i] + mode);
+  // Guarded because the column is optional: a store staged before it existed carries an empty
+  // vector rather than a short one.
+  return at < impl_->modeBranchingUncertainty.size() ? impl_->modeBranchingUncertainty[at] : 0.0;
 }
 
 double NuclearData::halfLifeUncertainty(int index) const {
