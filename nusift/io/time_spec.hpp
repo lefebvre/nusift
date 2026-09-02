@@ -54,4 +54,36 @@ std::vector<double> mergeTimes(std::vector<double> times);
 // number readable: "30 d", "1.5 y", "45 m". Used in every report.
 std::string formatDuration(double seconds);
 
+// --- calendar dates ------------------------------------------------------------
+//
+// Everything above is a DURATION -- an elapsed span, which is what a cooling time is. An assay
+// date is not one: it is an instant on a calendar, and the sheet it comes from writes it as
+// one. The two are kept apart deliberately, because "2024-03-15" and "30d" answer different
+// questions and a field that quietly accepted either would let a date be read as a span.
+//
+// Only ISO-8601 is accepted, and only in UTC. Every other spelling is ambiguous somewhere:
+// 03/04/2024 is two different days depending on the reader's country, and a local time is a
+// different instant depending on where it was written down. An inventory that reconciles two
+// assays a day apart cannot afford either.
+
+// Seconds since 1970-01-01T00:00:00Z for "YYYY-MM-DD", or "YYYY-MM-DDThh:mm:ss" with an
+// optional trailing "Z". Negative for dates before 1970, which is a legitimate assay date and
+// not an error. The result is only ever used in differences, so the choice of origin does not
+// reach any answer.
+//
+// Throws InputError for a malformed spelling and for a date that does not exist -- 2023-02-29
+// is rejected rather than rolled forward to March, because a rolled date silently moves an
+// assay by a day and nothing downstream could tell.
+double parseCalendarDate(std::string_view text);
+
+// Whether `text` is shaped like a calendar date at all. Used to tell a dated inventory column
+// from an absent one, and to give a better error than "not a date" for a field that was never
+// meant to be one.
+bool looksLikeCalendarDate(std::string_view text);
+
+// The inverse: "2024-03-15", or "2024-03-15T09:30:00Z" when the instant is not midnight. What
+// a report prints for an epoch, so that the date a reconciled inventory refers to is a date
+// rather than a count of seconds nobody can check.
+std::string formatCalendarDate(double secondsSinceEpoch);
+
 }  // namespace nusift

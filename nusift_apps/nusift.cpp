@@ -26,6 +26,7 @@
 #include "nusift/core/nuclide_name.hpp"
 #include "nusift/engine/decay_engine.hpp"
 #include "nusift/engine/inventory.hpp"
+#include "nusift/engine/reconcile.hpp"
 #include "nusift/exposure/air_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/io/inventory_io.hpp"
@@ -1326,6 +1327,84 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   return 0;
 }
 
+// --- bringing several assays to one date --------------------------------------
+
+struct ReconcileOptions {
+  // An epoch later than every assay is allowed and is sometimes what is wanted -- "what will
+  // these drums look like on the shipping date". An earlier one is refused by the library, for
+  // the reason reconcile.hpp gives at length.
+  std::string epoch;
+  std::string writePath;
+  std::string writeUnit = "atoms";
+};
+
+// Reading a dated inventory reconciles it whatever the command, because a date the tool ignored
+// would be worse than one it refused. This command is the one that SHOWS the reconciliation --
+// which sheet contributed what, how far each was carried -- and can write the merged inventory
+// out as an ordinary undated one for the next run to seed from.
+int runReconcile(const CommonOptions& options, const ReconcileOptions& reconcileOptions,
+                 const char* argv0) {
+  if (options.inventoryPath.empty()) {
+    throw InputError("reconcile: give the assays to merge with --inventory");
+  }
+
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+
+  InventoryReadOptions readOptions;
+  readOptions.ignoreUnknown = options.ignoreUnknown;
+  readOptions.warnings = &std::cerr;
+  const DatedInventory dated = readInventoryDated(options.inventoryPath, data, readOptions);
+  if (!dated.dated) {
+    throw InputError("reconcile: \"" + options.inventoryPath +
+                     "\" carries no assay dates, so there is nothing to bring to a common one. "
+                     "Add an `assayed` column of ISO dates (2024-03-15), or use `inventory "
+                     "convert` to change its units");
+  }
+
+  const double epoch = reconcileOptions.epoch.empty() ? latestAssayDate(dated.groups)
+                                                      : parseCalendarDate(reconcileOptions.epoch);
+  const Reconciliation reconciled = reconcile(data, dated.groups, epoch, decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.stagedCount();
+  context.seedProvenance = options.inventoryPath;
+
+  OutputStream out(options.output);
+  writeReconciliation(out.get(), reconciled, data, context, format);
+
+  // The checkpoint. What comes out is an ORDINARY inventory with no dates in it, because at the
+  // epoch there is only one date left and carrying it as a column would invite a second
+  // reconciliation of an already-reconciled file.
+  if (!reconcileOptions.writePath.empty()) {
+    Quantity unit = Quantity::Atoms;
+    if (!parseQuantity(reconcileOptions.writeUnit, unit)) {
+      throw InputError("reconcile: \"" + reconcileOptions.writeUnit + "\" is not a unit");
+    }
+    std::ofstream file(reconcileOptions.writePath);
+    if (!file) {
+      throw InputError("reconcile: cannot write to \"" + reconcileOptions.writePath + "\"");
+    }
+    Inventory merged = reconciled.inventory;
+    merged.setProvenance(options.inventoryPath + ", " +
+                         std::to_string(reconciled.contributions.size()) +
+                         " assays reconciled to " + formatCalendarDate(epoch));
+    const std::string& path = reconcileOptions.writePath;
+    if (path.size() >= 5 && path.compare(path.size() - 5, 5, ".json") == 0) {
+      writeInventoryJson(file, merged, data, unit);
+    } else {
+      writeInventoryCsv(file, merged, data, unit);
+    }
+    std::cerr << "  wrote " << merged.size() << " nuclides to " << path << "\n";
+  }
+  return 0;
+}
+
 // --- how long may I stay ------------------------------------------------------
 
 // Options for `stay`. The budget is spelled `--budget` rather than `--level` because it is not
@@ -1666,6 +1745,24 @@ int main(int argc, char** argv) {
                    "Relative tolerance for --refine (default 1e-6)")
       ->check(CLI::PositiveNumber);
 
+  CommonOptions reconcileOptions;
+  ReconcileOptions reconcileExtra;
+  CLI::App* reconcileCmd = app.add_subcommand(
+      "reconcile", "Bring assays taken on different dates to one date, and merge them");
+  addInventoryOptions(reconcileCmd, reconcileOptions);
+  reconcileCmd->add_option("--epoch", reconcileExtra.epoch,
+                           "Bring everything to this ISO date instead of the latest assay. "
+                           "Must not be earlier than any assay");
+  reconcileCmd->add_option("--write", reconcileExtra.writePath,
+                           "Also write the merged inventory here, as a reusable inventory file");
+  reconcileCmd->add_option("--write-units", reconcileExtra.writeUnit,
+                           "Units for --write (atoms, g, Bq, Ci, ...)");
+  reconcileCmd->add_option("-o,--output", reconcileOptions.output,
+                           "Write the report here instead of stdout");
+  reconcileCmd->add_option("--format", reconcileOptions.format, "text, csv, or json")
+      ->check(CLI::IsMember({"text", "csv", "json"}));
+  addSolverOptions(reconcileCmd, reconcileOptions);
+
   CommonOptions stayOptions;
   StayOptions stayExtra;
   CLI::App* stayCmd =
@@ -1763,6 +1860,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (reconcileCmd->parsed()) {
+      return runReconcile(reconcileOptions, reconcileExtra, argv0);
     }
     if (stayCmd->parsed()) {
       return runStay(stayOptions, stayExtra, argv0);

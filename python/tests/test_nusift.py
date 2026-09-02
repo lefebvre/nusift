@@ -1366,3 +1366,71 @@ def test_a_stay_budget_must_be_an_accrued_total(data):
         nusift.stay_time(
             data, inv, at="30d", budget=0.02, max_stay="0s", metric="exposure", units="Sv",
         )
+
+
+# --- assays on different dates -----------------------------------------------
+
+
+def test_dates_parse_and_round_trip():
+    assert nusift.parse_date("1970-01-01") == 0.0
+    assert nusift.format_date(nusift.parse_date("2024-03-15")) == "2024-03-15"
+    # A leap day that exists and one that does not.
+    assert nusift.parse_date("2024-02-29")
+    with pytest.raises(nusift.InputError):
+        nusift.parse_date("2023-02-29")
+    # Ambiguous anywhere is refused everywhere: 15/03 is two different days by country.
+    with pytest.raises(nusift.InputError):
+        nusift.parse_date("15/03/2024")
+
+
+@needs_store
+def test_reading_a_dated_inventory_reconciles_it(data, tmp_path):
+    path = tmp_path / "assays.csv"
+    path.write_text(
+        "nuclide,quantity,unit,assayed\n"
+        "Cs-137,1.0e14,Bq,2024-03-15\n"
+        "Sr-90,5.0e13,Bq,2023-01-10\n"
+    )
+
+    groups = nusift.read_assays(str(path), data)
+    assert [g.date for g in groups] == ["2023-01-10", "2024-03-15"]
+
+    reconciled = nusift.reconcile(data, groups)
+    assert reconciled.epoch == "2024-03-15"
+    assert reconciled.span_s > 0.0
+    assert [c.carried_s > 0.0 for c in reconciled.contributions] == [True, False]
+
+    # read_inventory does the same thing on its own, because a date the tool ignored would be
+    # worse than one it refused.
+    assert len(nusift.read_inventory(str(path), data)) == len(reconciled.inventory)
+    # Y-90 grew in during the carry and is in the seed; it was in neither sheet.
+    assert "Y-90" in reconciled.inventory.nuclides
+
+
+@needs_store
+def test_an_epoch_earlier_than_an_assay_is_refused(data, tmp_path):
+    path = tmp_path / "assays.csv"
+    path.write_text(
+        "Cs-137,1.0e14,Bq,2024-03-15\n"
+        "Sr-90,5.0e13,Bq,2023-01-10\n"
+    )
+    groups = nusift.read_assays(str(path), data)
+
+    # Un-growing a daughter has no unique answer, so this is refused rather than caveated.
+    with pytest.raises(nusift.InputError):
+        nusift.reconcile(data, groups, epoch="2023-06-01")
+    # Later than every assay is fine: that is just carrying everything further forward.
+    assert nusift.reconcile(data, groups, epoch="2030-01-01").epoch == "2030-01-01"
+
+
+@needs_store
+def test_a_file_dates_every_row_or_none(data, tmp_path):
+    mixed = tmp_path / "mixed.csv"
+    mixed.write_text("Cs-137,1.0e14,Bq,2024-03-15\nSr-90,5.0e13,Bq\n")
+    with pytest.raises(nusift.InputError):
+        nusift.read_assays(str(mixed), data)
+
+    undated = tmp_path / "undated.csv"
+    undated.write_text("Cs-137,1.0e14,Bq\nSr-90,5.0e13,Bq\n")
+    groups = nusift.read_assays(str(undated), data)
+    assert len(groups) == 1

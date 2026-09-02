@@ -195,5 +195,76 @@ TEST(FormatDuration, RoundTripsThroughTheParser) {
   }
 }
 
+// --- calendar dates ----------------------------------------------------------
+
+TEST(CalendarDate, RoundTripsThroughTheEpoch) {
+  // 1970-01-01 is the origin by construction, which is the one value that can be checked
+  // without trusting the algorithm being tested.
+  EXPECT_DOUBLE_EQ(parseCalendarDate("1970-01-01"), 0.0);
+  EXPECT_DOUBLE_EQ(parseCalendarDate("1970-01-02"), 86400.0);
+  // Dates before the origin are negative, which is a legitimate assay date and not an error.
+  EXPECT_DOUBLE_EQ(parseCalendarDate("1969-12-31"), -86400.0);
+
+  for (const char* text : {"1901-05-04", "1970-01-01", "1999-12-31", "2000-02-29", "2024-03-15",
+                           "2100-03-01", "2400-02-29"}) {
+    EXPECT_EQ(formatCalendarDate(parseCalendarDate(text)), text) << text;
+  }
+}
+
+TEST(CalendarDate, CarriesATimeOfDayWhenThereIsOne) {
+  const double midnight = parseCalendarDate("2024-03-15");
+  EXPECT_DOUBLE_EQ(parseCalendarDate("2024-03-15T00:00:00Z"), midnight);
+  EXPECT_DOUBLE_EQ(parseCalendarDate("2024-03-15T09:30:00Z"), midnight + 9 * 3600 + 30 * 60);
+  EXPECT_DOUBLE_EQ(parseCalendarDate("2024-03-15T09:30:00"), midnight + 9 * 3600 + 30 * 60);
+  EXPECT_EQ(formatCalendarDate(midnight + 9 * 3600 + 30 * 60), "2024-03-15T09:30:00Z");
+  // Midnight formats as a bare date: an epoch printed as "2024-03-15" is what a reader checks
+  // against a sheet, and "T00:00:00Z" on every one of them is noise.
+  EXPECT_EQ(formatCalendarDate(midnight), "2024-03-15");
+}
+
+TEST(CalendarDate, KnowsWhichYearsAreLeap) {
+  // A day apart across the century rules, which is where a naive leap test goes wrong: 1900 is
+  // not a leap year and 2000 is.
+  EXPECT_DOUBLE_EQ(parseCalendarDate("1900-03-01") - parseCalendarDate("1900-02-28"), 86400.0);
+  EXPECT_DOUBLE_EQ(parseCalendarDate("2000-03-01") - parseCalendarDate("2000-02-28"), 2 * 86400.0);
+  EXPECT_DOUBLE_EQ(parseCalendarDate("2024-03-01") - parseCalendarDate("2024-02-28"), 2 * 86400.0);
+}
+
+TEST(CalendarDate, RefusesADateThatDoesNotExist) {
+  // Rejected rather than rolled forward to 1 March. A rolled date moves an assay by a day and
+  // nothing downstream could tell, which is the whole argument for validating here.
+  EXPECT_THROW(parseCalendarDate("2023-02-29"), InputError);
+  EXPECT_THROW(parseCalendarDate("1900-02-29"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-04-31"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-13-01"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-00-10"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-01-00"), InputError);
+  EXPECT_NO_THROW(parseCalendarDate("2024-02-29"));
+}
+
+TEST(CalendarDate, RefusesEverySpellingThatIsAmbiguousSomewhere) {
+  EXPECT_THROW(parseCalendarDate("15/03/2024"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-3-15"), InputError);
+  EXPECT_THROW(parseCalendarDate("March 15 2024"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-03"), InputError);
+  EXPECT_THROW(parseCalendarDate(""), InputError);
+  // An offset is refused rather than ignored: reading +05:00 as UTC moves the assay by five
+  // hours, and two assays reconciled across it would be wrong by exactly that.
+  EXPECT_THROW(parseCalendarDate("2024-03-15T09:30:00+05:00"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-03-15T25:00:00"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-03-15T09:60:00"), InputError);
+  EXPECT_THROW(parseCalendarDate("2024-03-15Z"), InputError);
+}
+
+TEST(CalendarDate, DistinguishesADateFromEverythingElseAFieldMightHold) {
+  EXPECT_TRUE(looksLikeCalendarDate("2024-03-15"));
+  EXPECT_TRUE(looksLikeCalendarDate("  2024-03-15T09:30:00Z  "));
+  // A duration is not a date, and the two share a column in nobody's file.
+  EXPECT_FALSE(looksLikeCalendarDate("30d"));
+  EXPECT_FALSE(looksLikeCalendarDate("1.5e14"));
+  EXPECT_FALSE(looksLikeCalendarDate("Bq"));
+  EXPECT_FALSE(looksLikeCalendarDate(""));
+}
+
 }  // namespace
 }  // namespace nusift

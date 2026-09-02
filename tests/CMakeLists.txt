@@ -45,6 +45,7 @@ add_executable(nusift_unit_tests
   unit/test_inventory.cpp
   unit/test_inventory_io.cpp
   unit/test_point_source.cpp
+  unit/test_reconcile.cpp
   unit/test_report.cpp
   unit/test_seed_fission.cpp
   unit/test_spectrum.cpp

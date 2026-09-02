@@ -14,7 +14,9 @@
 
 #include "nusift/core/error.hpp"
 #include "nusift/core/nuclide_name.hpp"
+#include "nusift/engine/reconcile.hpp"
 #include "nusift/io/number_format.hpp"
+#include "nusift/io/time_spec.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 
 namespace nusift {
@@ -117,11 +119,86 @@ bool rowToAtoms(const Zai& zai, double value, Quantity unit, const NuclearData& 
   return true;
 }
 
+// One row as read, before anything is grouped. Kept flat rather than accumulated straight into
+// an Inventory because rows measured on different dates are not addable: merging them first and
+// discovering the dates afterwards would already have lost the thing that makes them separable.
+struct DatedRow {
+  Zai zai;
+  double atoms = 0.0;
+  double dateSeconds = 0.0;
+  bool dated = false;
+  int line = 0;
+};
+
+// Read the optional date field, and hold the file to one convention. `firstDated` and
+// `firstUndated` remember where each kind was first seen, so the refusal can name both lines --
+// "you dated line 4 and not line 9" is actionable where "mixed dates" is not.
+void takeDate(std::string_view text, const std::string& source, int line, DatedRow& row,
+              int& firstDated, int& firstUndated) {
+  const std::string_view field = trim(text);
+  if (!field.empty()) {
+    if (!looksLikeCalendarDate(field)) {
+      failAt(source, line,
+             "\"" + std::string(field) +
+                 "\" is not an assay date; dates are ISO-8601, as 2024-03-15 or "
+                 "2024-03-15T09:30:00Z");
+    }
+    try {
+      row.dateSeconds = parseCalendarDate(field);
+    } catch (const InputError& e) {
+      failAt(source, line, e.what());
+    }
+    row.dated = true;
+    if (firstDated == 0) {
+      firstDated = line;
+    }
+  } else if (firstUndated == 0) {
+    firstUndated = line;
+  }
+}
+
+// The refusal the header argues for. Checked once, after the whole file is read, because a file
+// may date its later rows and not its earlier ones and the complaint should name both.
+void requireOneConvention(const std::string& source, int firstDated, int firstUndated) {
+  if (firstDated != 0 && firstUndated != 0) {
+    throw InputError(
+        tagged(kModule, source + ": line " + std::to_string(firstDated) +
+                            " carries an assay date and line " + std::to_string(firstUndated) +
+                            " does not. A file dates every row or none: an undated row among "
+                            "dated ones has no reading that is not a guess about when it was "
+                            "measured, and the guess would not be visible in any answer"));
+  }
+}
+
+// Rows to assays. Rows sharing a date are one assay; an undated file is one assay whose date is
+// never used.
+DatedInventory groupRows(std::vector<DatedRow> rows, const std::string& sourceName, bool dated) {
+  DatedInventory out;
+  out.dated = dated;
+  std::stable_sort(rows.begin(), rows.end(), [](const DatedRow& a, const DatedRow& b) {
+    return a.dateSeconds < b.dateSeconds;
+  });
+  for (const DatedRow& row : rows) {
+    if (out.groups.empty() || out.groups.back().dateSeconds != row.dateSeconds) {
+      AssayGroup group;
+      group.dateSeconds = row.dateSeconds;
+      group.label = dated ? sourceName + " @ " + formatCalendarDate(row.dateSeconds) : sourceName;
+      group.inventory.setProvenance(group.label);
+      out.groups.push_back(std::move(group));
+    }
+    out.groups.back().inventory.add(row.zai, row.atoms);
+  }
+  return out;
+}
+
 }  // namespace
 
-Inventory readInventoryCsv(std::istream& in, const NuclearData& data, const std::string& sourceName,
-                           const InventoryReadOptions& options) {
-  Inventory inventory;
+DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
+                                     const std::string& sourceName,
+                                     const InventoryReadOptions& options) {
+  std::vector<DatedRow> rows;
+  int firstDated = 0;
+  int firstUndated = 0;
   std::string line;
   int lineNumber = 0;
   // "No data row seen yet", which is NOT the same as "on the first line": a file that opens
@@ -184,9 +261,17 @@ Inventory readInventoryCsv(std::istream& in, const NuclearData& data, const std:
       }
     }
 
-    double atoms = 0.0;
-    if (rowToAtoms(zai, value, unit, data, sourceName, lineNumber, options, atoms)) {
-      inventory.add(zai, atoms);
+    DatedRow row;
+    row.zai = zai;
+    row.line = lineNumber;
+    if (fields.size() >= 4) {
+      takeDate(fields[3], sourceName, lineNumber, row, firstDated, firstUndated);
+    } else if (firstUndated == 0) {
+      firstUndated = lineNumber;
+    }
+
+    if (rowToAtoms(zai, value, unit, data, sourceName, lineNumber, options, row.atoms)) {
+      rows.push_back(row);
       ++accepted;
     }
   }
@@ -194,20 +279,23 @@ Inventory readInventoryCsv(std::istream& in, const NuclearData& data, const std:
   if (accepted == 0) {
     throw InputError(tagged(kModule, sourceName + " contains no usable inventory rows"));
   }
-  inventory.setProvenance(sourceName);
-  return inventory;
+  requireOneConvention(sourceName, firstDated, firstUndated);
+  return groupRows(std::move(rows), sourceName, firstDated != 0);
 }
 
-Inventory readInventoryJson(std::istream& in, const NuclearData& data,
-                            const std::string& sourceName, const InventoryReadOptions& options) {
+DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
+                                      const std::string& sourceName,
+                                      const InventoryReadOptions& options) {
   // Deliberately a small hand-rolled reader rather than a JSON dependency: the accepted
-  // shape is one flat array of objects with three known keys, and the error messages a
+  // shape is one flat array of objects with four known keys, and the error messages a
   // purpose-built parser can give ("line 12: ...") are better than a generic one's.
   std::ostringstream buffer;
   buffer << in.rdbuf();
   const std::string text = buffer.str();
 
-  Inventory inventory;
+  std::vector<DatedRow> rows;
+  int firstDated = 0;
+  int firstUndated = 0;
   int accepted = 0;
   std::size_t pos = 0;
 
@@ -298,10 +386,12 @@ Inventory readInventoryJson(std::istream& in, const NuclearData& data,
     std::string nuclideText;
     std::string quantityText;
     std::string unitText;
+    std::string assayedText;
     if (!field("nuclide", nuclideText) || !field("quantity", quantityText)) {
       failAt(sourceName, lineOf(objectStart), "an entry needs \"nuclide\" and \"quantity\"");
     }
     field("unit", unitText);
+    field("assayed", assayedText);
 
     const Zai zai = requireNuclideName(nuclideText,
                                        sourceName + " line " + std::to_string(lineOf(objectStart)));
@@ -315,9 +405,13 @@ Inventory readInventoryJson(std::istream& in, const NuclearData& data,
       failAt(sourceName, lineOf(objectStart), "\"" + unitText + "\" is not a unit");
     }
 
-    double atoms = 0.0;
-    if (rowToAtoms(zai, value, unit, data, sourceName, lineOf(objectStart), options, atoms)) {
-      inventory.add(zai, atoms);
+    DatedRow row;
+    row.zai = zai;
+    row.line = lineOf(objectStart);
+    takeDate(assayedText, sourceName, row.line, row, firstDated, firstUndated);
+
+    if (rowToAtoms(zai, value, unit, data, sourceName, row.line, options, row.atoms)) {
+      rows.push_back(row);
       ++accepted;
     }
     afterEntry = true;
@@ -334,21 +428,63 @@ Inventory readInventoryJson(std::istream& in, const NuclearData& data,
   if (accepted == 0) {
     throw InputError(tagged(kModule, sourceName + " contains no usable inventory entries"));
   }
-  inventory.setProvenance(sourceName);
-  return inventory;
+  requireOneConvention(sourceName, firstDated, firstUndated);
+  return groupRows(std::move(rows), sourceName, firstDated != 0);
 }
 
-Inventory readInventory(const std::string& path, const NuclearData& data,
-                        const InventoryReadOptions& options) {
+DatedInventory readInventoryDated(const std::string& path, const NuclearData& data,
+                                  const InventoryReadOptions& options) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     throw InputError(tagged(kModule, "cannot open \"" + path + "\""));
   }
   const std::string lower = toLower(path);
   if (lower.size() >= 5 && lower.compare(lower.size() - 5, 5, ".json") == 0) {
-    return readInventoryJson(in, data, path, options);
+    return readInventoryDatedJson(in, data, path, options);
   }
-  return readInventoryCsv(in, data, path, options);
+  return readInventoryDatedCsv(in, data, path, options);
+}
+
+namespace {
+
+// Assays to one inventory. Undated files never reach the solver at all, which keeps the
+// overwhelmingly common case exactly as cheap as it was; a dated file pays one solve per assay
+// older than the epoch, which is the price of the rows being combinable in the first place.
+Inventory collapse(const NuclearData& data, DatedInventory dated) {
+  if (!dated.dated) {
+    Inventory inventory = std::move(dated.groups.front().inventory);
+    return inventory;
+  }
+  const double epoch = latestAssayDate(dated.groups);
+  Reconciliation reconciled = reconcile(data, dated.groups, epoch);
+  // The epoch is part of what the inventory IS, so it travels in the provenance every report
+  // header prints. A reconciled seed whose header said only the file name would look identical
+  // to the same file read on a different date.
+  std::string where = dated.groups.front().inventory.provenance();
+  const std::size_t at = where.find(" @ ");
+  if (at != std::string::npos) {
+    where.erase(at);
+  }
+  reconciled.inventory.setProvenance(where + " (" + std::to_string(dated.groups.size()) +
+                                     " assays reconciled to " + formatCalendarDate(epoch) + ")");
+  return std::move(reconciled.inventory);
+}
+
+}  // namespace
+
+Inventory readInventory(const std::string& path, const NuclearData& data,
+                        const InventoryReadOptions& options) {
+  return collapse(data, readInventoryDated(path, data, options));
+}
+
+Inventory readInventoryCsv(std::istream& in, const NuclearData& data, const std::string& sourceName,
+                           const InventoryReadOptions& options) {
+  return collapse(data, readInventoryDatedCsv(in, data, sourceName, options));
+}
+
+Inventory readInventoryJson(std::istream& in, const NuclearData& data,
+                            const std::string& sourceName, const InventoryReadOptions& options) {
+  return collapse(data, readInventoryDatedJson(in, data, sourceName, options));
 }
 
 namespace {
