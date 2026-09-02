@@ -40,6 +40,7 @@ AssayGroup assay(const char* date, const Zai& zai, double atoms, const char* lab
   group.dateSeconds = parseCalendarDate(date);
   group.inventory.add(zai, atoms);
   group.label = label;
+  group.dated = true;
   return group;
 }
 
@@ -143,6 +144,7 @@ TEST(Reconcile, RefusesAnEmptySetAndAnEmptyAssay) {
   AssayGroup nothing;
   nothing.dateSeconds = parseCalendarDate("2023-01-01");
   nothing.label = "blank sheet";
+  nothing.dated = true;
   withEmpty.push_back(nothing);
   EXPECT_THROW(reconcile(data, withEmpty, parseCalendarDate("2024-01-01")), InputError);
 }

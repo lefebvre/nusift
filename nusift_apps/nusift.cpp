@@ -47,6 +47,7 @@
 #include "nusift/triage/spectrum.hpp"
 #include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
+#include "nusift/triage/uncertainty.hpp"
 #include "nusift/version.hpp"
 
 namespace {
@@ -1329,6 +1330,76 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   return 0;
 }
 
+// --- what the assay's uncertainty does to the answer ---------------------------
+
+// The one uncertainty question that needs no evaluated data. `attribute` prints the importance
+// column already; this multiplies it by what the sheet said about each row and reports which
+// measurement the error bar is actually resting on.
+int runUncertainty(const CommonOptions& options, const char* argv0) {
+  if (options.inventoryPath.empty()) {
+    throw InputError(
+        "uncertainty: give an inventory whose rows carry uncertainties with --inventory. A "
+        "fission seed has no assay to propagate -- its uncertainty is in the yields, which is "
+        "the evaluated-data half of the question and is not this");
+  }
+
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const PackHolder* packs = nullptr;
+
+  InventoryReadOptions readOptions;
+  readOptions.ignoreUnknown = options.ignoreUnknown;
+  readOptions.warnings = &std::cerr;
+  const DatedInventory dated = readInventoryDated(options.inventoryPath, data, readOptions);
+
+  const bool anySigma =
+      std::any_of(dated.groups.begin(), dated.groups.end(),
+                  [](const AssayGroup& g) { return g.inventory.hasUncertainties(); });
+  if (!anySigma) {
+    throw InputError("uncertainty: no row in \"" + options.inventoryPath +
+                     "\" states one. Add an `uncertainty` column -- absolute in the row's own "
+                     "unit, or relative as 5% -- naming it in a header row if the file carries "
+                     "no assay dates");
+  }
+
+  const double epoch = dated.dated ? latestAssayDate(dated.groups) : 0.0;
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() != 1) {
+    throw InputError("time: an error bar is on the response at ONE instant; give one --at");
+  }
+
+  // The pack is resolved against the MERGED seed, since a fold is a question about the whole
+  // inventory rather than about one sheet.
+  const Inventory merged = readInventory(options.inventoryPath, data, readOptions);
+  const PackHolder holder(options, data, merged);
+  packs = &holder;
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options);
+  spec.aggregate = Aggregate::Nuclide;
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = holder.resolved();
+  spec.geometry = geometryFrom(options);
+
+  const ResponseUncertainty uncertainty = responseUncertainty(
+      data, dated.groups, epoch, times.front(), spec, decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.stagedCount();
+  context.seedProvenance = merged.provenance();
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+  context.pack = packs->describe();
+
+  OutputStream out(options.output);
+  writeUncertainty(out.get(), uncertainty, context, format);
+  return 0;
+}
+
 // --- a job with a shape --------------------------------------------------------
 
 struct PlanOptions {
@@ -1991,6 +2062,12 @@ int main(int argc, char** argv) {
                    "Relative tolerance for --refine (default 1e-6)")
       ->check(CLI::PositiveNumber);
 
+  CommonOptions uncertaintyOptions;
+  CLI::App* uncertaintyCmd = app.add_subcommand(
+      "uncertainty", "The error bar the assay's own uncertainties put on a response");
+  addCommonOptions(uncertaintyCmd, uncertaintyOptions, /*wantsTimes=*/true,
+                   /*wantsIntervals=*/false);
+
   CommonOptions planOptions;
   PlanOptions planExtra;
   CLI::App* planCmd = app.add_subcommand(
@@ -2129,6 +2206,9 @@ int main(int argc, char** argv) {
     }
     if (integrateCmd->parsed()) {
       return runIntegrate(integrateOptions, argv0);
+    }
+    if (uncertaintyCmd->parsed()) {
+      return runUncertainty(uncertaintyOptions, argv0);
     }
     if (planCmd->parsed()) {
       return runPlan(planOptions, planExtra, argv0);

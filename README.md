@@ -64,6 +64,10 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 # (each sample is an exact interval integral, so this costs solves the rate curve does not)
 nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
 
+# Given what the sheet says about each row, what is the error bar -- and which
+# measurement is it resting on? (exact: R is linear in the seed)
+nusift uncertainty -i assay.csv --at 30d --metric exposure --units Sv/h
+
 # What does the job actually cost, leg by leg -- and where does the budget run out?
 nusift plan -i inventory.csv --at 30d --metric exposure --units Sv --budget 2e-3 \
         --leg "approach,3m,4" --leg "valve work,20m,0.8" --leg "break:10m" \
@@ -282,6 +286,8 @@ Implemented:
 
 - Inventory input in atoms, moles, mass, or activity units
 - Assays dated per row, reconciled to a common epoch and merged -- forward only, by refusal
+- Error bars from the assay's own uncertainties, exact rather than first order, ranked by which
+  measurement dominates the variance
 - Decay to a set of cooling times, with exact time integrals over an interval
 - Ranking by nuclide, mass chain, element, or gamma line, with any of them pinnable
 - Point-source gamma exposure and air kerma in R/h or Gy/h, at any distance

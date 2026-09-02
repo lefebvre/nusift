@@ -48,6 +48,7 @@
 #include "nusift/triage/spectrum.hpp"
 #include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
+#include "nusift/triage/uncertainty.hpp"
 #include "nusift/version.hpp"
 
 namespace nb = nanobind;
@@ -494,13 +495,17 @@ NB_MODULE(_core, m) {
             const double seconds = nb::isinstance<nb::str>(date)
                                        ? parseCalendarDate(nb::cast<std::string>(date))
                                        : nb::cast<double>(date);
-            new (self) AssayGroup{seconds, inventory, label};
+            // A caller who passed a date has stated one, so this is always dated.
+            new (self) AssayGroup{seconds, inventory, label, /*dated=*/true};
           },
           "date"_a, "inventory"_a, "label"_a = "")
       .def_prop_ro("date", [](const AssayGroup& g) { return formatCalendarDate(g.dateSeconds); })
       .def_ro("date_s", &AssayGroup::dateSeconds)
       .def_ro("inventory", &AssayGroup::inventory)
       .def_ro("label", &AssayGroup::label)
+      .def_ro("dated", &AssayGroup::dated,
+              "Whether the file stated a date. An undated sheet's date is a placeholder zero "
+              "and cannot be carried to any epoch but zero.")
       .def("__repr__", [](const AssayGroup& g) {
         return "<AssayGroup " + formatCalendarDate(g.dateSeconds) + ", " +
                std::to_string(g.inventory.size()) + " nuclides>";
@@ -1307,6 +1312,88 @@ NB_MODULE(_core, m) {
       "data"_a, "result"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
       "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
       "Turn an interval result into a one-row table of per-contributor totals over the window.");
+
+  // --- the error bar the assay puts on the answer ----------------------------
+  //
+  // The one uncertainty question that needs no evaluated data. R is LINEAR in the seed, so
+  // sigma_R^2 = g^T Sigma g is exact rather than first-order -- no expansion, no estimated
+  // derivative. What is assumed is the shape of Sigma, and the report says so.
+  nb::class_<SeedUncertainty>(m, "SeedUncertainty")
+      .def_ro("label", &SeedUncertainty::label)
+      .def_ro("assay", &SeedUncertainty::assay)
+      .def_ro("carried_s", &SeedUncertainty::carriedSeconds)
+      .def_ro("seed_atoms", &SeedUncertainty::seedAtoms)
+      .def_prop_ro(
+          "sigma_atoms",
+          [](const SeedUncertainty& s) -> nb::object {
+            // None rather than 0.0: "stated no uncertainty" and "stated an uncertainty of
+            // zero" are different claims, and only one is ever true of a measurement.
+            return s.sigmaAtoms > 0.0 ? nb::cast(s.sigmaAtoms) : nb::none();
+          },
+          "1-sigma on this row in atoms, or None when the row stated none.")
+      .def_ro("importance", &SeedUncertainty::importance, "dR/dn0 for this row, at T + carried.")
+      .def_ro("share", &SeedUncertainty::share, "This row's exact share of R.")
+      .def_ro("sigma_contribution", &SeedUncertainty::sigmaContribution,
+              "The standard deviation this row alone puts on R. Not additive -- the variance "
+              "fractions are what sum to one.")
+      .def_ro("variance_fraction", &SeedUncertainty::varianceFraction,
+              "Share of the VARIANCE. The assay-planning number: it says which measurement to "
+              "improve, and a row with a negligible share of R can dominate it.")
+      .def("__repr__", [](const SeedUncertainty& s) {
+        return "<SeedUncertainty " + s.label + " " + shortestRoundTrip(s.varianceFraction) +
+               " of variance>";
+      });
+
+  nb::class_<ResponseUncertainty>(m, "ResponseUncertainty",
+                                  "An error bar on a response, and what it rests on.")
+      .def_prop_ro("unit",
+                   [](const ResponseUncertainty& u) { return std::string(unitName(u.unit)); })
+      .def_ro("time", &ResponseUncertainty::time)
+      .def_ro("response", &ResponseUncertainty::response)
+      .def_ro("sigma", &ResponseUncertainty::sigma)
+      .def_ro("relative", &ResponseUncertainty::relative)
+      .def_ro("covered_fraction", &ResponseUncertainty::coveredFraction,
+              "Share of the response coming from rows that stated an uncertainty. An error bar "
+              "propagated from rows holding half the answer is not an error bar on the answer.")
+      .def_ro("rows_with_sigma", &ResponseUncertainty::rowsWithSigma)
+      .def_ro("rows_without_sigma", &ResponseUncertainty::rowsWithoutSigma)
+      .def_ro("seeds", &ResponseUncertainty::seeds, "Ranked by variance fraction, largest first.")
+      .def("__repr__", [](const ResponseUncertainty& u) {
+        return "<ResponseUncertainty " + shortestRoundTrip(u.response) + " +/- " +
+               shortestRoundTrip(u.sigma) + " " + unitName(u.unit) + ">";
+      });
+
+  m.def(
+      "uncertainty",
+      [](const NuclearData& data, const std::vector<AssayGroup>& assays, const nb::object& at,
+         const nb::object& epoch, const std::string& metric, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, const ResolvedPack* pack, int threads,
+         bool prune, int cram_order) {
+        ResponseSpec spec;
+        spec.metric = pack != nullptr ? Metric::Pack : metricFrom(metric);
+        spec.aggregate = Aggregate::Nuclide;
+        spec.unit = requireUnit(units, spec.metric, Domain::Instant);
+        spec.geometry = geometry;
+        spec.pack = pack;
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        const double time = timeFrom(at);
+        const double when = epoch.is_none() ? latestAssayDate(assays)
+                            : nb::isinstance<nb::str>(epoch)
+                                ? parseCalendarDate(nb::cast<std::string>(epoch))
+                                : nb::cast<double>(epoch);
+        const nb::gil_scoped_release release;
+        return responseUncertainty(data, assays, when, time, spec, options);
+      },
+      "data"_a, "assays"_a, "at"_a, "epoch"_a = nb::none(), "metric"_a = "activity", "units"_a = "",
+      "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(), "threads"_a = 0,
+      "prune"_a = true, "cram_order"_a = 48,
+      "The error bar the assay uncertainties put on the response at `at`, and which row "
+      "dominates it. Takes ASSAYS rather than an inventory -- read them with read_assays() -- "
+      "because a sigma cannot ride on a reconciled inventory: a diagonal covariance at assay is "
+      "not diagonal at the epoch. Costs one adjoint per assay.");
 
   // --- a job with a shape ----------------------------------------------------
   //

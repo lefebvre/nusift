@@ -131,6 +131,48 @@ A dated file is reconciled with **default** solver options rather than the calle
 file means one inventory whichever command reads it. An undated file reaches no solver at all and
 is bit-for-bit what it was before dates existed.
 
+## 2b. Rows that say how well they are known
+
+A further column carries the **uncertainty** on the row, absolute in the row's own unit or
+relative with a percent:
+
+```
+nuclide, quantity, unit, uncertainty
+Cs-137,  1.2e14,   Bq,   3%
+Sr-90,   3.5,      g,    0.4
+```
+
+It converts through the *same* call the quantity does, and that is exact rather than convenient:
+`toAtoms()` is `value · k` in every branch, so a σ in becquerel becomes a σ in atoms under the
+identical factor. The measurement basis needs no separate bookkeeping for this — see
+[attribution.md §5a](attribution.md) for where it *is* needed and why.
+
+Two rows of one nuclide **accumulate** their quantities, as they always have, and combine their
+uncertainties **in quadrature**: two rows are two measurements — two containers, two aliquots —
+and two independent measurements add in variance. Two rows that are the same measurement written
+twice would not, but a file cannot say that and neither can the reader.
+
+A σ *larger* than its own quantity is accepted. That is what a measurement near a detection limit
+honestly reports, and refusing it would refuse exactly the rows an error bar is most wanted for.
+
+### The header row now names the columns
+
+`assayed` shipped as the fourth positional field, so a file wanting an uncertainty and no dates
+would have to write `Cs-137,1e14,Bq,,3%` and hope the empty field was noticed. A header row says
+it instead — `nuclide`, `quantity`, `unit`, `assayed`, `uncertainty` in any order, with the
+obvious synonyms.
+
+A header that names neither `nuclide` nor `quantity` is not describing these columns at all, and
+the reader falls back to positional exactly as it did before this existed: a file that worked
+yesterday keeps working.
+
+### Uncertainties do not survive reconciliation, deliberately
+
+`reconcile()` **drops** them rather than carrying them. A diagonal covariance at assay becomes
+`DΣDᵀ` at the epoch and `D` is not diagonal, so a per-row σ on a merged inventory would be a lie.
+Propagating assay uncertainty reaches back to the assays instead of forward from the merge, which
+is [attribution.md §5a](attribution.md)'s subject.
+
 ## 3. Converting to atoms
 
 | Input | Conversion | Needs |

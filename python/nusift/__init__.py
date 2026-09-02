@@ -69,6 +69,7 @@ from ._core import (  # noqa: F401
     CriterionHeadroom,
     SeedAttribution,
     SeedShare,
+    SeedUncertainty,
     DecayResult,
     DominanceWindow,
     EventSeries,
@@ -90,6 +91,7 @@ from ._core import (  # noqa: F401
     RemovedContributor,
     Removal,
     ResolvedPack,
+    ResponseUncertainty,
     ResponseEvaluator,
     ResponseTable,
     SetMember,
@@ -125,6 +127,7 @@ from ._core import (  # noqa: F401
     stay_time,
     task_plan,
     task_series,
+    uncertainty,
 )
 from ._data import default_store_path  # noqa: F401
 
@@ -140,6 +143,7 @@ __all__ = [
     "CriterionHeadroom",
     "SeedAttribution",
     "SeedShare",
+    "SeedUncertainty",
     "DecayResult",
     "DominanceWindow",
     "EventSeries",
@@ -162,6 +166,7 @@ __all__ = [
     "RemovedContributor",
     "ResolvedPack",
     "ResponseEvaluator",
+    "ResponseUncertainty",
     "ResponseTable",
     "SetMember",
     "StayTime",
@@ -197,4 +202,5 @@ __all__ = [
     "stay_time",
     "task_plan",
     "task_series",
+    "uncertainty",
 ]

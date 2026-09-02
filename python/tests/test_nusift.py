@@ -1605,3 +1605,127 @@ def test_a_plan_refuses_a_leg_that_is_not_one(data):
     # A leg accrues a total, so a rate unit is the wrong dimension for it.
     with pytest.raises(nusift.InputError):
         nusift.task_plan(data, inv, at="30d", legs=[good], metric="exposure", units="Sv/h")
+
+
+# --- the error bar the assay puts on the answer ------------------------------
+
+
+@needs_store
+def test_uncertainty_is_exact_and_ranks_by_variance(data, tmp_path):
+    path = tmp_path / "assay.csv"
+    path.write_text(
+        "nuclide,quantity,unit,uncertainty\n"
+        "Cs-137,1.0e14,Bq,3%\n"
+        "Sr-90,5.0e13,Bq,25%\n"
+    )
+    assays = nusift.read_assays(str(path), data)
+    u = nusift.uncertainty(data, assays, at="30d")
+
+    assert u.sigma > 0.0
+    assert u.covered_fraction == pytest.approx(1.0)
+    assert u.rows_without_sigma == 0
+
+    # sigma_R is the quadrature sum of the per-row contributions, and the variance fractions
+    # partition. Shares of R do not: they are a different decomposition of a different quantity.
+    assert sum(s.variance_fraction for s in u.seeds) == pytest.approx(1.0, rel=1e-12)
+    assert math.hypot(*[s.sigma_contribution for s in u.seeds]) == pytest.approx(u.sigma, rel=1e-12)
+
+    # The point of the ordering: the loosely measured row leads the variance even though the
+    # well-measured one is the larger share of the answer.
+    assert u.seeds[0].label == "Sr-90"
+    assert u.seeds[0].share < u.seeds[1].share
+
+
+@needs_store
+def test_the_propagated_response_is_the_ordinary_total(data, tmp_path):
+    # The identity that says the per-assay adjoints ran at the right times. For a dated file
+    # these are genuinely different solves reaching the same number.
+    path = tmp_path / "dated.csv"
+    path.write_text(
+        "nuclide,quantity,unit,assayed,uncertainty\n"
+        "Cs-137,1.0e14,Bq,2024-03-15,3%\n"
+        "Sr-90,5.0e13,Bq,2023-01-10,25%\n"
+    )
+    assays = nusift.read_assays(str(path), data)
+    u = nusift.uncertainty(data, assays, at="30d")
+
+    merged = nusift.read_inventory(str(path), data)
+    table = nusift.response(
+        data, nusift.decay(data, merged, [nusift.parse_duration("30d")]),
+        metric="activity", units="Bq",
+    )
+    assert u.response == pytest.approx(table.totals[0], rel=1e-9)
+    # The older sheet was carried; the one defining the epoch was not.
+    carried = {s.label: s.carried_s for s in u.seeds}
+    assert carried["Sr-90"] > 0.0
+    assert carried["Cs-137"] == 0.0
+
+
+@needs_store
+def test_importance_reorders_the_error_bar_by_metric(data, tmp_path):
+    path = tmp_path / "assay.csv"
+    path.write_text(
+        "nuclide,quantity,unit,uncertainty\n"
+        "Co-60,2.0e13,Bq,12%\n"
+        "Sr-90,5.0e13,Bq,25%\n"
+    )
+    assays = nusift.read_assays(str(path), data)
+
+    by_activity = nusift.uncertainty(data, assays, at="30d")
+    by_exposure = nusift.uncertainty(data, assays, at="30d", metric="exposure", units="Sv/h")
+
+    # Sr-90 is a pure beta emitter, so it dominates the activity error bar and contributes
+    # essentially nothing to the photon-dose one. Which measurement to improve depends on the
+    # question being asked, which is the whole reason importance is in the product.
+    assert by_activity.seeds[0].label == "Sr-90"
+    assert by_exposure.seeds[0].label == "Co-60"
+    assert by_exposure.seeds[-1].variance_fraction < 1e-6
+
+
+@needs_store
+def test_rows_stating_no_uncertainty_are_reported_not_guessed(data, tmp_path):
+    path = tmp_path / "partial.csv"
+    path.write_text(
+        "nuclide,quantity,unit,uncertainty\n"
+        "Cs-137,1.0e14,Bq,3%\n"
+        "Sr-90,5.0e13,Bq,\n"
+    )
+    assays = nusift.read_assays(str(path), data)
+    u = nusift.uncertainty(data, assays, at="30d")
+
+    assert u.rows_with_sigma == 1
+    assert u.rows_without_sigma == 1
+    # An error bar propagated from rows holding part of the answer is not an error bar on the
+    # answer, and the covered fraction is what lets a reader see that.
+    assert 0.0 < u.covered_fraction < 1.0
+    silent = next(s for s in u.seeds if s.label == "Sr-90")
+    # None rather than 0.0, and no contribution invented for it.
+    assert silent.sigma_atoms is None
+    assert silent.sigma_contribution == 0.0
+
+
+@needs_store
+def test_uncertainty_refuses_a_question_it_cannot_answer(data, tmp_path):
+    path = tmp_path / "assay.csv"
+    path.write_text("nuclide,quantity,unit,uncertainty\nCs-137,1.0e14,Bq,3%\n")
+    assays = nusift.read_assays(str(path), data)
+
+    # The shares are instantaneous; an accrued total needs the integrated adjoint.
+    with pytest.raises(nusift.InputError):
+        nusift.uncertainty(data, assays, at="30d", units="decays")
+    with pytest.raises(nusift.InputError):
+        nusift.uncertainty(data, assays, at=-1.0)
+    # An undated sheet has no date to carry FROM, so it cannot be carried to any epoch. The
+    # placeholder zero taken at face value would age it by fifty-four years, silently.
+    with pytest.raises(nusift.InputError):
+        nusift.uncertainty(data, assays, at="30d", epoch="2024-01-01")
+
+    # And a dated one cannot be carried BACKWARD, which is the inverse problem reconcile()
+    # refuses on the same terms.
+    dated_path = tmp_path / "dated.csv"
+    dated_path.write_text(
+        "nuclide,quantity,unit,assayed,uncertainty\nCs-137,1.0e14,Bq,2024-03-15,3%\n"
+    )
+    dated = nusift.read_assays(str(dated_path), data)
+    with pytest.raises(nusift.InputError):
+        nusift.uncertainty(data, dated, at="30d", epoch="2000-01-01")

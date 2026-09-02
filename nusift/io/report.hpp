@@ -25,6 +25,7 @@
 #include "nusift/triage/ranking.hpp"
 #include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
+#include "nusift/triage/uncertainty.hpp"
 
 namespace nusift {
 
@@ -156,6 +157,14 @@ void writeStayTimes(std::ostream& out, const StayReport& report, const ReportCon
 void writeReconciliation(std::ostream& out, const Reconciliation& reconciled,
                          const NuclearData& data, const ReportContext& context,
                          ReportFormat format);
+
+// Render an error bar and what it rests on: sigma_R, and which assay row dominates it.
+//
+// The variance-fraction column is the point of the table and the reason it is not ordered by
+// share. "Which measurement should I improve" and "which nuclide dominates the answer" have
+// different answers, and only the first one tells anybody what to go and do.
+void writeUncertainty(std::ostream& out, const ResponseUncertainty& uncertainty,
+                      const ReportContext& context, ReportFormat format);
 
 // Render a task plan: what each leg costs, and where a budget runs out.
 //

@@ -1269,6 +1269,135 @@ void writeEvents(std::ostream& out, const EventReport& report, const ReportConte
 
 namespace {
 
+void writeUncertaintyText(std::ostream& out, const ResponseUncertainty& u,
+                          const ReportContext& context) {
+  out << "NuSIFT " << metricName(u.metric) << " uncertainty from the assay\n";
+  out << "  t = " << formatDuration(u.time) << "    " << sci(u.response) << " +/- " << sci(u.sigma)
+      << ' ' << unitName(u.unit);
+  if (u.response > 0.0) {
+    out << "   (" << percent(u.relative) << ")";
+  }
+  out << '\n';
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << '\n';
+
+  out << "   seed          of variance    1-sigma on R      row sigma     share of R\n";
+  const std::size_t shown = std::min<std::size_t>(u.seeds.size(), 12);
+  for (std::size_t i = 0; i < shown; ++i) {
+    const SeedUncertainty& seed = u.seeds[i];
+    out << "   " << std::left << std::setw(12) << seed.label << std::right << std::setw(11)
+        << (seed.sigmaAtoms > 0.0 ? percent(seed.varianceFraction) : std::string("--"))
+        << std::setw(16)
+        << (seed.sigmaAtoms > 0.0 ? sci(seed.sigmaContribution) : std::string("--"))
+        << std::setw(15)
+        << (seed.sigmaAtoms > 0.0 ? sci(seed.sigmaAtoms) : std::string("none stated"))
+        << std::setw(15) << percent(u.response > 0.0 ? seed.share / u.response : 0.0) << '\n';
+  }
+  if (u.seeds.size() > shown) {
+    out << "   ... and " << (u.seeds.size() - shown) << " more seeds\n";
+  }
+
+  out << "\n  ";
+  writeWrappedNote(out,
+                   "This is exact rather than first order: R is linear in the seed, so "
+                   "sigma_R^2 = g^T Sigma g needs no expansion and no estimated derivative. "
+                   "What is assumed is the SHAPE of Sigma, below.");
+
+  // The figure that decides whether the error bar means anything at all. An uncertainty
+  // propagated from rows carrying half the answer is not an uncertainty on the answer.
+  if (u.rowsWithoutSigma > 0) {
+    out << "  ! ";
+    char covered[32];
+    std::snprintf(covered, sizeof(covered), "%.1f%%", 100.0 * u.coveredFraction);
+    writeWrappedNote(out, std::string(covered) +
+                              " of the response comes from rows that stated an uncertainty; the "
+                              "other rows are treated as contributing none, which understates "
+                              "sigma_R by an amount nothing here can bound. " +
+                              std::to_string(u.rowsWithoutSigma) +
+                              " seeded rows stated no uncertainty.");
+  }
+  out << "  ! ";
+  writeWrappedNote(out,
+                   "A per-row sigma is the DIAGONAL of Sigma, which asserts the assay errors are "
+                   "independent. Aliquots counted on one detector against one standard are not, "
+                   "and rows fitted to a total are not; off-diagonal terms move sigma_R in "
+                   "either direction. Nothing here can detect that.");
+  out << "  ! ";
+  writeWrappedNote(out,
+                   "The nuclear data is taken as exact. Half-life, branching and yield "
+                   "uncertainties are a separate parameter class this does not touch, and the "
+                   "store does not yet stage them.");
+}
+
+void writeUncertaintyCsv(std::ostream& out, const ResponseUncertainty& u) {
+  out << "seed,assay,carried_s,seed_atoms,sigma_atoms,importance,share,sigma_contribution,"
+         "variance_fraction\n";
+  for (const SeedUncertainty& seed : u.seeds) {
+    out << csvField(seed.label) << ',' << csvField(seed.assay) << ','
+        << shortestRoundTrip(seed.carriedSeconds) << ',' << shortestRoundTrip(seed.seedAtoms)
+        << ',';
+    // Empty rather than zero: "stated no uncertainty" and "stated an uncertainty of zero" are
+    // different claims, and only one of them is ever true of a measurement.
+    if (seed.sigmaAtoms > 0.0) {
+      out << shortestRoundTrip(seed.sigmaAtoms);
+    }
+    out << ',' << shortestRoundTrip(seed.importance) << ',' << shortestRoundTrip(seed.share) << ','
+        << shortestRoundTrip(seed.sigmaContribution) << ','
+        << shortestRoundTrip(seed.varianceFraction) << '\n';
+  }
+}
+
+void writeUncertaintyJson(std::ostream& out, const ResponseUncertainty& u) {
+  out << "{\n";
+  out << "  \"metric\": \"" << metricName(u.metric) << "\",\n";
+  out << "  \"unit\": \"" << unitName(u.unit) << "\",\n";
+  out << "  \"time_s\": " << jsonNumber(u.time) << ",\n";
+  out << "  \"response\": " << jsonNumber(u.response) << ",\n";
+  out << "  \"sigma\": " << jsonNumber(u.sigma) << ",\n";
+  out << "  \"relative\": " << jsonNumber(u.relative) << ",\n";
+  out << "  \"covered_fraction\": " << jsonNumber(u.coveredFraction) << ",\n";
+  out << "  \"rows_with_sigma\": " << u.rowsWithSigma << ",\n";
+  out << "  \"rows_without_sigma\": " << u.rowsWithoutSigma << ",\n";
+  out << "  \"seeds\": [\n";
+  for (std::size_t i = 0; i < u.seeds.size(); ++i) {
+    const SeedUncertainty& seed = u.seeds[i];
+    out << "    {\"seed\": \"" << seed.label << "\", \"assay\": \"" << seed.assay
+        << "\", \"carried_s\": " << jsonNumber(seed.carriedSeconds)
+        << ", \"seed_atoms\": " << jsonNumber(seed.seedAtoms) << ", \"sigma_atoms\": "
+        << (seed.sigmaAtoms > 0.0 ? jsonNumber(seed.sigmaAtoms) : std::string("null"))
+        << ", \"importance\": " << jsonNumber(seed.importance)
+        << ", \"share\": " << jsonNumber(seed.share)
+        << ", \"sigma_contribution\": " << jsonNumber(seed.sigmaContribution)
+        << ", \"variance_fraction\": " << jsonNumber(seed.varianceFraction) << "}"
+        << (i + 1 == u.seeds.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeUncertainty(std::ostream& out, const ResponseUncertainty& uncertainty,
+                      const ReportContext& context, ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeUncertaintyText(out, uncertainty, context);
+      return;
+    case ReportFormat::Csv:
+      writeUncertaintyCsv(out, uncertainty);
+      return;
+    case ReportFormat::Json:
+      writeUncertaintyJson(out, uncertainty);
+      return;
+  }
+}
+
+namespace {
+
 void writeTaskPlanText(std::ostream& out, const TaskPlan& plan, const ReportContext& context) {
   out << "NuSIFT task plan\n";
   out << "  starting " << formatDuration(plan.startSeconds) << ", " << plan.legs.size()

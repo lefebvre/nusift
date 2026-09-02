@@ -74,6 +74,13 @@ bool parseNumber(std::string_view text, double& out) {
   throw InputError(tagged(kModule, source + " line " + std::to_string(line) + ": " + what));
 }
 
+std::string toLower(std::string_view s) {
+  std::string out(s);
+  std::transform(out.begin(), out.end(), out.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return out;
+}
+
 // A first row whose second field is not a number is a header naming the columns. Detecting
 // it beats requiring one, since half the spreadsheets in the world have one and half do not.
 bool looksLikeHeader(const std::vector<std::string_view>& fields) {
@@ -84,11 +91,78 @@ bool looksLikeHeader(const std::vector<std::string_view>& fields) {
   return !parseNumber(fields[1], ignored);
 }
 
-std::string toLower(std::string_view s) {
-  std::string out(s);
-  std::transform(out.begin(), out.end(), out.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return out;
+// Which column holds what. Positional by default -- nuclide, quantity, unit, assayed,
+// uncertainty -- and taken from the header row when one names the columns.
+//
+// The mapping exists because the positional order cannot serve both optional columns at once.
+// `assayed` shipped as the fourth field, so a file wanting an uncertainty and no dates would
+// have to write "Cs-137,1e14,Bq,,5%" and hope the empty field is noticed. A header that says
+// `nuclide,quantity,unit,uncertainty` says it instead.
+struct ColumnMap {
+  int nuclide = 0;
+  int quantity = 1;
+  int unit = 2;
+  int assayed = 3;
+  int uncertainty = 4;
+};
+
+// Recognised spellings, with the obvious synonyms a spreadsheet is likely to carry. A header
+// that names neither `nuclide` nor `quantity` is not describing these columns at all, and the
+// reader falls back to positional rather than erroring -- that is what it did before this
+// existed, and a file that worked yesterday must not stop working today.
+bool mapColumns(const std::vector<std::string_view>& header, ColumnMap& out) {
+  ColumnMap mapped{-1, -1, -1, -1, -1};
+  for (int i = 0; i < static_cast<int>(header.size()); ++i) {
+    const std::string name = toLower(header[static_cast<std::size_t>(i)]);
+    if (name == "nuclide" || name == "isotope" || name == "radionuclide") {
+      mapped.nuclide = i;
+    } else if (name == "quantity" || name == "amount" || name == "value") {
+      mapped.quantity = i;
+    } else if (name == "unit" || name == "units") {
+      mapped.unit = i;
+    } else if (name == "assayed" || name == "date" || name == "assay_date") {
+      mapped.assayed = i;
+    } else if (name == "uncertainty" || name == "sigma" || name == "error") {
+      mapped.uncertainty = i;
+    }
+  }
+  if (mapped.nuclide < 0 || mapped.quantity < 0) {
+    return false;
+  }
+  out = mapped;
+  return true;
+}
+
+// The field at `column`, or empty when the row is short or the column absent.
+std::string_view fieldAt(const std::vector<std::string_view>& fields, int column) {
+  if (column < 0 || column >= static_cast<int>(fields.size())) {
+    return {};
+  }
+  return fields[static_cast<std::size_t>(column)];
+}
+
+// An uncertainty as a sheet writes one: absolute in the row's own unit, or relative with a
+// trailing percent. Both are common and they are not distinguishable by magnitude, so the
+// spelling has to carry it -- "5" beside a quantity of 100 Bq could be either.
+double parseUncertainty(std::string_view text, double quantity, const std::string& source,
+                        int line) {
+  std::string_view field = trim(text);
+  const bool relative = !field.empty() && field.back() == '%';
+  if (relative) {
+    field.remove_suffix(1);
+    field = trim(field);
+  }
+  double value = 0.0;
+  if (!parseNumber(field, value)) {
+    failAt(source, line,
+           "\"" + std::string(trim(text)) +
+               "\" is not an uncertainty; give it in the row's own unit, or as a percentage "
+               "like 5%");
+  }
+  if (value < 0.0) {
+    failAt(source, line, "an uncertainty cannot be negative");
+  }
+  return relative ? 0.01 * value * quantity : value;
 }
 
 // Convert one row to atoms, or report why it cannot be. Returns false when the row should be
@@ -125,6 +199,7 @@ bool rowToAtoms(const Zai& zai, double value, Quantity unit, const NuclearData& 
 struct DatedRow {
   Zai zai;
   double atoms = 0.0;
+  double sigmaAtoms = 0.0;
   double dateSeconds = 0.0;
   bool dated = false;
   int line = 0;
@@ -182,11 +257,12 @@ DatedInventory groupRows(std::vector<DatedRow> rows, const std::string& sourceNa
     if (out.groups.empty() || out.groups.back().dateSeconds != row.dateSeconds) {
       AssayGroup group;
       group.dateSeconds = row.dateSeconds;
+      group.dated = dated;
       group.label = dated ? sourceName + " @ " + formatCalendarDate(row.dateSeconds) : sourceName;
       group.inventory.setProvenance(group.label);
       out.groups.push_back(std::move(group));
     }
-    out.groups.back().inventory.add(row.zai, row.atoms);
+    out.groups.back().inventory.add(row.zai, row.atoms, row.sigmaAtoms);
   }
   return out;
 }
@@ -197,6 +273,7 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
                                      const std::string& sourceName,
                                      const InventoryReadOptions& options) {
   std::vector<DatedRow> rows;
+  ColumnMap columns;
   int firstDated = 0;
   int firstUndated = 0;
   std::string line;
@@ -230,6 +307,7 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
     const std::vector<std::string_view> fields = splitFields(content);
     if (beforeFirstRow && looksLikeHeader(fields)) {
       beforeFirstRow = false;
+      mapColumns(fields, columns);
       continue;
     }
     beforeFirstRow = false;
@@ -239,11 +317,12 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
              "expected at least \"nuclide, quantity\", got \"" + std::string(content) + "\"");
     }
 
-    const Zai zai =
-        requireNuclideName(fields[0], sourceName + " line " + std::to_string(lineNumber));
+    const Zai zai = requireNuclideName(fieldAt(fields, columns.nuclide),
+                                       sourceName + " line " + std::to_string(lineNumber));
     double value = 0.0;
-    if (!parseNumber(fields[1], value)) {
-      failAt(sourceName, lineNumber, "\"" + std::string(fields[1]) + "\" is not a number");
+    if (!parseNumber(fieldAt(fields, columns.quantity), value)) {
+      failAt(sourceName, lineNumber,
+             "\"" + std::string(fieldAt(fields, columns.quantity)) + "\" is not a number");
     }
     if (!(value >= 0.0)) {
       failAt(sourceName, lineNumber, "a quantity cannot be negative");
@@ -252,10 +331,11 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
     // A missing unit column means atoms, which is the only unit that needs no nuclear data
     // and so the only safe default.
     Quantity unit = Quantity::Atoms;
-    if (fields.size() >= 3 && !fields[2].empty()) {
-      if (!parseQuantity(fields[2], unit)) {
+    const std::string_view unitText = fieldAt(fields, columns.unit);
+    if (!unitText.empty()) {
+      if (!parseQuantity(unitText, unit)) {
         failAt(sourceName, lineNumber,
-               "\"" + std::string(fields[2]) +
+               "\"" + std::string(unitText) +
                    "\" is not a unit (try atoms, mol, g, kg, mg, Bq, kBq, MBq, GBq, TBq, "
                    "Ci, mCi, uCi)");
       }
@@ -264,16 +344,24 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
     DatedRow row;
     row.zai = zai;
     row.line = lineNumber;
-    if (fields.size() >= 4) {
-      takeDate(fields[3], sourceName, lineNumber, row, firstDated, firstUndated);
-    } else if (firstUndated == 0) {
-      firstUndated = lineNumber;
-    }
+    takeDate(fieldAt(fields, columns.assayed), sourceName, lineNumber, row, firstDated,
+             firstUndated);
 
-    if (rowToAtoms(zai, value, unit, data, sourceName, lineNumber, options, row.atoms)) {
-      rows.push_back(row);
-      ++accepted;
+    if (!rowToAtoms(zai, value, unit, data, sourceName, lineNumber, options, row.atoms)) {
+      continue;
     }
+    const std::string_view sigmaText = fieldAt(fields, columns.uncertainty);
+    if (!sigmaText.empty()) {
+      // Converted through the same call the quantity was, which is exactly right: toAtoms is
+      // value * k in every branch, so a sigma in the row's unit becomes a sigma in atoms under
+      // the identical factor. The measurement basis needs no separate bookkeeping.
+      const double sigma = parseUncertainty(sigmaText, value, sourceName, lineNumber);
+      if (!rowToAtoms(zai, sigma, unit, data, sourceName, lineNumber, options, row.sigmaAtoms)) {
+        continue;
+      }
+    }
+    rows.push_back(row);
+    ++accepted;
   }
 
   if (accepted == 0) {
@@ -387,11 +475,13 @@ DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
     std::string quantityText;
     std::string unitText;
     std::string assayedText;
+    std::string uncertaintyText;
     if (!field("nuclide", nuclideText) || !field("quantity", quantityText)) {
       failAt(sourceName, lineOf(objectStart), "an entry needs \"nuclide\" and \"quantity\"");
     }
     field("unit", unitText);
     field("assayed", assayedText);
+    field("uncertainty", uncertaintyText);
 
     const Zai zai = requireNuclideName(nuclideText,
                                        sourceName + " line " + std::to_string(lineOf(objectStart)));
@@ -411,8 +501,15 @@ DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
     takeDate(assayedText, sourceName, row.line, row, firstDated, firstUndated);
 
     if (rowToAtoms(zai, value, unit, data, sourceName, row.line, options, row.atoms)) {
-      rows.push_back(row);
-      ++accepted;
+      bool usable = true;
+      if (!uncertaintyText.empty()) {
+        const double sigma = parseUncertainty(uncertaintyText, value, sourceName, row.line);
+        usable = rowToAtoms(zai, sigma, unit, data, sourceName, row.line, options, row.sigmaAtoms);
+      }
+      if (usable) {
+        rows.push_back(row);
+        ++accepted;
+      }
     }
     afterEntry = true;
   }

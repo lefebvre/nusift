@@ -52,6 +52,18 @@ const char* quantityName(Quantity quantity);
 struct InventoryEntry {
   std::int64_t zaiKey = 0;
   double atoms = 0.0;
+
+  // 1-sigma uncertainty on `atoms`, or zero when the row stated none. Zero and "known exactly"
+  // are deliberately the same encoding here, because no inventory row is ever known exactly and
+  // a reader who supplied no sigma has said nothing rather than said zero -- what consumes this
+  // reports how much of the answer rests on rows carrying no sigma, which is the honest form of
+  // the distinction.
+  //
+  // MEANINGFUL ONLY ON AN AS-MEASURED INVENTORY. Carrying an assay forward turns a diagonal
+  // covariance into D Sigma D^T, and D is not diagonal, so a per-row sigma on a RECONCILED
+  // inventory would be a lie -- reconcile() drops it rather than propagating it, and
+  // triage/uncertainty.hpp reaches back to the assays instead.
+  double sigmaAtoms = 0.0;
 };
 
 // A set of nuclides and their atom counts, merged by nuclide and kept sorted by key so that
@@ -61,10 +73,21 @@ public:
   // Adds to any existing entry for this nuclide rather than replacing it, so a file listing
   // a nuclide twice accumulates instead of silently keeping only the last row.
   //
+  // Uncertainties on two rows of one nuclide combine IN QUADRATURE, which is the reading that
+  // matches the accumulation above: two rows are two measurements -- two containers, two
+  // aliquots -- and two independent measurements add in variance. Two rows that are the same
+  // measurement written twice would not, but a file cannot say that and neither can this.
+  //
   // Throws InputError on a negative, infinite, or NaN count: an atom count is non-negative
   // and finite by definition, and none of those survive as anything but a corrupted ranking.
-  void add(const Zai& zai, double atoms);
-  void addKey(std::int64_t zaiKey, double atoms);
+  // A sigma is held to the same standard and to no more than that -- in particular one LARGER
+  // than its own quantity is accepted, because that is what a measurement near a detection
+  // limit honestly reports.
+  void add(const Zai& zai, double atoms, double sigmaAtoms = 0.0);
+  void addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms = 0.0);
+
+  // Whether any row carries an uncertainty. What decides if an error bar can be offered at all.
+  bool hasUncertainties() const;
 
   std::span<const InventoryEntry> entries() const { return entries_; }
   bool empty() const { return entries_.empty(); }
