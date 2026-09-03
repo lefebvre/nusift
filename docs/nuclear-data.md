@@ -171,6 +171,16 @@ and nothing downstream could tell. So branchings are keyed by `(RTYP, RFS)` and 
 ENDF/B-VIII.1 leaves none unmatched, which is the check being worth running rather than a
 foregone conclusion.
 
+The yield σ **rides on the product** rather than in a parallel array, since the two are never
+wanted apart: a yield without its σ cannot enter an error budget, and a σ without its yield has
+nothing to be a fraction of. What none of these three columns carries is a covariance. ENDF holds
+none for decay data at all; the branchings' correlation is *derived* from the fact that a
+nuclide's modes sum to one; and the yields' is *imported* from a published product, fetched by
+[`data/fycom/fetch_fycom.sh`](../data/fycom/fetch_fycom.sh) and read by
+[`yield_covariance.hpp`](../nusift/nucdata/yield_covariance.hpp) rather than staged into the
+store — it is built for a different edition than the store is, and an artifact of ENDF/B-VIII.1
+is no place to hide a VIII.0 product. See [attribution.md](attribution.md) for what it changes.
+
 The half-life *value* is read twice on purpose — once through cram, once directly — and the two
 are **compared**. They come from one record through different parsers, so a disagreement means
 the readers are not looking at the same nuclide, and every σ attached on that basis would be
@@ -304,4 +314,5 @@ passed over. `--store` or `$NUSIFT_DATA_STORE` settles it.
 | [`nusift/nucdata/nuclear_data.cpp`](../nusift/nucdata/nuclear_data.cpp) | Chain construction, closure, and the runtime accessors |
 | [`nusift/nucdata/photon_lines.hpp`](../nusift/nucdata/photon_lines.hpp) | `GammaLine`, `LineSpectrum`, and why lines are persisted |
 | [`nusift/nucdata/fission_yield.cpp`](../nusift/nucdata/fission_yield.cpp) | Yield sets and nearest-energy selection |
+| [`nusift/nucdata/yield_covariance.cpp`](../nusift/nucdata/yield_covariance.cpp) | Reading an imported yield correlation, and the key convention it has to be translated out of |
 | [`nusift/nucdata/store_locator.cpp`](../nusift/nucdata/store_locator.cpp) | The search order above |

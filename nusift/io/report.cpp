@@ -1477,8 +1477,9 @@ void writeUncertaintyText(std::ostream& out, const ResponseUncertainty& u,
   out << "  ! ";
   writeWrappedNote(out,
                    "The nuclear data is taken as exact. Half-life, branching and yield "
-                   "uncertainties are a separate parameter class this does not touch, and the "
-                   "store does not yet stage them.");
+                   "uncertainties are a separate parameter class this does not touch: the first "
+                   "two are what `sensitivity` reports, and the third is what `uncertainty "
+                   "--seed-fission --yield-covariance` reports.");
 }
 
 void writeUncertaintyCsv(std::ostream& out, const ResponseUncertainty& u) {
@@ -1539,6 +1540,209 @@ void writeUncertainty(std::ostream& out, const ResponseUncertainty& uncertainty,
       return;
     case ReportFormat::Json:
       writeUncertaintyJson(out, uncertainty);
+      return;
+  }
+}
+
+namespace {
+
+void writeYieldUncertaintyText(std::ostream& out, const YieldUncertainty& u,
+                               const ReportContext& context) {
+  out << "NuSIFT " << metricName(u.metric) << " uncertainty from the evaluated fission yields\n";
+  out << "  t = " << formatDuration(u.time) << "    " << sci(u.response) << ' ' << unitName(u.unit)
+      << "    " << sci(u.fissions) << " fissions\n";
+
+  // The two figures together, because the comparison IS the result. Both run over the products
+  // the matrix carries, so their whole difference is the off-diagonal.
+  out << "  diagonal    +/- " << sci(u.sigmaDiagonalMatched) << "   ("
+      << percent(u.relativeDiagonalMatched) << ")\n";
+  if (u.varianceNegative) {
+    out << "  correlated  INDEFINITE: g^T Sigma g = " << sci(u.varianceCorrelated)
+        << ", which has no square root\n";
+  } else {
+    out << "  correlated  +/- " << sci(u.sigmaCorrelated) << "   (" << percent(u.relativeCorrelated)
+        << ")   " << std::fixed << std::setprecision(2) << u.varianceRatio
+        << "x the diagonal variance\n"
+        << std::defaultfloat << std::setprecision(6);
+  }
+  if (!context.geometry.empty()) {
+    out << "  model: " << context.geometry << '\n';
+  }
+  if (!context.seedProvenance.empty()) {
+    out << "  seed:  " << context.seedProvenance << '\n';
+  }
+  out << '\n';
+
+  out << "   product       of variance    1-sigma on R     yield sigma     share of R\n";
+  const std::size_t shown = std::min<std::size_t>(u.products.size(), 12);
+  for (std::size_t i = 0; i < shown; ++i) {
+    const YieldContribution& product = u.products[i];
+    const bool stated = product.sigmaYield > 0.0;
+    out << "   " << (product.correlated ? ' ' : '*') << std::left << std::setw(12) << product.label
+        << std::right << std::setw(11)
+        << (stated ? percent(product.varianceFraction) : std::string("--")) << std::setw(16)
+        << (stated ? sci(product.sigmaContribution) : std::string("--")) << std::setw(16)
+        << (stated ? sci(product.sigmaYield) : std::string("none stated")) << std::setw(15)
+        << percent(u.response > 0.0 ? product.share / u.response : 0.0) << '\n';
+  }
+  if (u.products.size() > shown) {
+    out << "   ... and " << (u.products.size() - shown) << " more products\n";
+  }
+  if (u.productsUnmatched > 0) {
+    out << "   * not carried by the correlation matrix; diagonal term only\n";
+  }
+
+  out << "\n  ";
+  writeWrappedNote(out,
+                   "A fission seed is n0 = N_f Y with N_f exact, so this is the same exact "
+                   "propagation the assay error bar uses -- sigma_R^2 = g^T (N_f^2 Sigma_Y) g -- "
+                   "with the off-diagonal of Sigma_Y imported rather than assumed away.");
+
+  out << "  ! ";
+  writeWrappedNote(out, "Correlation: " + u.provenance.system + " from " + u.provenance.library +
+                            ", paired with the sigma_Y this store stages from " + u.storeLibrary +
+                            ". A correlation is dimensionless and structural, which is the "
+                            "argument that it carries across an edition better than a variance "
+                            "would; it is an argument and not a proof.");
+  out << "    " << u.provenance.citation << '\n';
+
+  // Indefiniteness is a property of the published product, reported wherever it shows up rather
+  // than only when it bites. A reader who sees a correlated figure without this line would have
+  // no way to know the matrix is not a covariance in the mathematical sense.
+  if (u.smallestEigenvalue < 0.0) {
+    char eigen[64];
+    std::snprintf(eigen, sizeof(eigen), "%.4g", u.smallestEigenvalue);
+    out << "  ! ";
+    writeWrappedNote(out,
+                     std::string("The imported matrix is not positive semi-definite on these "
+                                 "products: its smallest eigenvalue is ") +
+                         eigen +
+                         ". That is expected of a stochastic estimate and is NOT repaired here -- "
+                         "projecting onto the nearest PSD matrix would replace a published "
+                         "correlation with one no evaluation stands behind.");
+  }
+  if (u.varianceNegative) {
+    out << "  ! ";
+    writeWrappedNote(out,
+                     "The contraction came out negative, which the indefiniteness above permits. "
+                     "No standard deviation is reported for it. The diagonal figure still holds.");
+  }
+  if (u.productsUnmatched > 0 || u.coveredFraction < 1.0) {
+    char covered[32];
+    std::snprintf(covered, sizeof(covered), "%.1f%%", 100.0 * u.coveredFraction);
+    out << "  ! ";
+    writeWrappedNote(out, std::string(covered) +
+                              " of the response sits on products the matrix carries; " +
+                              std::to_string(u.productsUnmatched) +
+                              " seeded products are outside it and keep their diagonal term "
+                              "only. The correlated figure is over the covered set.");
+  }
+  if (u.productsWithoutSigma > 0) {
+    char covered[32];
+    std::snprintf(covered, sizeof(covered), "%.1f%%", 100.0 * u.sigmaCoveredFraction);
+    out << "  ! ";
+    writeWrappedNote(out, std::string(covered) +
+                              " of the response comes from products whose yield states an "
+                              "uncertainty; " +
+                              std::to_string(u.productsWithoutSigma) +
+                              " products state none and are treated as contributing no variance, "
+                              "which understates sigma_R by an amount nothing here can bound.");
+  }
+  out << "  ! ";
+  writeWrappedNote(out,
+                   "This is ONE parameter class. Combining it with the half-life and branching "
+                   "figures needs the cross-covariance between the three, which no evaluation "
+                   "publishes and this resampling did not estimate, so there is no total here.");
+  out << "  ! ";
+  writeWrappedNote(out,
+                   "The number of fissions is taken as exact. An uncertainty on the source term "
+                   "itself scales R and this sigma together and is the user's to carry.");
+}
+
+void writeYieldUncertaintyCsv(std::ostream& out, const YieldUncertainty& u) {
+  out << "product,yield,sigma_yield,seed_atoms,importance,share,sigma_contribution,"
+         "variance_fraction,correlated\n";
+  for (const YieldContribution& product : u.products) {
+    out << csvField(product.label) << ',' << shortestRoundTrip(product.yield) << ',';
+    // Empty rather than zero, as the assay report does it: "states no uncertainty" and "states
+    // an uncertainty of zero" are different claims about an evaluation.
+    if (product.sigmaYield > 0.0) {
+      out << shortestRoundTrip(product.sigmaYield);
+    }
+    out << ',' << shortestRoundTrip(product.seedAtoms) << ','
+        << shortestRoundTrip(product.importance) << ',' << shortestRoundTrip(product.share) << ','
+        << shortestRoundTrip(product.sigmaContribution) << ','
+        << shortestRoundTrip(product.varianceFraction) << ',' << (product.correlated ? 1 : 0)
+        << '\n';
+  }
+}
+
+void writeYieldUncertaintyJson(std::ostream& out, const YieldUncertainty& u) {
+  out << "{\n";
+  out << "  \"metric\": \"" << escapeJson(metricName(u.metric)) << "\",\n";
+  out << "  \"unit\": \"" << escapeJson(unitName(u.unit)) << "\",\n";
+  out << "  \"time_s\": " << jsonNumber(u.time) << ",\n";
+  out << "  \"fissions\": " << jsonNumber(u.fissions) << ",\n";
+  out << "  \"incident_energy_ev\": " << jsonNumber(u.incidentEnergyEv) << ",\n";
+  out << "  \"response\": " << jsonNumber(u.response) << ",\n";
+  out << "  \"sigma_diagonal\": " << jsonNumber(u.sigmaDiagonal) << ",\n";
+  out << "  \"relative_diagonal\": " << jsonNumber(u.relativeDiagonal) << ",\n";
+  out << "  \"sigma_diagonal_matched\": " << jsonNumber(u.sigmaDiagonalMatched) << ",\n";
+  out << "  \"relative_diagonal_matched\": " << jsonNumber(u.relativeDiagonalMatched) << ",\n";
+  // Null rather than zero when the form is negative: there is no standard deviation, and a zero
+  // would read as a vanishing one.
+  out << "  \"sigma_correlated\": "
+      << (u.varianceNegative ? std::string("null") : jsonNumber(u.sigmaCorrelated)) << ",\n";
+  out << "  \"relative_correlated\": "
+      << (u.varianceNegative ? std::string("null") : jsonNumber(u.relativeCorrelated)) << ",\n";
+  out << "  \"variance_correlated\": " << jsonNumber(u.varianceCorrelated) << ",\n";
+  out << "  \"variance_ratio\": "
+      << (u.varianceNegative ? std::string("null") : jsonNumber(u.varianceRatio)) << ",\n";
+  out << "  \"smallest_eigenvalue\": " << jsonNumber(u.smallestEigenvalue) << ",\n";
+  out << "  \"covered_fraction\": " << jsonNumber(u.coveredFraction) << ",\n";
+  out << "  \"sigma_covered_fraction\": " << jsonNumber(u.sigmaCoveredFraction) << ",\n";
+  out << "  \"products_matched\": " << u.productsMatched << ",\n";
+  out << "  \"products_unmatched\": " << u.productsUnmatched << ",\n";
+  out << "  \"products_with_sigma\": " << u.productsWithSigma << ",\n";
+  out << "  \"products_without_sigma\": " << u.productsWithoutSigma << ",\n";
+  out << "  \"products_unused_in_matrix\": " << u.productsUnusedInMatrix << ",\n";
+  // Every one of these is free text from a file path, a CLI flag or a store attribute, so each
+  // goes through escapeJson rather than straight into the quotes.
+  out << "  \"correlation\": {\"system\": \"" << escapeJson(u.provenance.system)
+      << "\", \"library\": \"" << escapeJson(u.provenance.library) << "\", \"path\": \""
+      << escapeJson(u.provenance.path) << "\", \"citation\": \""
+      << escapeJson(u.provenance.citation) << "\"},\n";
+  out << "  \"store_library\": \"" << escapeJson(u.storeLibrary) << "\",\n";
+  out << "  \"products\": [\n";
+  for (std::size_t i = 0; i < u.products.size(); ++i) {
+    const YieldContribution& product = u.products[i];
+    out << "    {\"product\": \"" << escapeJson(product.label)
+        << "\", \"yield\": " << jsonNumber(product.yield) << ", \"sigma_yield\": "
+        << (product.sigmaYield > 0.0 ? jsonNumber(product.sigmaYield) : std::string("null"))
+        << ", \"seed_atoms\": " << jsonNumber(product.seedAtoms)
+        << ", \"importance\": " << jsonNumber(product.importance)
+        << ", \"share\": " << jsonNumber(product.share)
+        << ", \"sigma_contribution\": " << jsonNumber(product.sigmaContribution)
+        << ", \"variance_fraction\": " << jsonNumber(product.varianceFraction)
+        << ", \"correlated\": " << (product.correlated ? "true" : "false") << "}"
+        << (i + 1 == u.products.size() ? "\n" : ",\n");
+  }
+  out << "  ]\n}\n";
+}
+
+}  // namespace
+
+void writeYieldUncertainty(std::ostream& out, const YieldUncertainty& uncertainty,
+                           const ReportContext& context, ReportFormat format) {
+  switch (format) {
+    case ReportFormat::Text:
+      writeYieldUncertaintyText(out, uncertainty, context);
+      return;
+    case ReportFormat::Csv:
+      writeYieldUncertaintyCsv(out, uncertainty);
+      return;
+    case ReportFormat::Json:
+      writeYieldUncertaintyJson(out, uncertainty);
       return;
   }
 }

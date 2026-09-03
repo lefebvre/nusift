@@ -37,6 +37,7 @@
 #include "nusift/nucdata/coefficient_pack.hpp"
 #include "nusift/nucdata/nuclear_data.hpp"
 #include "nusift/nucdata/store_locator.hpp"
+#include "nusift/nucdata/yield_covariance.hpp"
 #include "nusift/seed/seed_fission.hpp"
 #include "nusift/triage/allowable.hpp"
 #include "nusift/triage/attribution.hpp"
@@ -49,6 +50,7 @@
 #include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
 #include "nusift/triage/uncertainty.hpp"
+#include "nusift/triage/yield_uncertainty.hpp"
 #include "nusift/version.hpp"
 
 namespace {
@@ -1399,12 +1401,79 @@ int runSensitivity(const CommonOptions& options, const SensitivityCliOptions& ex
 // The one uncertainty question that needs no evaluated data. `attribute` prints the importance
 // column already; this multiplies it by what the sheet said about each row and reports which
 // measurement the error bar is actually resting on.
-int runUncertainty(const CommonOptions& options, const char* argv0) {
+struct UncertaintyCliOptions {
+  std::string covariancePath;
+  std::string covarianceLibrary = "ENDF/B-VIII.0";
+};
+
+// The yield half: what the EVALUATION says about a fission seed, rather than what an assay said
+// about a measured one. It is a separate function rather than a branch inside runUncertainty
+// because almost nothing is shared -- there is no sheet to read, no epoch, no assay to carry --
+// and the two would have been a single function with two disjoint halves.
+int runYieldUncertainty(const CommonOptions& options, const UncertaintyCliOptions& extra,
+                        const char* argv0) {
+  std::string storePath;
+  const NuclearData data = openStore(options, argv0, storePath);
+  const seed::FissionSeed fissionSeed = fissionSeedFrom(options);
+  const Inventory inventory = seed::seedFromFission(data, fissionSeed);
+  const PackHolder packs(options, data, inventory);
+
+  const std::vector<double> times = timesFrom(options);
+  if (times.size() != 1) {
+    throw InputError("time: an error bar is on the response at ONE instant; give one --at");
+  }
+
+  ResponseSpec spec;
+  spec.metric = metricFrom(options);
+  spec.aggregate = Aggregate::Nuclide;
+  spec.unit = requireUnit(options.unit, spec.metric, Domain::Instant);
+  spec.pack = packs.resolved();
+  spec.geometry = geometryFrom(options);
+
+  const YieldCorrelation correlation =
+      YieldCorrelation::read(extra.covariancePath, extra.covarianceLibrary);
+  const YieldUncertainty uncertainty = yieldUncertainty(
+      data, fissionSeed, correlation, times.front(), spec, decayOptionsFrom(options));
+
+  ReportFormat format = ReportFormat::Text;
+  parseReportFormat(options.format, format);
+  ReportContext context;
+  context.storePath = storePath;
+  context.storeLibrary = data.provenance().library;
+  context.storeCreatedUtc = data.provenance().createdUtc;
+  context.storeNuclideCount = data.stagedCount();
+  context.seedProvenance = inventory.provenance();
+  context.geometry = describeGeometry(options, spec.metric, spec.unit);
+  context.pack = packs.describe();
+
+  OutputStream out(options.output);
+  writeYieldUncertainty(out.get(), uncertainty, context, format);
+  return 0;
+}
+
+int runUncertainty(const CommonOptions& options, const UncertaintyCliOptions& extra,
+                   const char* argv0) {
+  if (!options.seedFissile.empty() || !extra.covariancePath.empty()) {
+    // The two halves of the question, and each needs what the other cannot supply. A fission
+    // seed has no assay to propagate; a measured inventory has no fission yields behind it.
+    if (options.seedFissile.empty()) {
+      throw InputError(
+          "uncertainty: --yield-covariance propagates the uncertainty of the evaluated YIELDS, "
+          "which only a fission seed has. Give --seed-fission, or drop --yield-covariance to "
+          "propagate an inventory's own assay uncertainties");
+    }
+    if (extra.covariancePath.empty()) {
+      throw InputError(
+          "uncertainty: a fission seed has no assay to propagate -- its uncertainty is in the "
+          "yields. Give --yield-covariance with the correlation matrix for this fissioning "
+          "system (see data/fycom/fetch_fycom.sh)");
+    }
+    return runYieldUncertainty(options, extra, argv0);
+  }
   if (options.inventoryPath.empty()) {
     throw InputError(
-        "uncertainty: give an inventory whose rows carry uncertainties with --inventory. A "
-        "fission seed has no assay to propagate -- its uncertainty is in the yields, which is "
-        "the evaluated-data half of the question and is not this");
+        "uncertainty: give an inventory whose rows carry uncertainties with --inventory, or a "
+        "fission seed with --seed-fission and --yield-covariance");
   }
 
   std::string storePath;
@@ -2144,10 +2213,23 @@ int main(int argc, char** argv) {
       ->check(CLI::PositiveNumber);
 
   CommonOptions uncertaintyOptions;
-  CLI::App* uncertaintyCmd = app.add_subcommand(
-      "uncertainty", "The error bar the assay's own uncertainties put on a response");
+  UncertaintyCliOptions uncertaintyExtra;
+  CLI::App* uncertaintyCmd =
+      app.add_subcommand("uncertainty",
+                         "The error bar the assay's own uncertainties, or the evaluated fission "
+                         "yields, put on a response");
   addCommonOptions(uncertaintyCmd, uncertaintyOptions, /*wantsTimes=*/true,
                    /*wantsIntervals=*/false);
+  uncertaintyCmd
+      ->add_option("--yield-covariance", uncertaintyExtra.covariancePath,
+                   "For a fission seed: the FYCoM CORRELATION matrix (a *_corr.csv) for this "
+                   "fissioning system. Only the correlation is read -- the variances come from "
+                   "the store's own sigma_Y. See data/fycom/fetch_fycom.sh")
+      ->check(CLI::ExistingFile);
+  uncertaintyCmd->add_option(
+      "--covariance-library", uncertaintyExtra.covarianceLibrary,
+      "The evaluation the correlation matrix was BUILT FOR, reported beside the store's own so "
+      "the pairing is declared rather than assumed (default ENDF/B-VIII.0)");
 
   CommonOptions planOptions;
   PlanOptions planExtra;
@@ -2292,7 +2374,7 @@ int main(int argc, char** argv) {
       return runSensitivity(sensitivityOptions, sensitivityExtra, argv0);
     }
     if (uncertaintyCmd->parsed()) {
-      return runUncertainty(uncertaintyOptions, argv0);
+      return runUncertainty(uncertaintyOptions, uncertaintyExtra, argv0);
     }
     if (planCmd->parsed()) {
       return runPlan(planOptions, planExtra, argv0);

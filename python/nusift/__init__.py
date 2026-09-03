@@ -102,6 +102,9 @@ from ._core import (  # noqa: F401
     StayTime,
     TaskPlan,
     TriageSet,
+    YieldContribution,
+    YieldCorrelation,
+    YieldUncertainty,
     TrajectoryEvent,
     __version__,
     allowable_scale,
@@ -133,6 +136,7 @@ from ._core import (  # noqa: F401
     task_plan,
     task_series,
     uncertainty,
+    yield_uncertainty,
 )
 from ._data import default_store_path  # noqa: F401
 
@@ -181,6 +185,9 @@ __all__ = [
     "StayTime",
     "TaskPlan",
     "TriageSet",
+    "YieldContribution",
+    "YieldCorrelation",
+    "YieldUncertainty",
     "TrajectoryEvent",
     "__version__",
     "allowable_scale",
@@ -213,4 +220,5 @@ __all__ = [
     "task_plan",
     "task_series",
     "uncertainty",
+    "yield_uncertainty",
 ]
