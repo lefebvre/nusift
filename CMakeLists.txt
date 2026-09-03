@@ -229,6 +229,38 @@ if(NUSIFT_CLANG_TIDY)
       "${CLANG_TIDY_EXE};--header-filter=${CMAKE_SOURCE_DIR}/nusift/.*\\.hpp$")
 endif()
 
+# --- formatting -------------------------------------------------------------
+#
+# Two targets over the same script, so the formatting gate can be run before pushing rather than
+# discovered in CI:
+#
+#   cmake --build build --target format-check   what CI runs, same files and same flags
+#   cmake --build build --target format         the same, rewriting the files in place
+#
+# Neither is wired into the default build. Formatting every source on every `cmake --build` would
+# rewrite files under the developer's editor, and a check that fails the build for whitespace
+# would stop the compile a developer was actually waiting for. This is a gate to run, not a
+# constraint to build under.
+#
+# USES_TERMINAL because clang-format's diff output is the whole value of the check and Ninja
+# would otherwise buffer it until the target finished.
+add_custom_target(format-check
+  COMMAND ${CMAKE_COMMAND}
+          -DNUSIFT_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+          -P ${CMAKE_SOURCE_DIR}/cmake/format.cmake
+  COMMENT "Checking formatting (clang-format --dry-run --Werror)"
+  USES_TERMINAL
+  VERBATIM)
+
+add_custom_target(format
+  COMMAND ${CMAKE_COMMAND}
+          -DNUSIFT_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+          -DNUSIFT_FORMAT_FIX=ON
+          -P ${CMAKE_SOURCE_DIR}/cmake/format.cmake
+  COMMENT "Formatting sources in place (clang-format -i)"
+  USES_TERMINAL
+  VERBATIM)
+
 # ---------------------------------------------------------------------------
 # Generated version header
 #
@@ -335,4 +367,5 @@ message(STATUS "  spikes        : ${NUSIFT_BUILD_SPIKES}")
 message(STATUS "  staging       : ${NUSIFT_WITH_STAGING}")
 message(STATUS "  python        : ${NUSIFT_BUILD_PYTHON}")
 message(STATUS "  install/export: ${NUSIFT_INSTALL}")
+message(STATUS "  formatting    : cmake --build <dir> --target format-check | format")
 message(STATUS "")

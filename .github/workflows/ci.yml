@@ -15,11 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check formatting
+        # The same script the `format-check` build target runs, invoked in cmake script mode so
+        # it needs no configure step. One gate rather than two spellings of one, which is what
+        # keeps a green local check from meeting a red CI over a difference between them.
         run: |
           sudo apt-get update && sudo apt-get install -y clang-format
-          files=$(git ls-files '*.cpp' '*.hpp')
-          if [ -z "$files" ]; then echo "no sources to check"; exit 0; fi
-          clang-format --dry-run --Werror $files
+          cmake -DNUSIFT_SOURCE_DIR="$PWD" -P cmake/format.cmake
 
   # The default developer configuration: no system cram, so it is fetched, and nothing is
   # installable. This is what `cmake -B build` does on a fresh clone, and it must stay green.
