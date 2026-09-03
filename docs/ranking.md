@@ -36,12 +36,27 @@ spaces:
 | Activity | `λᵢ` | Bq | decays |
 | Exposure | `λᵢ · Σ_j y_j k(E_j)` | R/h | R |
 | Photon | `λᵢ · Σ_j y_j` · `λᵢ · Σ_j y_j f(E_j)` | photons/s · photons/m²/s | photons · photons/m² |
+| Heat | `λᵢ · (E_em + E_lp + E_hp)ᵢ` | W | J |
 
 Every metric is λ times *something*: activity stops there; exposure and photon fluence carry on
 into the photon transport (`k(E_j)` and `f(E_j)` of [Exposure §1](exposure.md#1-the-model-in-full));
-and photon strength stops at the discrete photon yield, `Σ_j y_j` — geometry-free, the only
-metric that is a property of the inventory alone, which is what makes it the one to compare
-inventories with before a site has been chosen. That shared factor is not a coincidence — every
+photon strength stops at the discrete photon yield, `Σ_j y_j`; and decay heat stops at a
+per-nuclide constant, the sum of ENDF MT457's three average decay energies. Photon strength and
+heat are both geometry-free — properties of the inventory alone rather than of a place — which is
+what makes them the ones to compare inventories with before a site has been chosen.
+
+**Decay heat is the RECOVERABLE energy, not the Q value**, because the evaluation excludes the
+neutrinos: for a beta emitter that is roughly half the disintegration energy, so the difference
+is not a rounding correction. Nor is it the heat *deposited* anywhere. Where the three components
+stop differs by orders of magnitude — heavy particles within microns, light ones within
+millimetres, electromagnetic energy leaving a small source entirely — so a retained-versus-escaped
+split needs a geometry this layer does not have. The metric is the source term, and the three
+energies are kept separately accessible on `NuclearData` for whoever builds that split.
+
+There is deliberately **no watt-per-gram unit**. Specific power is a ratio of two responses rather
+than a response, so it is not a fixed weight: a per-nuclide W/g weight summed against atoms
+produces a number that is not the mixture's specific power and means nothing at all. It belongs
+above this layer, where both totals are in hand. That shared factor is not a coincidence — every
 quantity NuSIFT reports is per-decay, so it is proportional to the decay rate, and the metric is
 what each decay is worth.
 

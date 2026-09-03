@@ -71,7 +71,11 @@ Metric metricFrom(const std::string& text) {
   if (text == "photon") {
     return Metric::Photon;
   }
-  throw InputError("metric: \"" + text + "\" is not a metric (activity, exposure, or photon)");
+  if (text == "heat") {
+    return Metric::Heat;
+  }
+  throw InputError("metric: \"" + text +
+                   "\" is not a metric (activity, exposure, photon, or heat)");
 }
 
 Aggregate aggregateFrom(const std::string& text) {

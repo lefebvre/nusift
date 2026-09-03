@@ -64,6 +64,10 @@ nusift when -i inventory.csv --times 1s:100y:log:80 --of Y-90
 # (each sample is an exact interval integral, so this costs solves the rate curve does not)
 nusift when -i inventory.csv --times 1h:50y:log:60 --task 1h --metric exposure --level 0.5
 
+# Decay heat: the power the inventory releases, and the energy over a window.
+# Geometry-free -- a property of the material, not of where it is standing.
+nusift rank --seed-fission U-235 --yield-kt 20 --at 30d --metric heat
+
 # And the other parameter class: how much does the answer rest on the evaluated
 # half-lives? (elasticities, with the refinement chosen from the chain itself)
 nusift sensitivity -i inventory.csv --at 30d --metric exposure --units Sv/h

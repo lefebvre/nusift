@@ -52,7 +52,14 @@ using namespace nusift;
 // Everything read from a tape that cram's chain does not carry.
 struct ExtraData {
   double awr = 0.0;
+  // The three average decay energies of MT457, which together are the decay heat: every joule a
+  // decay releases leaves as electromagnetic radiation, as light particles (betas, positrons,
+  // Auger and conversion electrons, neutrinos excluded by the evaluation), or as heavy ones
+  // (alphas, recoils, fission fragments). ENDF partitions them exactly so that the sum is the
+  // total, which is why decay heat is a weight rather than a model.
   double emEnergyEv = 0.0;
+  double lpEnergyEv = 0.0;
+  double hpEnergyEv = 0.0;
   double continuumPhotonEv = 0.0;
   std::vector<double> lineEnergyEv;
   std::vector<double> lineIntensity;
@@ -117,9 +124,23 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
       }
     }
 
+    // All three, read together because they are one partition and are only meaningful summed.
+    //
+    // numberDecayEnergies() counts [value, uncertainty] PAIRS, not values, and the three sit at
+    // pair indices 0, 1 and 2 in that order -- light particle, electromagnetic, heavy particle.
+    // So each guard is its own index plus one, and the electromagnetic guard of 2 that was here
+    // before is the middle case of the same rule rather than a different convention. A tape
+    // carrying fewer pairs stopped early rather than disagreeing, so what is there is taken and
+    // the rest stay zero.
     const auto& energies = section.averageDecayEnergies();
+    if (energies.numberDecayEnergies() >= 1) {
+      extra.lpEnergyEv = static_cast<double>(*energies.lightParticleDecayEnergy().begin());
+    }
     if (energies.numberDecayEnergies() >= 2) {
       extra.emEnergyEv = static_cast<double>(*energies.electromagneticDecayEnergy().begin());
+    }
+    if (energies.numberDecayEnergies() >= 3) {
+      extra.hpEnergyEv = static_cast<double>(*energies.heavyParticleDecayEnergy().begin());
     }
 
     double discreteEnergy = 0.0;
@@ -536,6 +557,8 @@ int main(int argc, char** argv) {
       arrays.halfLifeUncertainty.push_back(halfLifeSigma);
       arrays.awr.push_back(haveExtra ? extra->second.awr : 0.0);
       arrays.emEnergyEv.push_back(haveExtra ? extra->second.emEnergyEv : 0.0);
+      arrays.lpEnergyEv.push_back(haveExtra ? extra->second.lpEnergyEv : 0.0);
+      arrays.hpEnergyEv.push_back(haveExtra ? extra->second.hpEnergyEv : 0.0);
       arrays.continuumPhotonEv.push_back(haveExtra ? extra->second.continuumPhotonEv : 0.0);
 
       if (decay != nullptr) {

@@ -124,6 +124,34 @@ def test_fission_product_activity_follows_the_way_wigner_slope(data):
     )
 
 
+def test_decay_heat_follows_the_way_wigner_slope(data):
+    # The rule was written for POWER, so this is the quantity it actually describes -- and it
+    # goes through the three MT457 decay energies, which the activity fit above never touches.
+    # Only the exponent is asserted; the rule's constant is 57% low at 1 h and is checked
+    # against an evaluation instead, in the test below.
+    result = checks.way_wigner_power(data)
+    low, high = result["band"]
+    assert result["within"], (
+        f"decay-heat log-log slope {result['slope']:.3f} outside [{low}, {high}] over "
+        f"{checks.WAY_WIGNER_START} to {checks.WAY_WIGNER_END}"
+    )
+
+
+def test_total_decay_energy_matches_the_evaluated_partition(data):
+    # The sharp one. Summing MT457's average energies over the MT454 yields and the whole chain
+    # has to reproduce MT458's delayed beta plus delayed gamma for the same fission -- two
+    # evaluations of one quantity, reached by different routes.
+    result = checks.fission_decay_energy(data)
+    assert result["within"], (
+        f"{result['mev_per_fission']:.3f} MeV per fission against "
+        f"{result['reference_mev']:.2f} MeV: {result['residual']:+.2%}, outside "
+        f"{result['tolerance']:.0%}"
+    )
+    # Roughly six beta decays carry a fission fragment to stability. A gross error in the yields
+    # or the chain moves this long before it moves the energy.
+    assert 5.0 <= result["decays_per_fission"] <= 7.0, result["decays_per_fission"]
+
+
 # --- an independent implementation --------------------------------------------
 
 

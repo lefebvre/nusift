@@ -45,6 +45,8 @@ constexpr Unit kAllUnits[] = {
     Unit::Photons,
     Unit::PhotonsPerSquareMeterPerSecond,
     Unit::PhotonsPerSquareMeter,
+    Unit::Watt,
+    Unit::Joule,
 };
 
 // Case-insensitive ASCII equality. Unit spellings are ASCII by construction -- they come from
@@ -108,6 +110,11 @@ double unitScale(Unit unit) {
     case Unit::Photons:
     case Unit::PhotonsPerSquareMeterPerSecond:
     case Unit::PhotonsPerSquareMeter:
+    // Heat is computed in watts per atom, which is joules per second: against atom-seconds the
+    // same weight is joules, with no hour to take back out. Same arrangement as the photon
+    // units and for the same reason -- the weight was never quoted per hour.
+    case Unit::Watt:
+    case Unit::Joule:
       return 1.0;
   }
   return 1.0;
@@ -213,6 +220,14 @@ double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
         return lambda * exposure::fluenceRatePerBecquerel(data.lines(index), spec.geometry);
       }
       return lambda * totalPhotonYield(data.lines(index));
+    case Metric::Heat:
+      // lambda * (recoverable energy per decay), in watts per atom. The three MT457 averages
+      // summed: a decay's whole energy budget less the neutrinos the evaluation excludes.
+      // No geometry and no spectrum, which makes this the cheapest metric in the file after
+      // activity -- and, unlike exposure, a per-nuclide constant that a pack COULD have carried
+      // if anyone published one. It is built in rather than packed because it is computed from
+      // staged evaluated data rather than read from a published table.
+      return lambda * data.decayEnergyEv(index) * units::kEvToJ;
   }
   return 0.0;
 }
@@ -869,6 +884,7 @@ bool unitSuitsDomain(Unit unit, Domain domain) {
     case Unit::SievertPerHour:
     case Unit::PhotonsPerSecond:
     case Unit::PhotonsPerSquareMeterPerSecond:
+    case Unit::Watt:
       return domain == Domain::Instant;
     case Unit::Decays:
     case Unit::Roentgen:
@@ -876,6 +892,7 @@ bool unitSuitsDomain(Unit unit, Domain domain) {
     case Unit::Sievert:
     case Unit::Photons:
     case Unit::PhotonsPerSquareMeter:
+    case Unit::Joule:
       return domain == Domain::Interval;
   }
   return false;
@@ -901,6 +918,9 @@ bool unitSuitsMetric(Unit unit, Metric metric) {
     case Unit::PhotonsPerSquareMeterPerSecond:
     case Unit::PhotonsPerSquareMeter:
       return metric == Metric::Photon;
+    case Unit::Watt:
+    case Unit::Joule:
+      return metric == Metric::Heat;
   }
   return false;
 }
@@ -937,6 +957,10 @@ const char* unitName(Unit unit) {
       return "photons/m2/s";
     case Unit::PhotonsPerSquareMeter:
       return "photons/m2";
+    case Unit::Watt:
+      return "W";
+    case Unit::Joule:
+      return "J";
   }
   return "?";
 }
@@ -965,6 +989,9 @@ Unit defaultUnit(Metric metric, Domain domain) {
     // photon answer that does not name a distance is not silently one at some distance.
     return domain == Domain::Interval ? Unit::Photons : Unit::PhotonsPerSecond;
   }
+  if (metric == Metric::Heat) {
+    return domain == Domain::Interval ? Unit::Joule : Unit::Watt;
+  }
   return domain == Domain::Interval ? Unit::Decays : Unit::Becquerel;
 }
 
@@ -979,7 +1006,8 @@ Unit requireUnit(std::string_view text, Metric metric, Domain domain) {
   throw InputError(tagged(kUnitsModule, "\"" + std::string(text) + "\" is not a unit (activity: " +
                                             spellingsFor(Metric::Activity) +
                                             "; exposure: " + spellingsFor(Metric::Exposure) +
-                                            "; photon: " + spellingsFor(Metric::Photon) + ")"));
+                                            "; photon: " + spellingsFor(Metric::Photon) +
+                                            "; decay heat: " + spellingsFor(Metric::Heat) + ")"));
 }
 
 const char* metricName(Metric metric) {
@@ -990,6 +1018,8 @@ const char* metricName(Metric metric) {
       return "exposure";
     case Metric::Photon:
       return "photon";
+    case Metric::Heat:
+      return "decay heat";
     // Deliberately generic. What this metric IS lives in the pack's own header -- its quantity,
     // its version, its scenario -- and a report prints those rather than this word.
     case Metric::Pack:

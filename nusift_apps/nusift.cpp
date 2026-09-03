@@ -163,8 +163,8 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
                     "Integration window T1,T2, repeatable (e.g. 1h,30d)");
   }
 
-  app->add_option("--metric", options.metric, "activity, exposure, or photon")
-      ->check(CLI::IsMember({"activity", "exposure", "photon"}));
+  app->add_option("--metric", options.metric, "activity, exposure, photon, or heat")
+      ->check(CLI::IsMember({"activity", "exposure", "photon", "heat"}));
   app->add_option("--pack", options.packPath,
                   "Rank by a coefficient pack instead: a CSV of per-nuclide coefficients with "
                   "its quantity, units, basis and version in its header");
@@ -178,7 +178,7 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
       ->check(CLI::IsMember({"nuclide", "mass-chain", "element", "line"}));
   app->add_option("--units", options.unit,
                   "activity: Bq, Ci, decays;  exposure: R/h, Gy/h, Sv/h, R, Gy, Sv;  photon: "
-                  "photons/s, photons, photons/m2/s, photons/m2");
+                  "photons/s, photons, photons/m2/s, photons/m2;  heat: W, J");
 
   // Exposure geometry. An exposure number is uninterpretable without the distance it was
   // computed at, so these are reported in the output header alongside the values.
@@ -227,6 +227,9 @@ Metric metricFrom(const std::string& text) {
   }
   if (text == "photon") {
     return Metric::Photon;
+  }
+  if (text == "heat") {
+    return Metric::Heat;
   }
   return Metric::Activity;
 }
@@ -2252,7 +2255,7 @@ int main(int argc, char** argv) {
   addCommonOptions(shortlistCmd, shortlistOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
   shortlistCmd->add_option("--metrics", shortlistExtra.metrics,
                            "Be good for all of these at once, comma separated "
-                           "(e.g. activity,exposure,photon). Defaults to --metric");
+                           "(e.g. activity,exposure,heat). Defaults to --metric");
 
   CommonOptions reconcileOptions;
   ReconcileOptions reconcileExtra;

@@ -45,6 +45,16 @@ enum class Metric {
   // point (fluence). Energy-free on purpose -- it is the exposure kernel with the kerma factor
   // removed, so a missing dose model cannot make the source term wrong.
   Photon,
+  // Decay heat: the power the inventory releases as its nuclides decay, and the energy released
+  // over an interval. lambda times the sum of ENDF MT457's three average decay energies, which
+  // is a per-nuclide constant like activity's -- no geometry, no spectrum, no kernel.
+  //
+  // It is the RECOVERABLE energy and not the Q value, because the evaluation excludes the
+  // neutrinos. For a beta emitter that is roughly half the disintegration energy, so the
+  // difference is not a rounding correction. Nor is it the heat DEPOSITED anywhere: where the
+  // three components stop differs by orders of magnitude, and a retained-versus-escaped split
+  // needs a geometry NuSIFT does not have. This is the source term.
+  Heat,
   // Whatever a coefficient pack says. The three above are metrics this file knows how to
   // compute; this one is a metric someone else computed and NuSIFT reads, which is the whole
   // point -- a transport index or an intake dose coefficient is not physics NuSIFT should be
@@ -101,6 +111,16 @@ enum class Unit {
   Photons,                         // interval only: photons emitted over the window
   PhotonsPerSquareMeterPerSecond,  // instant: fluence rate at the point
   PhotonsPerSquareMeter,           // interval only: fluence at the point over the window
+
+  // Decay heat. A power and the energy it accrues, which is the same rate-versus-total line
+  // every other metric here draws.
+  //
+  // There is deliberately no watt-per-gram here. Specific power is a RATIO of two responses --
+  // power over mass -- and not a response, so it is not a fixed weight: a per-nuclide W/g
+  // weight summed against atoms produces a number that is not the mixture's specific power and
+  // means nothing at all. It belongs above this layer, where both totals are in hand.
+  Watt,
+  Joule,  // interval only
 };
 
 // Which metric a unit can express. Reporting exposure in becquerel is not a rounding error,

@@ -201,6 +201,16 @@ different routes.
 The t^-1.2 gross fission-product decay rule, and the 1.45×10²³ fissions per kiloton at
 180 MeV/fission that `nusift seed-fission` uses.
 
+**`endf458`** — ENDF-6 section MT458, the fission energy-release partition, as evaluated for
+U-235 thermal fission and reproduced in every major library since ENDF/B-VI: delayed betas
+6.50 MeV, delayed gammas 6.33 MeV, neutrinos 8.75 MeV, against a total of about 202 MeV.
+
+The delayed beta and gamma terms sum to the recoverable energy released by fission-product
+DECAY, which is what `nusift integrate --metric heat` over all time has to reproduce. It is not
+staged: NuSIFT fetches only the decay and fission-yield sublibraries, and MT458 lives in the
+neutron sublibrary, so this is an outside number rather than one the store could be checked
+against itself. That is the point of it.
+
 **`radioactivedecay`** — Malins, A., & Lemoine, T. (2022). *radioactivedecay: A Python package
 for radioactive decay calculations.* Journal of Open Source Software 7(71), 3318.
 <https://doi.org/10.21105/joss.03318>
