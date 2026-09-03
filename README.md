@@ -229,6 +229,17 @@ cmake --build build
 ctest --test-dir build -L unit --output-on-failure
 ```
 
+Formatting is a CI gate, and the same check runs locally as a target:
+
+```bash
+cmake --build build --target format-check   # what CI runs, same files and same flags
+cmake --build build --target format         # the same, rewriting the files in place
+```
+
+Both take their file list from `git ls-files` at the moment they run, so a source added since
+the last configure is still checked — but one never `git add`ed is invisible to them, as it is
+to CI.
+
 On Windows, point CMake at a vcpkg toolchain for HDF5 and Eigen:
 
 ```bash
