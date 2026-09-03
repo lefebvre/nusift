@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" role="img" aria-label="Assays from several dates reconciled to one">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="899" height="559" rx="6"/>
+<text class="ink" x="74.0" y="26.0" font-size="13" text-anchor="start" font-weight="600">Three assays, three dates, one inventory</text>
+<text class="muted" x="74.0" y="44.0" font-size="11.5" text-anchor="start" font-weight="normal">`nusift reconcile` — every sheet carried forward to the latest of them</text>
+<text class="ink" x="74.0" y="88.0" font-size="11.5" text-anchor="start" font-weight="600">the sheets</text>
+<text class="ink" x="88.0" y="119.0" font-size="11" text-anchor="start" font-weight="500">2021-06-14</text>
+<text class="t0" x="224.0" y="119.0" font-size="10.5" text-anchor="start" font-weight="normal">carried forward 2.27 y</text>
+<text class="muted" x="404.0" y="119.0" font-size="10.5" text-anchor="start" font-weight="normal">5.67e21 atoms on the sheet</text>
+<text class="ink" x="88.0" y="139.0" font-size="11" text-anchor="start" font-weight="500">2022-02-03</text>
+<text class="t1" x="224.0" y="139.0" font-size="10.5" text-anchor="start" font-weight="normal">carried forward 1.63 y</text>
+<text class="muted" x="404.0" y="139.0" font-size="10.5" text-anchor="start" font-weight="normal">2.38e21 atoms on the sheet</text>
+<text class="ink" x="88.0" y="159.0" font-size="11" text-anchor="start" font-weight="500">2023-09-20</text>
+<text class="t2" x="224.0" y="159.0" font-size="10.5" text-anchor="start" font-weight="normal">already at the epoch</text>
+<text class="muted" x="404.0" y="159.0" font-size="10.5" text-anchor="start" font-weight="normal">1.54e21 atoms on the sheet</text>
+<text class="ink" x="74.0" y="186.0" font-size="11.5" text-anchor="start" font-weight="600">what came out: 14 nuclides, of which 7 were on no sheet at all</text>
+<text class="ink" x="88.0" y="217.0" font-size="11" text-anchor="start" font-weight="500">Cs-137</text>
+<rect class="fill-a" x="184.0" y="206.0" width="560.0" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="752.0" y="217.0" font-size="10" text-anchor="start" font-weight="normal">5.33e21</text>
+<text class="ink" x="88.0" y="234.0" font-size="11" text-anchor="start" font-weight="500">Sr-90</text>
+<rect class="fill-a" x="184.0" y="223.0" width="238.4" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="430.4" y="234.0" font-size="10" text-anchor="start" font-weight="normal">2.27e21</text>
+<text class="ink" x="88.0" y="251.0" font-size="11" text-anchor="start" font-weight="500">Pu-239</text>
+<rect class="fill-a" x="184.0" y="240.0" width="126.9" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="318.9" y="251.0" font-size="10" text-anchor="start" font-weight="normal">1.21e21</text>
+<text class="warn" x="88.0" y="268.0" font-size="11" text-anchor="start" font-weight="600">Ba-137</text>
+<rect class="fill-b" x="184.0" y="257.0" width="30.0" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="222.0" y="268.0" font-size="10" text-anchor="start" font-weight="normal">2.86e20   grown in</text>
+<text class="ink" x="88.0" y="285.0" font-size="11" text-anchor="start" font-weight="500">Pu-240</text>
+<rect class="fill-a" x="184.0" y="274.0" width="25.1" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="217.1" y="285.0" font-size="10" text-anchor="start" font-weight="normal">2.39e20</text>
+<text class="warn" x="88.0" y="302.0" font-size="11" text-anchor="start" font-weight="600">Zr-90</text>
+<rect class="fill-b" x="184.0" y="291.0" width="9.5" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="201.5" y="302.0" font-size="10" text-anchor="start" font-weight="normal">9.00e19   grown in</text>
+<text class="ink" x="88.0" y="319.0" font-size="11" text-anchor="start" font-weight="500">Am-241</text>
+<rect class="fill-a" x="184.0" y="308.0" width="9.3" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="201.3" y="319.0" font-size="10" text-anchor="start" font-weight="normal">8.86e19</text>
+<text class="ink" x="88.0" y="336.0" font-size="11" text-anchor="start" font-weight="500">Co-60</text>
+<rect class="fill-a" x="184.0" y="325.0" width="4.1" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="196.1" y="336.0" font-size="10" text-anchor="start" font-weight="normal">3.92e19</text>
+<text class="ink" x="88.0" y="353.0" font-size="11" text-anchor="start" font-weight="500">Eu-154</text>
+<rect class="fill-a" x="184.0" y="342.0" width="2.2" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="194.2" y="353.0" font-size="10" text-anchor="start" font-weight="normal">2.06e19</text>
+<text class="warn" x="88.0" y="370.0" font-size="11" text-anchor="start" font-weight="600">Ni-60</text>
+<rect class="fill-b" x="184.0" y="359.0" width="1.4" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="193.4" y="370.0" font-size="10" text-anchor="start" font-weight="normal">1.36e19   grown in</text>
+<text class="warn" x="88.0" y="387.0" font-size="11" text-anchor="start" font-weight="600">Gd-154</text>
+<rect class="fill-b" x="184.0" y="376.0" width="0.8" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="192.8" y="387.0" font-size="10" text-anchor="start" font-weight="normal">2.89e18   grown in</text>
+<text class="warn" x="88.0" y="404.0" font-size="11" text-anchor="start" font-weight="600">Y-90</text>
+<rect class="fill-b" x="184.0" y="393.0" width="0.8" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="192.8" y="404.0" font-size="10" text-anchor="start" font-weight="normal">5.75e17   grown in</text>
+<text class="warn" x="88.0" y="421.0" font-size="11" text-anchor="start" font-weight="600">Ba-137m</text>
+<rect class="fill-b" x="184.0" y="410.0" width="0.8" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="192.8" y="421.0" font-size="10" text-anchor="start" font-weight="normal">8.14e14   grown in</text>
+<text class="warn" x="88.0" y="438.0" font-size="11" text-anchor="start" font-weight="600">Sm-154</text>
+<rect class="fill-b" x="184.0" y="427.0" width="0.8" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="192.8" y="438.0" font-size="10" text-anchor="start" font-weight="normal">5.19e14   grown in</text>
+<text class="ink" x="74.0" y="466.0" font-size="12" text-anchor="start" font-weight="normal">Ba-137m was on no sheet, and it is what sets the dose rate around this object.</text>
+<text class="muted" x="74.0" y="486.0" font-size="11.5" text-anchor="start" font-weight="normal">That is the argument for reconciliation being a decay SOLVE per sheet rather than a per-nuclide exponential: a sheet lists</text>
+<text class="muted" x="74.0" y="502.0" font-size="11.5" text-anchor="start" font-weight="normal">what was counted, and carrying it forward grows in everything the counted nuclides feed, whether or not anyone looked for it.</text>
+<text class="muted" x="74.0" y="524.0" font-size="11.5" text-anchor="start" font-weight="normal">Every sheet is carried FORWARD and none backward, which is a refusal rather than a limitation. Un-growing a daughter is an</text>
+<text class="muted" x="74.0" y="540.0" font-size="11.5" text-anchor="start" font-weight="normal">inverse problem with no unique answer, so an epoch earlier than an assay is rejected rather than answered with one of them.</text>
+</svg>

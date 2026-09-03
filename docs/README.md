@@ -6,6 +6,11 @@ evaluated exactly, what is approximated and by how much, and what is not modelle
 Each stage has its own document. Read them in order for the whole method, or jump to the one
 that produced the number you are looking at.
 
+**If you arrived with a question rather than with a number**, start at
+[scenarios.md](scenarios.md) instead. It is the same tool organized the other way round — one
+section per command, each on a source the model actually fits, with a figure from real output and
+a note on what the answer does not say.
+
 | # | Stage | What it decides |
 | --- | --- | --- |
 | 1 | [Nuclear data](nuclear-data.md) | What the store holds, how ENDF becomes a chain, and why whole photon spectra are persisted rather than one constant per nuclide |
@@ -15,6 +20,10 @@ that produced the number you are looking at.
 | 5 | [Exposure](exposure.md) | The photon transport model: lines, air attenuation, air kerma, ICRP 116 effective dose, and what it excludes |
 | 6 | [Ranking and forecasting](ranking.md) | Weights, aggregation, the binned source term, coverage, robust triage sets, dominance windows, piecewise task plans, located events, maximum allowable scale, counterfactual interventions, and how a report states its own limits |
 | 7 | [Seed attribution](attribution.md) | The other attribution of the same number: which seeded nuclide a response is riding on, from one adjoint solve — and the error bar its uncertainties put on the answer |
+
+| | | |
+| --- | --- | --- |
+| — | [**Scenarios**](scenarios.md) | The same capabilities organized by the question asked rather than by the stage that answers it: one section per command, with a figure from real output |
 
 ## The one design decision everything follows from
 
@@ -87,14 +96,18 @@ header — because for a triage answer, what produced it is part of it.
 ## Scope of the model
 
 Implemented and exercised end to end: decay from an inventory or from fission, instantaneous
-and time-integrated activity, point-source photon exposure, ranking by four aggregates,
-dominance forecasting, a binned photon emission spectrum written as a transport code's source
-definition, and Python bindings for both the instantaneous and the interval path.
+and time-integrated activity, point-source photon exposure and ICRP 116 effective dose, photon
+strength and fluence, decay heat, per-nuclide and per-energy coefficient packs, ranking by four
+aggregates, dominance forecasting, located trajectory events, robust triage sets, piecewise task
+plans, maximum allowable scale, counterfactual interventions, reference-date reconciliation,
+evaluated-data sensitivity and uncertainty, a binned photon emission spectrum written as a
+transport code's source definition, and Python bindings throughout.
+[scenarios.md](scenarios.md) shows each of them on a worked case.
 
 Not modelled, each of which would *raise* a reported exposure: scattered photons beyond an
 explicit `--buildup` factor, source self-absorption, bremsstrahlung and any continuous photon
 spectrum, and beta, alpha, or neutron dose. Not yet implemented: neutron activation as a source
-term, shielding, and decay heat.
+term, and shielding.
 
 The limits are quantified per store rather than asserted in general — run `nusift data info`
 and it will tell you how many nuclides in *this* evaluation emit photons it cannot model. See
@@ -114,8 +127,12 @@ in [`validation/references/`](../validation/references/README.md).
 
 ## Regenerating the figures
 
-The data-driven figures come from [`figures/make_figures.py`](figures/make_figures.py) (numpy
-only). Air-coefficient figures parse the NIST table directly out of
+The METHOD figures — the ones that belong beside an equation — come from
+[`figures/make_figures.py`](figures/make_figures.py) (numpy only). The CAPABILITY figures in
+[scenarios.md](scenarios.md) come from
+[`figures/make_scenario_figures.py`](figures/make_scenario_figures.py), built from CLI output that
+[`figures/data/make_data.sh`](figures/data/make_data.sh) regenerates. Both draw through
+`figures/svgplot.py`, so the two sets cannot drift into different visual languages. Air-coefficient figures parse the NIST table directly out of
 [`air_coefficients.cpp`](../nusift/exposure/air_coefficients.cpp) so they cannot drift from the
 values the code interpolates; the rest are built from committed CLI output under
 [`figures/data/`](figures/data/README.md).

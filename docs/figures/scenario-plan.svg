@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 434" width="900" height="434" role="img" aria-label="A job costed leg by leg against a dose budget">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="899" height="433" rx="6"/>
+<text class="ink" x="74.0" y="26.0" font-size="13" text-anchor="start" font-weight="600">What the job costs, leg by leg</text>
+<text class="muted" x="74.0" y="44.0" font-size="11.5" text-anchor="start" font-weight="normal">`nusift plan --budget 0.02` — five years on, examples/contaminated_component.csv</text>
+<text class="ink" x="74.0" y="112.0" font-size="11.5" text-anchor="start" font-weight="500">approach</text>
+<rect class="t0" x="202.0" y="100.0" width="4.5" height="14.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="202.0" y="127.0" font-size="10.5" text-anchor="start" font-weight="normal">9.82e-4 Sv   0.6% of the total   at 4 m</text>
+<text class="ink" x="74.0" y="146.0" font-size="11.5" text-anchor="start" font-weight="500">survey</text>
+<rect class="t1" x="202.0" y="134.0" width="92.3" height="14.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="202.0" y="161.0" font-size="10.5" text-anchor="start" font-weight="normal">0.02 Sv   12.8% of the total   at 2 m</text>
+<text class="ink" x="74.0" y="180.0" font-size="11.5" text-anchor="start" font-weight="500">break</text>
+<rect class="box" x="202.0" y="168.0" width="1.0" height="14.0" rx="2" fill-opacity="0.0" stroke-width="1.0"/>
+<text class="muted" x="202.0" y="195.0" font-size="10.5" text-anchor="start" font-weight="normal">no dose — and it still takes ten minutes of the day</text>
+<text class="ink" x="74.0" y="214.0" font-size="11.5" text-anchor="start" font-weight="500">cut and cap</text>
+<rect class="t3" x="202.0" y="202.0" width="620.0" height="14.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="202.0" y="229.0" font-size="10.5" text-anchor="start" font-weight="normal">0.134 Sv   85.9% of the total   at 1.2 m</text>
+<text class="ink" x="74.0" y="248.0" font-size="11.5" text-anchor="start" font-weight="500">retreat</text>
+<rect class="t4" x="202.0" y="236.0" width="4.5" height="14.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="202.0" y="263.0" font-size="10.5" text-anchor="start" font-weight="normal">9.82e-4 Sv   0.6% of the total   at 4 m</text>
+<line class="axis" x1="202.0" y1="280.0" x2="822.0" y2="280.0" stroke-width="1.0"/>
+<text class="ink" x="74.0" y="302.0" font-size="12" text-anchor="start" font-weight="normal">The budget of 0.02 Sv is spent 14.3 m into "survey" — the plan as written accrues 782% of it.</text>
+<text class="muted" x="74.0" y="322.0" font-size="11.5" text-anchor="start" font-weight="normal">The mean-rate column is what makes breaking a job into legs worth doing: two legs with the same dose are different problems</text>
+<text class="muted" x="74.0" y="338.0" font-size="11.5" text-anchor="start" font-weight="normal">when one is fifteen minutes at two metres and the other is forty-five at one, and only the rate separates them.</text>
+<text class="muted" x="74.0" y="360.0" font-size="11.5" text-anchor="start" font-weight="normal">Naming the leg and the minute is the point. A plan that simply reports 'over budget' leaves the reader to work out which part</text>
+<text class="muted" x="74.0" y="376.0" font-size="11.5" text-anchor="start" font-weight="normal">to shorten, move further out, or share between two people — and those are the only three things anyone can actually do.</text>
+<text class="muted" x="74.0" y="398.0" font-size="11.5" text-anchor="start" font-weight="normal">A break carries no dose and still carries time, so the legs after it start later against a source that has decayed further.</text>
+<text class="muted" x="74.0" y="414.0" font-size="11.5" text-anchor="start" font-weight="normal">That is why a break is spelled as a leg rather than subtracted afterwards: it keeps its place in the sequence.</text>
+</svg>

@@ -1,0 +1,38 @@
+store:            data/nusift_b8.1.h5
+schema version:   1
+library:          ENDF/B-VIII.1
+staged:           2026-09-03T12:57:58Z
+staged by:        0.1.0
+tapes staged:     3821
+nuclides staged:  3828
+chain size:       4012  (staged, plus decay daughters and fission products
+                       registered so nothing is produced into a gap)
+decay data from:  endf
+photon lines:     endf
+fission yields:   endf
+
+unstable nuclides:              3562
+  with discrete photon lines:   1595
+    of those, >5% continuum:    34
+    of those, clamped lines:    1471
+  emit photons, no spectrum:    1546
+  SF branch, no yields staged:  103
+nuclides with atomic weights:   3576
+
+1546 unstable nuclides have an evaluated average photon energy but no discrete
+spectrum in this evaluation. They contribute ZERO to an exposure ranking while
+genuinely emitting photons, so an exposure answer dominated by short-lived
+exotic species is understated in a way the ranking cannot show.
+
+5705 discrete lines across 1471 nuclides fall outside the tabulated air-coefficient
+range (10 keV to 10 MeV). Their attenuation and absorption coefficients are the
+clamped end values rather than interpolations, so their contribution to an exposure
+is an order-of-magnitude figure. Nearly all are soft X-rays, which any real source
+encapsulation absorbs before they reach air.
+
+103 nuclides have a spontaneous-fission branch but no fission-yield set of any
+energy. The branch removes atoms from the parent and produces nothing in their
+place, so a chain passing through one of them does not conserve atoms. Negligible
+for a fission-product source; worth knowing for an actinide inventory. Staging the
+SFY sublibrary (--sfy-dir) closes the gap. Affected:
+    Tl-180, Th-230, Pu-236, Pu-244, Am-242m, Am-242m2, Cm-234, Cm-244m, and 95 more

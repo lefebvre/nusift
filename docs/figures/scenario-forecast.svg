@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 358" width="900" height="358" role="img" aria-label="Dominance windows over a century">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="899" height="357" rx="6"/>
+<line class="grid" x1="74.0" y1="100.0" x2="74.0" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="74.0" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 m</text>
+<line class="grid" x1="245.8" y1="100.0" x2="245.8" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="245.8" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 h</text>
+<line class="grid" x1="379.2" y1="100.0" x2="379.2" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="379.2" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 d</text>
+<line class="grid" x1="475.8" y1="100.0" x2="475.8" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="475.8" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 d</text>
+<line class="grid" x1="626.8" y1="100.0" x2="626.8" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="626.8" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">1 y</text>
+<line class="grid" x1="723.4" y1="100.0" x2="723.4" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="723.4" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">10 y</text>
+<line class="grid" x1="820.0" y1="100.0" x2="820.0" y2="220.0" stroke-width="1.2"/>
+<text class="muted" x="820.0" y="238.0" font-size="10.5" text-anchor="middle" font-weight="normal">100 y</text>
+<rect class="t0" x="74.0" y="100.0" width="14.4" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="74.0" y1="100.0" x2="74.0" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t0" x="81.2" y="126.0" font-size="10.5" text-anchor="middle" font-weight="600">La-144</text>
+<text class="muted" x="81.2" y="139.0" font-size="9.5" text-anchor="middle" font-weight="normal">5%</text>
+<rect class="t1" x="88.4" y="100.0" width="29.2" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="88.4" y1="100.0" x2="88.4" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t1" x="103.0" y="160.0" font-size="10.5" text-anchor="middle" font-weight="600">Cs-140</text>
+<text class="muted" x="103.0" y="173.0" font-size="9.5" text-anchor="middle" font-weight="normal">6%</text>
+<rect class="t2" x="117.6" y="100.0" width="48.6" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="117.6" y1="100.0" x2="117.6" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t2" x="141.9" y="194.0" font-size="10.5" text-anchor="middle" font-weight="600">Xe-137</text>
+<text class="muted" x="141.9" y="207.0" font-size="9.5" text-anchor="middle" font-weight="normal">6%</text>
+<rect class="t3" x="166.2" y="100.0" width="29.1" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="166.2" y1="100.0" x2="166.2" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t3" x="180.8" y="126.0" font-size="10.5" text-anchor="middle" font-weight="600">Cs-139</text>
+<text class="muted" x="180.8" y="139.0" font-size="9.5" text-anchor="middle" font-weight="normal">6%</text>
+<rect class="t4" x="195.3" y="100.0" width="35.8" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="195.3" y1="100.0" x2="195.3" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t4" x="213.2" y="160.0" font-size="10.5" text-anchor="middle" font-weight="600">Y-94</text>
+<text class="muted" x="213.2" y="173.0" font-size="9.5" text-anchor="middle" font-weight="normal">5%</text>
+<rect class="t5" x="231.1" y="100.0" width="25.9" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="231.1" y1="100.0" x2="231.1" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t5" x="244.1" y="194.0" font-size="10.5" text-anchor="middle" font-weight="600">Cs-138</text>
+<text class="muted" x="244.1" y="207.0" font-size="9.5" text-anchor="middle" font-weight="normal">8%</text>
+<rect class="t6" x="257.0" y="100.0" width="51.5" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="257.0" y1="100.0" x2="257.0" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t6" x="282.8" y="126.0" font-size="10.5" text-anchor="middle" font-weight="600">I-134</text>
+<text class="muted" x="282.8" y="139.0" font-size="9.5" text-anchor="middle" font-weight="normal">12%</text>
+<rect class="t7" x="308.5" y="100.0" width="45.2" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="308.5" y1="100.0" x2="308.5" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t7" x="331.1" y="160.0" font-size="10.5" text-anchor="middle" font-weight="600">Y-92</text>
+<text class="muted" x="331.1" y="173.0" font-size="9.5" text-anchor="middle" font-weight="normal">10%</text>
+<rect class="t0" x="353.7" y="100.0" width="82.8" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="353.7" y1="100.0" x2="353.7" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t0" x="395.1" y="194.0" font-size="10.5" text-anchor="middle" font-weight="600">Xe-135</text>
+<text class="muted" x="395.1" y="207.0" font-size="9.5" text-anchor="middle" font-weight="normal">11%</text>
+<rect class="t1" x="436.5" y="100.0" width="51.1" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="436.5" y1="100.0" x2="436.5" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t1" x="462.1" y="126.0" font-size="10.5" text-anchor="middle" font-weight="600">Xe-133</text>
+<text class="muted" x="462.1" y="139.0" font-size="9.5" text-anchor="middle" font-weight="normal">14%</text>
+<rect class="t2" x="487.7" y="100.0" width="39.8" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="487.7" y1="100.0" x2="487.7" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t2" x="507.6" y="160.0" font-size="10.5" text-anchor="middle" font-weight="600">La-140</text>
+<text class="muted" x="507.6" y="173.0" font-size="9.5" text-anchor="middle" font-weight="normal">14%</text>
+<rect class="t3" x="527.5" y="100.0" width="24.7" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="527.5" y1="100.0" x2="527.5" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t3" x="539.8" y="194.0" font-size="10.5" text-anchor="middle" font-weight="600">Ce-141</text>
+<text class="muted" x="539.8" y="207.0" font-size="9.5" text-anchor="middle" font-weight="normal">12%</text>
+<rect class="t4" x="552.1" y="100.0" width="63.8" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="552.1" y1="100.0" x2="552.1" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t4" x="584.0" y="126.0" font-size="10.5" text-anchor="middle" font-weight="600">Nb-95</text>
+<text class="muted" x="584.0" y="139.0" font-size="9.5" text-anchor="middle" font-weight="normal">25%</text>
+<rect class="t5" x="615.9" y="100.0" width="61.7" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="615.9" y1="100.0" x2="615.9" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t5" x="646.7" y="160.0" font-size="10.5" text-anchor="middle" font-weight="600">Pr-144</text>
+<text class="muted" x="646.7" y="173.0" font-size="9.5" text-anchor="middle" font-weight="normal">32%</text>
+<rect class="t6" x="677.6" y="100.0" width="24.3" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="677.6" y1="100.0" x2="677.6" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t6" x="689.8" y="194.0" font-size="10.5" text-anchor="middle" font-weight="600">Pm-147</text>
+<text class="muted" x="689.8" y="207.0" font-size="9.5" text-anchor="middle" font-weight="normal">20%</text>
+<rect class="t7" x="701.9" y="100.0" width="118.1" height="120.0" rx="2" fill-opacity="0.2" stroke-width="0"/>
+<line class="axis" x1="701.9" y1="100.0" x2="701.9" y2="220.0" stroke-width="0.9" stroke-dasharray="2 4"/>
+<text class="t7" x="761.0" y="126.0" font-size="10.5" text-anchor="middle" font-weight="600">Cs-137</text>
+<text class="muted" x="761.0" y="139.0" font-size="9.5" text-anchor="middle" font-weight="normal">26%</text>
+<rect class="box" x="74.0" y="100.0" width="746.0" height="120.0" rx="2" fill-opacity="0" stroke-width="1.2"/>
+<line class="axis" x1="74.0" y1="220.0" x2="820.0" y2="220.0" stroke-width="1.4"/>
+<line class="axis" x1="74.0" y1="100.0" x2="74.0" y2="220.0" stroke-width="1.4"/>
+<text class="ink" x="74.0" y="26.0" font-size="13" text-anchor="start" font-weight="600">Who leads the activity, and until when</text>
+<text class="muted" x="74.0" y="44.0" font-size="11.5" text-anchor="start" font-weight="normal">`nusift forecast` — 20 kt U-235 thermal fission, 1 minute to 100 years</text>
+<text class="muted" x="74.0" y="252.0" font-size="11" text-anchor="start" font-weight="normal">time after fission →</text>
+<text class="ink" x="74.0" y="280.0" font-size="12" text-anchor="start" font-weight="normal">16 leadership changes across the window, each with the share the leader holds at its peak.</text>
+<text class="muted" x="74.0" y="298.0" font-size="11.5" text-anchor="start" font-weight="normal">A boundary is a located crossing rather than a sample time: two contributors' curves cross somewhere between two grid points,</text>
+<text class="muted" x="74.0" y="316.0" font-size="11.5" text-anchor="start" font-weight="normal">and the forecast reports where, not which sample happened to be nearest. The same machinery locates every event in `when`,</text>
+<text class="muted" x="74.0" y="334.0" font-size="11.5" text-anchor="start" font-weight="normal">so a dominance boundary and a threshold crossing cannot disagree about the same instant.</text>
+</svg>

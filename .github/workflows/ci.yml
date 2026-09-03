@@ -229,6 +229,25 @@ jobs:
           git diff --exit-code -- docs/validation.md docs/figures/ \
             || (echo "::error::validation report is stale; run validation/make_report.py and commit the result" && exit 1)
 
+      # The capability figures in docs/scenarios.md get the same treatment, and can: they are
+      # drawn from CLI output committed under docs/figures/data/, so this step needs neither a
+      # built CLI nor a staged store. Regenerating the DATA is a separate, deliberate act --
+      # docs/figures/data/make_data.sh -- because it needs both.
+      #
+      # `git status --porcelain` rather than `git diff`, and the difference is the whole point:
+      # diff sees only tracked files that changed. It is blind to a figure the generator writes
+      # that nobody committed, and blind to a committed figure the generator has stopped writing.
+      # Both are real drift between the script and the tree, and both would have passed silently.
+      - name: The scenario figures must match what is committed
+        run: |
+          python docs/figures/make_scenario_figures.py
+          drift="$(git status --porcelain -- docs/figures/)"
+          if [ -n "$drift" ]; then
+            echo "$drift"
+            echo "::error::scenario figures drifted from the committed tree (changed, added, or no longer generated); run docs/figures/make_scenario_figures.py and commit the result"
+            exit 1
+          fi
+
   # The STAGING configuration -- the second of the two build configurations, and the only one
   # that touches ENDFtk. Slow, because it compiles ENDFtk, spdlog, and range-v3 from source,
   # but it is the only thing that verifies the staging tool at all: nothing in the runtime

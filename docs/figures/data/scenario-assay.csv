@@ -1,0 +1,11 @@
+# Three drums assayed on three dates, each with the counting uncertainty the laboratory
+# reported. Drawn from docs/scenarios.md; the sigmas are illustrative and the point is their
+# RELATIVE size, which is what decides where measurement effort should go.
+nuclide, quantity, unit, uncertainty, assayed
+Cs-137,  4.1e12,   Bq,   3%,          2021-06-14
+Co-60,   2.2e11,   Bq,   2%,          2021-06-14
+Sr-90,   1.8e12,   Bq,   18%,         2022-02-03
+Eu-154,  6.0e10,   Bq,   9%,          2022-02-03
+Am-241,  4.5e9,    Bq,   25%,         2023-09-20
+Pu-239,  1.1e9,    Bq,   30%,         2023-09-20
+Pu-240,  8.0e8,   Bq,   30%,         2023-09-20

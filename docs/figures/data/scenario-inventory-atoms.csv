@@ -1,0 +1,12 @@
+# nusift inventory
+# source: examples/contaminated_component.csv
+nuclide,quantity,unit
+Co-60,5.279646953254122e+19,atoms
+Sr-90,2.3593516440172089e+21,atoms
+Y-90,5.98314487357471e+17,atoms
+Cs-137,5.614876276140915e+21,atoms
+Ba-137m,861531312177580.5,atoms
+Eu-154,2.349517455563188e+19,atoms
+Pu-239,1.2074483219045844e+21,atoms
+Pu-240,2.389668524168152e+20,atoms
+Am-241,8.862922871643578e+19,atoms
