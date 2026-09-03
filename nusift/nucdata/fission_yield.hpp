@@ -29,6 +29,13 @@ namespace nusift {
 struct FissionProduct {
   Zai nuclide;
   double yield = 0.0;  // atoms produced per fission
+
+  // The evaluation's 1-sigma on that yield, ABSOLUTE and in the same unit; <= 0 means the
+  // evaluation states none, which is not the same as stating zero. ENDF/B-VIII.1 carries one
+  // for 63126 of 73264 staged yields. It rides on the product rather than in a parallel array
+  // because the two are never wanted apart: a yield without its sigma cannot enter an error
+  // budget, and a sigma without its yield has nothing to be a fraction of.
+  double yieldUncertainty = 0.0;
 };
 
 struct FissionYieldSet {

@@ -27,6 +27,7 @@
 #include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
 #include "nusift/triage/uncertainty.hpp"
+#include "nusift/triage/yield_uncertainty.hpp"
 
 namespace nusift {
 
@@ -180,6 +181,17 @@ void writeDecaySensitivities(std::ostream& out, const DecaySensitivities& sensit
 // different answers, and only the first one tells anybody what to go and do.
 void writeUncertainty(std::ostream& out, const ResponseUncertainty& uncertainty,
                       const ReportContext& context, ReportFormat format);
+
+// Render the error bar the EVALUATED yields put on a response, with and without the imported
+// correlation.
+//
+// The two figures lead together, because neither is the answer on its own. The diagonal one is
+// what every treatment before this reported; the correlated one is what the published matrix
+// says it should have been; and the ratio between them is the only reason to have imported
+// anything. The provenance line under them is not decoration -- a correlation built for one
+// evaluation and paired with another's sigmas is a declared assumption, and it is declared here.
+void writeYieldUncertainty(std::ostream& out, const YieldUncertainty& uncertainty,
+                           const ReportContext& context, ReportFormat format);
 
 // Render a task plan: what each leg costs, and where a budget runs out.
 //

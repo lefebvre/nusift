@@ -72,6 +72,11 @@ nusift sensitivity -i inventory.csv --at 30d --metric exposure --units Sv/h
 # measurement is it resting on? (exact: R is linear in the seed)
 nusift uncertainty -i assay.csv --at 30d --metric exposure --units Sv/h
 
+# And for a fission source, the same question about the EVALUATED yields -- with the
+# one correlation no evaluation publishes, imported (data/fycom/fetch_fycom.sh)
+nusift uncertainty --seed-fission U-235 --energy thermal --fissions 1e20 --at 30d \
+        --yield-covariance data/fycom/ENDF/U235T_corr.csv
+
 # What does the job actually cost, leg by leg -- and where does the budget run out?
 nusift plan -i inventory.csv --at 30d --metric exposure --units Sv --budget 2e-3 \
         --leg "approach,3m,4" --leg "valve work,20m,0.8" --leg "break:10m" \

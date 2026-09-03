@@ -132,8 +132,12 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
     set.parent = Zai::fromKey(a.nfyParentKey[s]);
     set.energyEv = a.nfyEnergyEv[s];
     for (int p = a.nfySetOffset[s]; p < a.nfySetOffset[s + 1]; ++p) {
+      // The uncertainty column is optional wholesale -- a store staged before uncertainties
+      // were carried has none at all -- so it is indexed only once it is known to be there.
+      const double sigma =
+          a.nfyProductYieldUncertainty.empty() ? 0.0 : a.nfyProductYieldUncertainty[p];
       set.products.push_back(
-          FissionProduct{Zai::fromKey(a.nfyProductKey[p]), a.nfyProductYield[p]});
+          FissionProduct{Zai::fromKey(a.nfyProductKey[p]), a.nfyProductYield[p], sigma});
     }
     impl.yields.add(std::move(set));
   }

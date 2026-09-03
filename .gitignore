@@ -28,6 +28,11 @@ wheelhouse/
 # Nuclear data. Raw ENDF tapes are large and regenerable via
 # data/endf/fetch_endf.sh; the staged store is committed (see the negation).
 data/endf/B-VIII.1/
+# The imported yield correlations are the same kind of thing: fetched by
+# data/fycom/fetch_fycom.sh, tens of megabytes each, and released by their author for use with
+# citation rather than for redistribution from here.
+data/fycom/ENDF/
+data/fycom/JEFF/
 *.h5
 !data/nusift_b8.1.h5
 !tests/data/*.h5

@@ -50,6 +50,7 @@
 #include "nusift/triage/task_plan.hpp"
 #include "nusift/triage/triage_set.hpp"
 #include "nusift/triage/uncertainty.hpp"
+#include "nusift/triage/yield_uncertainty.hpp"
 #include "nusift/version.hpp"
 
 namespace nb = nanobind;
@@ -1518,6 +1519,167 @@ NB_MODULE(_core, m) {
       "dominates it. Takes ASSAYS rather than an inventory -- read them with read_assays() -- "
       "because a sigma cannot ride on a reconciled inventory: a diagonal covariance at assay is "
       "not diagonal at the epoch. Costs one adjoint per assay.");
+
+  // --- the error bar the EVALUATED yields put on a fission source ------------
+  //
+  // The other half of the same question, and the only one that needs data no evaluation
+  // publishes. A fission seed is n0 = N_f Y, so the propagation is the one above with a
+  // different Sigma -- and the off-diagonal of that Sigma is imported rather than assumed.
+  nb::class_<YieldCorrelation>(m, "YieldCorrelation",
+                               "A correlation between independent fission yields, read from a "
+                               "published FYCoM matrix.")
+      .def_static("read", &YieldCorrelation::read, "path"_a, "library"_a = "ENDF/B-VIII.0",
+                  "Read a FYCoM CORRELATION csv (a *_corr.csv). Only the correlation is taken; "
+                  "the variances come from the store's own staged sigma_Y, which is what the "
+                  "paper's own 'normalized' covariance does. `library` is the evaluation the "
+                  "matrix was BUILT FOR, carried into the answer so the pairing with the "
+                  "store's edition is declared rather than assumed.")
+      .def_prop_ro("size", &YieldCorrelation::size)
+      .def_prop_ro("system", [](const YieldCorrelation& c) { return c.provenance().system; })
+      .def_prop_ro("library", [](const YieldCorrelation& c) { return c.provenance().library; })
+      .def_prop_ro("citation", [](const YieldCorrelation& c) { return c.provenance().citation; })
+      .def("__len__", &YieldCorrelation::size)
+      .def("__repr__", [](const YieldCorrelation& c) {
+        return "<YieldCorrelation " + c.provenance().system + " " + std::to_string(c.size()) +
+               " products from " + c.provenance().library + ">";
+      });
+
+  nb::class_<YieldContribution>(m, "YieldContribution",
+                                "One fission product's yield, and what its uncertainty does.")
+      .def_ro("label", &YieldContribution::label)
+      .def_ro("yield_per_fission", &YieldContribution::yield)
+      .def_prop_ro(
+          "sigma_yield",
+          [](const YieldContribution& p) -> nb::object {
+            // None rather than 0.0, as the assay side does it: an evaluation stating no
+            // uncertainty and one stating zero are different claims.
+            return p.sigmaYield > 0.0 ? nb::cast(p.sigmaYield) : nb::none();
+          },
+          "Absolute 1-sigma on the yield, or None when the evaluation states none.")
+      .def_ro("seed_atoms", &YieldContribution::seedAtoms)
+      .def_ro("importance", &YieldContribution::importance)
+      .def_ro("share", &YieldContribution::share)
+      .def_ro("sigma_contribution", &YieldContribution::sigmaContribution)
+      .def_ro("variance_fraction", &YieldContribution::varianceFraction,
+              "Share of the DIAGONAL variance -- the only per-product share there is, since "
+              "half of every off-diagonal term belongs to each of two products.")
+      .def_ro("correlated", &YieldContribution::correlated,
+              "Whether the imported matrix carries this product.")
+      .def("__repr__", [](const YieldContribution& p) {
+        return "<YieldContribution " + p.label + " " + shortestRoundTrip(p.varianceFraction) +
+               " of variance>";
+      });
+
+  nb::class_<YieldUncertainty>(m, "YieldUncertainty",
+                               "The error bar the evaluated yields put on a response.")
+      .def_prop_ro("unit", [](const YieldUncertainty& u) { return std::string(unitName(u.unit)); })
+      .def_ro("time", &YieldUncertainty::time)
+      .def_ro("fissions", &YieldUncertainty::fissions)
+      .def_ro("response", &YieldUncertainty::response)
+      .def_ro("sigma_diagonal", &YieldUncertainty::sigmaDiagonal,
+              "Over every seeded product stating a sigma: what a diagonal treatment reports.")
+      .def_ro("relative_diagonal", &YieldUncertainty::relativeDiagonal)
+      .def_ro("sigma_diagonal_matched", &YieldUncertainty::sigmaDiagonalMatched,
+              "The same sum restricted to products the matrix carries. THIS is what the "
+              "correlated figure should be compared against: the two run over one set of "
+              "products, so their whole difference is the off-diagonal.")
+      .def_ro("relative_diagonal_matched", &YieldUncertainty::relativeDiagonalMatched)
+      .def_prop_ro(
+          "sigma_correlated",
+          [](const YieldUncertainty& u) -> nb::object {
+            // None when the contraction came out negative. The published matrices are not
+            // positive semi-definite, so that is a real outcome and a square root would be an
+            // invented number.
+            return u.varianceNegative ? nb::none() : nb::cast(u.sigmaCorrelated);
+          },
+          "1-sigma with the imported correlation, or None when the contraction was negative.")
+      .def_prop_ro("relative_correlated",
+                   [](const YieldUncertainty& u) -> nb::object {
+                     return u.varianceNegative ? nb::none() : nb::cast(u.relativeCorrelated);
+                   })
+      .def_ro("variance_correlated", &YieldUncertainty::varianceCorrelated,
+              "The raw quadratic form, SIGNED. Negative is possible and is not an error.")
+      .def_ro("variance_negative", &YieldUncertainty::varianceNegative)
+      .def_ro("variance_ratio", &YieldUncertainty::varianceRatio,
+              "Correlated variance over the matched diagonal one: what the correlation costs.")
+      .def_ro("smallest_eigenvalue", &YieldUncertainty::smallestEigenvalue,
+              "Of the correlation block actually contracted. Negative means the published "
+              "matrix is indefinite on these products, which is expected and is not repaired.")
+      .def_ro("covered_fraction", &YieldUncertainty::coveredFraction,
+              "Share of the response sitting on products the matrix carries.")
+      .def_ro("sigma_covered_fraction", &YieldUncertainty::sigmaCoveredFraction,
+              "Share of the response sitting on products whose yield states an uncertainty.")
+      .def_ro("products_matched", &YieldUncertainty::productsMatched)
+      .def_ro("products_unmatched", &YieldUncertainty::productsUnmatched)
+      .def_ro("products_with_sigma", &YieldUncertainty::productsWithSigma)
+      .def_ro("products_without_sigma", &YieldUncertainty::productsWithoutSigma)
+      .def_ro("products_unused_in_matrix", &YieldUncertainty::productsUnusedInMatrix)
+      .def_ro("store_library", &YieldUncertainty::storeLibrary)
+      .def_prop_ro("correlation_library",
+                   [](const YieldUncertainty& u) { return u.provenance.library; })
+      .def_prop_ro("correlation_system",
+                   [](const YieldUncertainty& u) { return u.provenance.system; })
+      .def_ro("products", &YieldUncertainty::products,
+              "Ranked by diagonal variance fraction, largest first.")
+      .def("__repr__", [](const YieldUncertainty& u) {
+        return "<YieldUncertainty " + shortestRoundTrip(u.response) + " " +
+               std::string(unitName(u.unit)) + ", diagonal " +
+               shortestRoundTrip(u.relativeDiagonalMatched) + " correlated " +
+               (u.varianceNegative ? std::string("indefinite")
+                                   : shortestRoundTrip(u.relativeCorrelated)) +
+               ">";
+      });
+
+  m.def(
+      "yield_uncertainty",
+      [](const NuclearData& data, const YieldCorrelation& correlation, const std::string& fissile,
+         const nb::object& at, const std::string& energy, std::optional<double> fissions,
+         std::optional<double> yield_kt, std::optional<double> energy_j, double mev_per_fission,
+         const std::string& metric, const std::string& units,
+         const exposure::PointSourceGeometry& geometry, const ResolvedPack* pack, int threads,
+         bool prune, int cram_order) {
+        seed::FissionSeed fissionSeed;
+        fissionSeed.fissile = requireNuclideName(fissile);
+        if (!parseIncidentEnergy(energy, fissionSeed.incidentEnergyEv)) {
+          throw InputError("energy: \"" + energy + "\" is not an incident energy");
+        }
+        fissionSeed.meVPerFission = mev_per_fission;
+        const int given = (fissions ? 1 : 0) + (yield_kt ? 1 : 0) + (energy_j ? 1 : 0);
+        if (given != 1) {
+          throw InputError(
+              "give exactly one of fissions=, yield_kt=, or energy_j= to size the source");
+        }
+        if (fissions) {
+          fissionSeed.fissions = *fissions;
+        } else if (yield_kt) {
+          fissionSeed.fissions = seed::fissionsFromKt(*yield_kt, mev_per_fission);
+        } else {
+          fissionSeed.fissions = seed::fissionsFromEnergyJ(*energy_j, mev_per_fission);
+        }
+
+        ResponseSpec spec;
+        spec.metric = pack != nullptr ? Metric::Pack : metricFrom(metric);
+        spec.aggregate = Aggregate::Nuclide;
+        spec.unit = requireUnit(units, spec.metric, Domain::Instant);
+        spec.geometry = geometry;
+        spec.pack = pack;
+        DecayOptions options;
+        options.threads = threads;
+        options.prune = prune;
+        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        const double time = timeFrom(at);
+        const nb::gil_scoped_release release;
+        return yieldUncertainty(data, fissionSeed, correlation, time, spec, options);
+      },
+      "data"_a, "correlation"_a, "fissile"_a, "at"_a, "energy"_a = "thermal",
+      "fissions"_a = nb::none(), "yield_kt"_a = nb::none(), "energy_j"_a = nb::none(),
+      "mev_per_fission"_a = seed::kMeVPerFissionExplosiveYield, "metric"_a = "activity",
+      "units"_a = "", "geometry"_a = exposure::PointSourceGeometry{}, "pack"_a = nb::none(),
+      "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
+      "The error bar the EVALUATED fission yields put on the response at `at`, with and without "
+      "the imported correlation. Costs one adjoint solve plus one dense contraction. The number "
+      "of fissions is taken as exact; an uncertainty on the source term scales the response and "
+      "this sigma together and is the caller's to carry.");
 
   // --- a job with a shape ----------------------------------------------------
   //

@@ -17,6 +17,7 @@ add_library(nusift
   engine/sensitivity.cpp
   nucdata/store_locator.cpp
   nucdata/fission_yield.cpp
+  nucdata/yield_covariance.cpp
   seed/seed_fission.cpp
   exposure/air_coefficients.cpp
   exposure/dose_coefficients.cpp
@@ -32,6 +33,7 @@ add_library(nusift
   triage/triage_set.cpp
   triage/task_plan.cpp
   triage/uncertainty.cpp
+  triage/yield_uncertainty.cpp
   io/time_spec.cpp
   io/inventory_io.cpp
   io/report.cpp
@@ -94,6 +96,7 @@ if(NUSIFT_INSTALL)
     nucdata/photon_lines.hpp
     nucdata/store_arrays.hpp
     nucdata/store_locator.hpp
+    nucdata/yield_covariance.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/nucdata)
 
   install(FILES
@@ -123,6 +126,7 @@ if(NUSIFT_INSTALL)
     triage/task_plan.hpp
     triage/triage_set.hpp
     triage/uncertainty.hpp
+    triage/yield_uncertainty.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nusift/triage)
 
   install(FILES
