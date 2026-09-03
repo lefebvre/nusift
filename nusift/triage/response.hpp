@@ -339,7 +339,7 @@ std::vector<double> weightDecayDerivatives(const NuclearData& data, const Respon
 
 // The caveats an exposure figure carries at ONE instant: how much of the emitted photon energy
 // sits in spectra NuSIFT does not model, how thick the air path was left uncorrected, and which
-// emitters carry the unmodelled continuum.
+// emitters carry the unmodeled continuum.
 //
 // Broken out of buildResponse because a path that reaches the same response a different way --
 // the adjoint attribution, which never assembles a table -- has to report the same caveats. An
@@ -354,7 +354,7 @@ struct ExposureCaveats {
   double meanOpticalDepth = 0.0;
   // Emitter names, sorted, for the nuclides flagged kFlagUnmodeledContinuum. Scanned over the
   // whole index space rather than over ranked rows, for the reason the CLI's contextFor()
-  // gives: a nuclide whose photon output is ENTIRELY continuum has no modelled exposure, so it
+  // gives: a nuclide whose photon output is ENTIRELY continuum has no modeled exposure, so it
   // never places in a ranking and would carry its warning off the page with it.
   std::vector<std::string> unmodeledContinuum;
 };

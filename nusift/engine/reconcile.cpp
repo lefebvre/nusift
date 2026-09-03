@@ -81,7 +81,7 @@ Reconciliation reconcile(const NuclearData& data, std::span<const AssayGroup> gr
     // Row uncertainties are DROPPED rather than carried, here and in the branch below. A
     // diagonal covariance at assay becomes D Sigma D^T at the epoch and D is not diagonal, so a
     // per-row sigma on a merged inventory would be a lie -- addKey's default of zero is the
-    // right behaviour and is named here so it reads as a decision rather than an omission.
+    // right behavior and is named here so it reads as a decision rather than an omission.
     // Propagating assay uncertainty is triage/uncertainty.hpp's job, and it reaches back to the
     // assays instead of forward from the merge.
     if (contribution.carriedSeconds == 0.0) {

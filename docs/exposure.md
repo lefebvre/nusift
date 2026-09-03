@@ -158,7 +158,7 @@ self-attenuation, no air scatter" ([Peplow 2020](https://doi.org/10.1097/HP.0000
 
 ## 5. Photons are attributed to the nuclide that emits them
 
-This is a modelling choice with visible consequences. NuSIFT attaches each line to its actual
+This is a modeling choice with visible consequences. NuSIFT attaches each line to its actual
 emitter, so a Cs-137 source's exposure is attributed to **Ba-137m**, not to Cs-137:
 
 | Nuclide | Discrete lines | Strongest |
@@ -248,15 +248,15 @@ integral weights atom-**seconds**, so an accrued exposure has a spurious factor 
 back out at the same point as the unit conversion and nowhere else. See
 [Ranking §2](ranking.md#2-weights-are-the-metric-definition).
 
-## 7. What is not modelled, and what it costs
+## 7. What is not modeled, and what it costs
 
 Each of these would **raise** a reported exposure, so every NuSIFT exposure is a lower bound in
 the direction of all four:
 
 **Scattered photons.** The default buildup factor is 1.0 — uncollided fluence only. For a bare
-source at a metre in air this is a percent-level correction; at range it is not. Buildup is a
+source at a meter in air this is a percent-level correction; at range it is not. Buildup is a
 function of the optical depth of the path, μ_air(E)·d, and every exposure table carries that
-depth averaged over the lines by the exposure each delivers. At a metre it is a few hundredths
+depth averaged over the lines by the exposure each delivers. At a meter it is a few hundredths
 of a mean free path; at 100 m a 662 keV photon sees 0.9 and a 100 keV photon 1.9. Past about
 half a mean free path the scattered photons are tens of percent of the uncollided value, and
 beyond one they exceed it, so a report whose path is that thick and whose buildup was left at
@@ -286,7 +286,7 @@ missing is measured per nuclide at staging time and reported alongside the ranki
 ```
 
 That percentage is **activity-weighted**, not a count of flagged nuclides — a nuclide with a large
-unmodelled fraction but negligible activity contributes negligibly to it, which is the whole point
+unmodeled fraction but negligible activity contributes negligibly to it, which is the whole point
 of reporting a magnitude rather than a tally. It is a fraction of emitted *energy*, and exposure
 per unit energy is not flat: μ_en/ρ climbs steeply below 100 keV, so a continuum softer than the
 lines costs more exposure than its share of the energy. The footnote therefore says "of that

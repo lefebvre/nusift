@@ -93,7 +93,7 @@ TEST(IncidentEnergy, ParsesNamedEnergiesAndBareValues) {
 
 // Every fission puts its yield's worth of atoms into the inventory, so the total is the
 // fission count times the summed yield. Checking the total rather than individual products is
-// what catches a normalisation error, which would scale everything equally.
+// what catches a normalization error, which would scale everything equally.
 TEST(SeedFission, TotalAtomsAreFissionsTimesTotalYield) {
   const NuclearData data = chainWithYields();
   seed::FissionSeed fissionSeed;

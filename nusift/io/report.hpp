@@ -152,9 +152,9 @@ void writeStayTimes(std::ostream& out, const StayReport& report, const ReportCon
 //
 // The caveat this report exists to carry is not the arithmetic, which is a decay solve like any
 // other. It is that reconciliation propagates what a sheet MEASURED and cannot recover what it
-// did not: a daughter that grew in during the carry is modelled and appears, while a daughter
+// did not: a daughter that grew in during the carry is modeled and appears, while a daughter
 // that was present at an assay and simply not written down is gone for good. So a merged
-// inventory mixes measured and modelled amounts, and which of the two a given row is depends on
+// inventory mixes measured and modeled amounts, and which of the two a given row is depends on
 // how far its assay was carried. No number in the table says that, so the report does.
 void writeReconciliation(std::ostream& out, const Reconciliation& reconciled,
                          const NuclearData& data, const ReportContext& context,

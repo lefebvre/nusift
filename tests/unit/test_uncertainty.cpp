@@ -91,7 +91,7 @@ TEST(Uncertainty, IsExactRatherThanFirstOrder) {
   }
 }
 
-// The number a reader is meant to act on. Variance fractions are (g_i sigma_i)^2 normalised, so
+// The number a reader is meant to act on. Variance fractions are (g_i sigma_i)^2 normalized, so
 // a row with a small share of the answer can dominate its error bar -- which is the whole reason
 // the table is ordered by this column and not by share.
 TEST(Uncertainty, RanksByVarianceAndNotByShare) {

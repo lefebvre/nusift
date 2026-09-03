@@ -84,7 +84,7 @@ TEST(StoreChain, Strontium90AndYttrium90FollowBateman) {
 
 // Secular equilibrium: with a parent 4000 times longer-lived than its daughter, the daughter's
 // activity climbs to the parent's and stays there. This is the textbook statement, and it is
-// the behaviour a Sr-90/Y-90 source actually has.
+// the behavior a Sr-90/Y-90 source actually has.
 TEST(StoreChain, Yttrium90ReachesSecularEquilibriumWithItsParent) {
   const std::vector<double> times = {30.0 * 86400.0};
   const DecayResult result = decaySingle("Sr-90", times);

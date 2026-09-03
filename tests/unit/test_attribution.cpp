@@ -38,7 +38,7 @@ Zai terminator() {
   return Zai{52, 100, 0};
 }
 
-// The same chain with photon lines on the daughter and an unmodelled continuum beside them, so
+// The same chain with photon lines on the daughter and an unmodeled continuum beside them, so
 // an exposure metric has something to answer with AND something to warn about.
 NuclearData emittingChain() {
   StoreArrays s = synth::linearChain({kL0, kL1});

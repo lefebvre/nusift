@@ -222,7 +222,7 @@ it.
 
 ENDF carries **no covariance for decay data at all** — the tapes hold MF1 and MF8 and nothing
 else, and the fission-yield covariances that exist are a separate published product rather than
-part of any evaluation. So the half-life figure is a diagonal one and is labelled as such.
+part of any evaluation. So the half-life figure is a diagonal one and is labeled as such.
 
 The **branchings are different**, and this is where the correlation can be had for free. A
 nuclide's modes sum to one, which is a fact about the data model rather than an evaluated

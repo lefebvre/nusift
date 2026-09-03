@@ -88,7 +88,7 @@ std::int64_t keyFromZa(int za, int liso) {
 // weight ratio, the average electromagnetic decay energy, and the discrete photon lines.
 //
 // Intensities are made ABSOLUTE here (FD * RI) so that everything downstream is a plain sum
-// over lines with no normalisation left to remember.
+// over lines with no normalization left to remember.
 void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extras) {
   using namespace njoy::ENDFtk;
 
@@ -151,10 +151,10 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
       if (styp != 0 && styp != 9) {
         continue;
       }
-      const double normalisation = static_cast<double>(spectrum.discreteNormalisationFactor()[0]);
+      const double normalization = static_cast<double>(spectrum.discreteNormalisationFactor()[0]);
       for (const auto& line : spectrum.discreteSpectra()) {
         const double energyEv = static_cast<double>(line.discreteEnergy()[0]);
-        const double intensity = normalisation * static_cast<double>(line.relativeIntensity()[0]);
+        const double intensity = normalization * static_cast<double>(line.relativeIntensity()[0]);
         if (energyEv > 0.0 && intensity > 0.0) {
           extra.lineEnergyEv.push_back(energyEv);
           extra.lineIntensity.push_back(intensity);
@@ -198,7 +198,7 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
     // often bremsstrahlung. Taken as the shortfall against the evaluated average rather than
     // by integrating the continuum record, which makes it robust to how the evaluation chose
     // to represent it and captures anything else the lines miss. The consumer needs to know
-    // only that this much photon energy exists and is not modelled.
+    // only that this much photon energy exists and is not modeled.
     //
     // Clamped at zero: the average and the line sum come from different parts of an
     // evaluation and disagree by a few percent, so a small negative shortfall means the lines

@@ -73,7 +73,7 @@
 <text class="muted" x="746.0" y="253.0" font-size="10.5" text-anchor="start" font-weight="normal">1.73e-8 Sv/h   0.0%</text>
 <text class="ink" x="74.0" y="288.0" font-size="12" text-anchor="start" font-weight="normal">Sr-90 and Y-90 carry more activity than anything else in this object and are nowhere in this list.</text>
 <text class="muted" x="74.0" y="308.0" font-size="11.5" text-anchor="start" font-weight="normal">They are beta emitters: a curie of Sr-90 and a curie of Cs-137 are the same number of decays per second and nothing like</text>
-<text class="muted" x="74.0" y="324.0" font-size="11.5" text-anchor="start" font-weight="normal">the same hazard at two metres. Which is the point of having metrics at all — the inventory did not change, the question did.</text>
+<text class="muted" x="74.0" y="324.0" font-size="11.5" text-anchor="start" font-weight="normal">the same hazard at two meters. Which is the point of having metrics at all — the inventory did not change, the question did.</text>
 <text class="muted" x="74.0" y="346.0" font-size="11.5" text-anchor="start" font-weight="normal">A point source at 2 m is the model here, and it fits: the object is compact. The same kernel pointed at a contaminated field</text>
 <text class="muted" x="74.0" y="362.0" font-size="11.5" text-anchor="start" font-weight="normal">would not be, which is why the fission-debris figures above are all in quantities that need no geometry.</text>
 </svg>

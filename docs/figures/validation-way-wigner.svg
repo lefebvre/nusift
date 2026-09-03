@@ -73,5 +73,5 @@
 <text class="ink" x="58.0" y="366.0" font-size="12" text-anchor="start" font-weight="normal">Fitted log-log slope -1.121, inside the accepted [-1.35, -1.05].</text>
 <text class="muted" x="58.0" y="388.0" font-size="11.5" text-anchor="start" font-weight="normal">Nothing in NuSIFT was fitted to this rule: the exponent falls out of the yield set, the chain topology, the solve, and the</text>
 <text class="muted" x="58.0" y="406.0" font-size="11.5" text-anchor="start" font-weight="normal">activity weights together. Local slope by decade — 1 h - 10 h -1.10, 10 h - 100 h -1.22, 100 h - 30 d -1.07. The rule is a fit to</text>
-<text class="muted" x="58.0" y="424.0" font-size="11.5" text-anchor="start" font-weight="normal">gross behaviour rather than an exact exponent, which is why the local slope moves across the window and the band admits that.</text>
+<text class="muted" x="58.0" y="424.0" font-size="11.5" text-anchor="start" font-weight="normal">gross behavior rather than an exact exponent, which is why the local slope moves across the window and the band admits that.</text>
 </svg>

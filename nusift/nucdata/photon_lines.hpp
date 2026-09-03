@@ -35,7 +35,7 @@ enum class SpectrumType : int {
 
 // One discrete photon line: energy, and absolute intensity in photons per decay.
 //
-// `intensity` is ABSOLUTE (FD * RI in ENDF terms -- the discrete normalisation factor times
+// `intensity` is ABSOLUTE (FD * RI in ENDF terms -- the discrete normalization factor times
 // the relative intensity), not relative to the strongest line. Storing it absolute is what
 // lets the exposure sum be written as a plain dot product against the line array.
 struct GammaLine {
@@ -63,7 +63,7 @@ inline double discretePhotonEnergyEv(LineSpectrum lines) {
 // the photon-strength metric, which asks how many photons a decay emits and says nothing about
 // their energy. Like the energy sum it covers the DISCRETE lines only: photons in a
 // continuum NuSIFT does not model are not counted, which is exactly the understatement the
-// unmodelled-continuum flag exists to report.
+// unmodeled-continuum flag exists to report.
 inline double totalPhotonYield(LineSpectrum lines) {
   double total = 0.0;
   for (const GammaLine& line : lines) {

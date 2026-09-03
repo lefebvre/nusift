@@ -1763,7 +1763,7 @@ void writeTaskPlanText(std::ostream& out, const TaskPlan& plan, const ReportCont
   }
   out << '\n';
 
-  // "for 3 m" beside "at 4 m" is three minutes beside four metres, and the two columns cannot
+  // "for 3 m" beside "at 4 m" is three minutes beside four meters, and the two columns cannot
   // be told apart by eye. The distance is a bare number under a unit-bearing header instead.
   out << "   leg                 starts   duration   dist/m     occ           "
       << unitName(plan.unit) << "     frac       per h\n";
@@ -2023,8 +2023,8 @@ namespace {
 // inventory that no column in it can show.
 constexpr const char* kCarryNote =
     "Reconciliation propagates what a sheet MEASURED. A daughter that grew in during the carry "
-    "is modelled and appears here; a daughter that was present at an assay and not written down "
-    "is not recovered by anything. So the merged rows mix measured and modelled amounts, and "
+    "is modeled and appears here; a daughter that was present at an assay and not written down "
+    "is not recovered by anything. So the merged rows mix measured and modeled amounts, and "
     "which a row is depends on how far its assay was carried.";
 
 void writeReconciliationText(std::ostream& out, const Reconciliation& reconciled,

@@ -181,7 +181,7 @@ TEST(PointSource, GammaConstantIsTheVacuumRateAtOneMetre) {
 }
 
 // Air attenuation must reduce the rate, and more so with distance and density -- but only
-// slightly at a metre, which is why published constants ignore it.
+// slightly at a meter, which is why published constants ignore it.
 TEST(PointSource, AirAttenuationReducesTheRateAndScalesWithPathAndDensity) {
   const std::vector<GammaLine> lines = {{661657.0, 0.9, SpectrumType::Gamma}};
   PointSourceGeometry vacuum;
@@ -191,7 +191,7 @@ TEST(PointSource, AirAttenuationReducesTheRateAndScalesWithPathAndDensity) {
   EXPECT_LT(exposureRate(spanOf(lines), 1.0e9, air), exposureRate(spanOf(lines), 1.0e9, vacuum));
 
   // At 1 m of air the correction is well under a percent, so a vacuum constant is a good
-  // approximation there -- and at 100 m it is not, which is the whole point of modelling it.
+  // approximation there -- and at 100 m it is not, which is the whole point of modeling it.
   const double ratioAtOneMetre =
       exposureRate(spanOf(lines), 1.0e9, air) / exposureRate(spanOf(lines), 1.0e9, vacuum);
   EXPECT_GT(ratioAtOneMetre, 0.99);
@@ -317,7 +317,7 @@ TEST(PointSource, FluenceRateMatchesSpreadingAttenuationAndBuildup) {
 }
 
 // With attenuation off, a unit-intensity line at 1 m is exactly 1 / (4 pi) photons per
-// square metre per second per becquerel, and the inverse-square scaling is exact: there is
+// square meter per second per becquerel, and the inverse-square scaling is exact: there is
 // nowhere for an error in the geometric term to hide.
 TEST(PointSource, FluenceIsExactlyInverseSquareInVacuum) {
   const std::vector<GammaLine> lines = {{661657.0, 0.9, SpectrumType::Gamma}};

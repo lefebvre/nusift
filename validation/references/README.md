@@ -190,7 +190,7 @@ compilation than the protection quantities, which is consistent with some incons
 them.
 
 The independent check is against the other kernel already in the tree: H*(10) is designed to be
-a conservative estimate of effective dose for photons below about 10 MeV, and on a caesium field
+a conservative estimate of effective dose for photons below about 10 MeV, and on a cesium field
 this pack gives 10.99 Sv/h against ICRP 116's 9.25 Sv/h -- a ratio of 1.19, which is the
 published relationship at 662 keV between two curves transcribed from different publications by
 different routes.
@@ -259,7 +259,7 @@ that moves a nucleus off its chain. That is a real physical offset, not numerica
 sits +2.5% high because I-137 emits a delayed neutron in about 7% of its decays, and A = 85 sits
 −2.5% low because the light wing gains from the chain above it. The band accommodates that term.
 This is a consistency check on seeding and mass-chain aggregation rather than an independent
-measurement, and it is labelled as one.
+measurement, and it is labeled as one.
 
 **ICRP 116 ratios — ±3%.**
 This table used to check that a caveat was still true, and now checks an agreement. The sievert
@@ -277,7 +277,7 @@ effective dose by a factor of five for Am-241. Without that, agreement would sto
 the kernel does anything.
 
 **Way-Wigner — slope within [−1.35, −1.05].**
-An empirical fit to gross behaviour, quoted as good to roughly 25% over its validity window, not
+An empirical fit to gross behavior, quoted as good to roughly 25% over its validity window, not
 an exact exponent. The local slope genuinely moves across the window — measured between −1.07
 and −1.23 decade by decade — and the band admits that spread while still rejecting anything
 qualitatively wrong, such as a single exponential or a chain that never turns over.

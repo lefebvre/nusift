@@ -82,7 +82,7 @@ struct CommonOptions {
   std::string packPath;
   // The area, volume or mass a concentration pack's inventory is spread through. A bare number:
   // which unit it is in is the pack's to say, and the report prints it back so a volume given
-  // to a per-square-metre pack is visible rather than silently accepted.
+  // to a per-square-meter pack is visible rather than silently accepted.
   double packExtent = 0.0;
 
   std::string metric = "activity";
@@ -182,7 +182,7 @@ void addCommonOptions(CLI::App* app, CommonOptions& options, bool wantsTimes, bo
 
   // Exposure geometry. An exposure number is uninterpretable without the distance it was
   // computed at, so these are reported in the output header alongside the values.
-  app->add_option("--distance", options.distanceM, "Point-source distance in metres")
+  app->add_option("--distance", options.distanceM, "Point-source distance in meters")
       ->check(CLI::PositiveNumber);
   // Effective dose is defined for a body in a field, so how the body stands in it is half of
   // what a sievert means. Ignored by every unit that is not a sievert, which is why it sits
@@ -418,7 +418,7 @@ ReportContext contextFor(const NuclearData& data, const std::string& storePath,
   // Scanned over the whole response table, NOT over the ranked rows.
   //
   // This distinction is the difference between the warning working and not. A nuclide whose
-  // photon output is entirely continuum -- Y-90's bremsstrahlung, say -- has zero MODELLED
+  // photon output is entirely continuum -- Y-90's bremsstrahlung, say -- has zero MODELED
   // exposure, so it never places in an exposure ranking and would carry its warning off the
   // page with it. That is exactly the case the reader most needs to be told about: the
   // contributor is absent from the table precisely because the part NuSIFT cannot model is
@@ -637,7 +637,7 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
   spec.geometry = geometryFrom(options);
 
   // A context per interval. Each interval is solved separately over its own index space, so
-  // the set of contributors carrying unmodelled continuum is a property of that interval --
+  // the set of contributors carrying unmodeled continuum is a property of that interval --
   // building one context from the last table footnoted every ranking with the last interval's
   // emitters, which need not appear in the ranking they annotate.
   const std::string geometry = describeGeometry(options, spec.metric, spec.unit);
@@ -1083,7 +1083,7 @@ int runDataNuclide(const std::string& storePath, const std::vector<std::string>&
     std::printf("  avg EM energy    %.6g eV/decay\n", data.emEnergyEv(index));
     std::printf("  discrete lines   %zu  (%.6g eV/decay)\n", lines.size(), discrete);
     if (continuum > 0.0) {
-      std::printf("  continuum        %.6g eV/decay  (%.1f%% of photon energy, NOT modelled)\n",
+      std::printf("  continuum        %.6g eV/decay  (%.1f%% of photon energy, NOT modeled)\n",
                   continuum, data.unmodeledPhotonFraction(index) * 100.0);
     }
     if (!lines.empty()) {
@@ -1271,7 +1271,7 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
     }
     series = taskSeries(data, inventory, spec, times, taskSeconds, decayOptions, when.refine);
 
-    // The caveats a report carries -- which emitters have unmodelled photon continua -- belong
+    // The caveats a report carries -- which emitters have unmodeled photon continua -- belong
     // to the inventory and not to a particular window, so the first one speaks for all of them.
     std::vector<std::int64_t> keys;
     const std::vector<double> integral = intervalIntegral(
@@ -1599,7 +1599,7 @@ PlanLeg parseLeg(const std::string& text, const CommonOptions& options, bool isB
       throw std::invalid_argument("trailing");
     }
   } catch (const std::exception&) {
-    throw InputError("plan: \"" + fields[2] + "\" is not a distance in metres");
+    throw InputError("plan: \"" + fields[2] + "\" is not a distance in meters");
   }
   if (!(leg.geometry.distanceM > 0.0)) {
     throw InputError("plan: leg \"" + leg.name + "\" needs a positive distance");
@@ -1668,11 +1668,11 @@ int runPlan(const CommonOptions& options, const PlanOptions& planOptions, const 
   if (at != std::string::npos) {
     context.geometry.replace(at, std::string("point source at").size(),
                              "point source, distance per leg;");
-    const std::size_t metres = context.geometry.find(" m,", at);
-    if (metres != std::string::npos) {
+    const std::size_t meters = context.geometry.find(" m,", at);
+    if (meters != std::string::npos) {
       context.geometry.erase(
           at + std::string("point source, distance per leg;").size(),
-          metres + 3 - at - std::string("point source, distance per leg;").size());
+          meters + 3 - at - std::string("point source, distance per leg;").size());
     }
   }
 
@@ -1912,7 +1912,7 @@ int runStay(const CommonOptions& options, const StayOptions& stayOptions, const 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
   // A table is needed for the continuum footnote and nothing else, so it is built at the first
-  // start time: which emitters carry an unmodelled continuum is a property of the inventory,
+  // start time: which emitters carry an unmodeled continuum is a property of the inventory,
   // not of how long anyone stands next to it.
   const DecayResult result =
       decay(data, inventory, std::vector<double>{report.stays.front().startSeconds},

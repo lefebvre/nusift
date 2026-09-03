@@ -390,18 +390,18 @@ def figure_metrics(path):
     parts.append(text(right_x, 66, "by exposure at 1 m", "ink", 12.5, "middle", "600"))
     parts.append(text(right_x, 82, "R/h", "muted", 10.5, "middle"))
 
-    colour = {}
+    color = {}
     for i, r in enumerate(activity):
-        colour[r["contributor"]] = i % 8
+        color[r["contributor"]] = i % 8
     for r in exposure:
-        colour.setdefault(r["contributor"], len(colour) % 8)
+        color.setdefault(r["contributor"], len(color) % 8)
 
     def place(rows, x, anchor, dx):
         out = {}
         for i, r in enumerate(rows):
             y = top + i * row_h
             name = r["contributor"]
-            cls = f"t{colour[name] % 8}"
+            cls = f"t{color[name] % 8}"
             out[name] = y
             out_label = f"{name}   {float(r['fraction']) * 100:.1f}%"
             out.setdefault("_parts", []).append(text(x + dx, y + 4, out_label, cls, 12, anchor, "600"))
@@ -414,7 +414,7 @@ def figure_metrics(path):
     for name, y0 in la.items():
         if name in le:
             y1 = le[name]
-            cls = f"s{colour[name] % 8}"
+            cls = f"s{color[name] % 8}"
             x0, x1 = left_x + 58, right_x - 58
             parts.append(
                 f'<path class="{cls}" d="M {x0} {y0} C {(x0 + x1) / 2} {y0}, {(x0 + x1) / 2} {y1}, {x1} {y1}" '

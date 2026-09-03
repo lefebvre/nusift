@@ -44,9 +44,9 @@ Two readers run over the same MF8/MT457 sections, because they need different th
 | Average decay energies, all three | NuSIFT | Light-particle, electromagnetic and heavy-particle, per decay. Their sum is the decay-heat weight; the electromagnetic one is also the reference the continuum shortfall is measured against |
 | Discrete photon lines | NuSIFT | cram is deliberately a pure depletion library and carries no photon data |
 
-**Intensities are made absolute at staging time.** ENDF gives a discrete normalisation factor
+**Intensities are made absolute at staging time.** ENDF gives a discrete normalization factor
 `FD` and a relative intensity `RI` per line; the store keeps `FD · RI`, in photons per decay.
-Everything downstream is then a plain sum over lines with no normalisation left to remember —
+Everything downstream is then a plain sum over lines with no normalization left to remember —
 which is what lets the exposure evaluation be written as a dot product.
 
 **Two photon spectrum types are kept**: `STYP 0` (gammas) and `STYP 9` (X-rays and annihilation
@@ -82,7 +82,7 @@ means the lines account for everything, not that there is negative continuum.
 
 This number is what lets a report distinguish *"this nuclide emits no photons"* from *"this
 nuclide emits photons NuSIFT cannot model"*. Without it both look like a zero contribution, and
-the second is a silent error. See [Exposure §7](exposure.md#7-what-is-not-modelled-and-what-it-costs).
+the second is a silent error. See [Exposure §7](exposure.md#7-what-is-not-modeled-and-what-it-costs).
 
 ## 3. Why whole spectra, not one constant per nuclide
 
@@ -234,7 +234,7 @@ table. The constructor asserts this rather than assuming it.
 **Closure registers every reachable daughter that was not staged.** Without it the matrix would
 silently drop production into an unknown daughter and atoms would vanish. Closure-added nuclides
 sit past the staged axis with all their per-nuclide data at defaults — no half-life, no lines —
-which is precisely the stable-terminator behaviour they should have.
+which is precisely the stable-terminator behavior they should have.
 
 **`size()` is not coverage.** The closed chain is larger than the staged axis, and reporting it
 as though it were the store's coverage overstates it by orders of magnitude: a store of three

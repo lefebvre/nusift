@@ -35,7 +35,7 @@
 // JEFF-3.3; the store is VIII.1. A correlation is dimensionless and structural, which is the
 // argument that it transports across an edition better than a variance would -- but it is an
 // argument, not a proof, so `library` travels with the matrix into the report, beside the
-// citation the licence requires.
+// citation the license requires.
 //
 // THE MATRIX IS NOT POSITIVE SEMI-DEFINITE, and this is measured rather than feared. The
 // published U-235 thermal correlation has 280 negative eigenvalues against a trace of 998, the
@@ -59,7 +59,7 @@ namespace nusift {
 
 // Where a matrix came from, carried into every answer built on it. All four fields reach the
 // report: a number from this file is not interpretable without knowing which fissioning system
-// and which evaluation produced it, and the licence releases the data for use on the condition
+// and which evaluation produced it, and the license releases the data for use on the condition
 // that its author is cited.
 struct YieldCovarianceProvenance {
   std::string path;      // the file as the user named it

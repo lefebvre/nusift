@@ -29,7 +29,7 @@ struct NuclearData::Impl {
 
   // Sized to the CLOSED chain, so every index in [0, chain.size()) is addressable. Entries
   // past the staged axis belong to closure-added daughters and stay at their defaults, which
-  // is precisely the stable-terminator behaviour they should have.
+  // is precisely the stable-terminator behavior they should have.
   std::vector<std::int64_t> keys;
   std::vector<double> halfLife;
   std::vector<double> halfLifeUncertainty;

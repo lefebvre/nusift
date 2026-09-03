@@ -308,7 +308,7 @@ TEST(CoefficientPack, AConcentrationPackNeedsTheExtentAndTheRestRefuseIt) {
 }
 
 TEST(CoefficientPack, TheConcentrationDenominatorIsDeclaredAndChecked) {
-  // Deposition per square metre and a cloud per cubic metre are different questions whose
+  // Deposition per square meter and a cloud per cubic meter are different questions whose
   // coefficients look alike, so `per` is required and is not free text.
   EXPECT_THROW(
       packFrom(headerWith("# basis: concentration\n") + "nuclide,coefficient\nSn-100,1e-14\n"),

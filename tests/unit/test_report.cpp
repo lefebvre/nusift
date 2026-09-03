@@ -265,7 +265,7 @@ TEST(Report, TextFootnotesAThickAirPathLeftUncorrected) {
   EXPECT_EQ(text.back(), '\n') << text;
 }
 
-// A metre of air is a few hundredths of a mean free path. A paragraph about scatter there would
+// A meter of air is a few hundredths of a mean free path. A paragraph about scatter there would
 // be noise beside a percent-level effect, and would teach readers to skip the paragraph.
 TEST(Report, TextSaysNothingAboutScatterOverAThinPath) {
   const std::string text = asText(exposureThroughAir(0.02, 1.0), ReportContext{});

@@ -25,9 +25,9 @@
 // data store persists every discrete line instead of one number per nuclide. gammaConstant()
 // below exists only for the vacuum case, where the exponential is 1 and the sum does factor.
 //
-// WHAT IS NOT MODELLED, and would each raise the answer:
+// WHAT IS NOT MODELED, and would each raise the answer:
 //   * scattered photons (buildup) -- the default factor is 1.0, i.e. uncollided fluence only.
-//     For a bare source at a metre in air this is a small correction; through any shielding it
+//     For a bare source at a meter in air this is a small correction; through any shielding it
 //     is not, which is why the field is exposed rather than hidden.
 //   * source self-absorption -- a point source has no volume to absorb its own photons.
 //   * bremsstrahlung and any continuous photon spectrum. NuSIFT models discrete lines only;
@@ -136,7 +136,7 @@ double effectiveDoseRatePerBecquerel(LineSpectrum lines, const PointSourceGeomet
 // with each weighted by the exposure it actually delivers at the point of interest.
 //
 // Buildup is a function of exactly this quantity, so it is the number that says whether
-// leaving the factor at 1.0 is a small omission or a large one. At a metre it is a few
+// leaving the factor at 1.0 is a small omission or a large one. At a meter it is a few
 // hundredths and the scattered photons are a percent-level correction; past about half a mean
 // free path they are tens of percent of the uncollided value, and beyond one they exceed it.
 // Zero with attenuation off, where there is no path to be thick, and zero for a spectrum that

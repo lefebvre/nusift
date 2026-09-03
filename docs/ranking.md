@@ -49,7 +49,7 @@ what makes them the ones to compare inventories with before a site has been chos
 neutrinos: for a beta emitter that is roughly half the disintegration energy, so the difference
 is not a rounding correction. Nor is it the heat *deposited* anywhere. Where the three components
 stop differs by orders of magnitude — heavy particles within microns, light ones within
-millimetres, electromagnetic energy leaving a small source entirely — so a retained-versus-escaped
+millimeters, electromagnetic energy leaving a small source entirely — so a retained-versus-escaped
 split needs a geometry this layer does not have. The metric is the source term, and the three
 energies are kept separately accessible on `NuclearData` for whoever builds that split.
 
@@ -166,11 +166,11 @@ as comment cards at the top of both formats:
 
 | | MCNP `SDEF` | OpenMC |
 | --- | --- | --- |
-| Absolute rate | `SP` is normalised to unity, so the card carries the **shape**; the emission rate is printed for an `FM` multiplier | recorded in `strength=`, which OpenMC also does not apply — tallies score per source particle either way |
+| Absolute rate | `SP` is normalized to unity, so the card carries the **shape**; the emission rate is printed for an `FM` multiplier | recorded in `strength=`, which OpenMC also does not apply — tallies score per source particle either way |
 | Geometry | `POS`/`CEL`/`RAD`/`AXS` are the user's; unset, MCNP puts a point at the origin | `space=` is a placeholder `Point` to replace |
 | Units | boundaries in MeV | boundaries in eV, one probability per bin (`len(p) == len(x) - 1`) |
 
-Both decks also carry the unmodelled-continuum fraction, and this is the metric where it matters
+Both decks also carry the unmodeled-continuum fraction, and this is the metric where it matters
 most. Everywhere else in NuSIFT that flag understates a number a person is about to read; here it
 understates a *source*, and the shortfall propagates through someone else's transport run where
 nothing downstream knows to doubt it.
@@ -314,7 +314,7 @@ dominance windows structurally cannot answer about a contributor that never lead
 
 ### Flags become footnotes
 
-A contributor carrying more than 5% of its photon energy in an unmodelled continuum is flagged,
+A contributor carrying more than 5% of its photon energy in an unmodeled continuum is flagged,
 and the report footnotes the ranking with the **activity-weighted** magnitude of what is missing.
 The flag is set for exposure and photon only: an incomplete photon spectrum understates a dose
 and a photon count alike and says nothing whatever about a count of decays, so an activity report
@@ -323,7 +323,7 @@ carrying it would end with a paragraph about a metric it never computed.
 An exposure or photon-fluence ranking carries one more footnote, for the omission the model makes
 by default: when the air path is thicker than about half a mean free path at the energies
 carrying the answer and `--buildup` was left at 1.0, the report says so and gives the optical
-depth — see [Exposure §7](exposure.md#7-what-is-not-modelled-and-what-it-costs). Photon strength
+depth — see [Exposure §7](exposure.md#7-what-is-not-modeled-and-what-it-costs). Photon strength
 names no distance and carries no such footnote, whatever the geometry record holds. Both caveats
 travel with the JSON output, as `unmodeled_energy_fraction`, `mean_optical_depth`, and `buildup`.
 
@@ -425,7 +425,7 @@ absorbs the daughters that travel in the package.
 
 They also demonstrate the point ranking exists to make. On one inventory at one instant, the
 ingestion hazard is led by Cs-137 and the inhalation hazard by Sr-90, because strontium's
-inhalation coefficient is an order of magnitude further above caesium's than its ingestion
+inhalation coefficient is an order of magnitude further above cesium's than its ingestion
 coefficient is. Same atoms, same solve, different weight vector, different answer.
 
 ### The distributed source, and the input an inventory cannot supply
@@ -444,7 +444,7 @@ different number when told how much space the becquerels occupy.
 
 **The geometry is the assumption, and it is a large one.** These coefficients are computed for a
 person inside a uniformly contaminated, semi-infinite cloud — infinite compared with the mean
-free path of the photons carrying the dose, which in air at 1 MeV is of order a hundred metres.
+free path of the photons carrying the dose, which in air at 1 MeV is of order a hundred meters.
 A plume that is smaller, or not uniform, or not surrounding the person gives less, and no
 coefficient can know that. The pack answers "what would standing inside a cloud of this
 composition commit", not "what does the plume over there deliver", and its header says so.
@@ -452,8 +452,8 @@ composition commit", not "what does the plume over there deliver", and its heade
 It is also where the chain earns its keep. FGR-15 states that its coefficients exclude decay
 products and that a parent and its progeny "should be combined only after consideration of the
 equations describing production and decay of daughter radionuclides over time" — which is what
-the solve underneath the ranking already is. Caesium-137's own submersion coefficient is
-9.4e-17 and barium-137m's is 2.7e-14, so on a caesium inventory the barium carries 99% of the
+the solve underneath the ranking already is. Cesium-137's own submersion coefficient is
+9.4e-17 and barium-137m's is 2.7e-14, so on a cesium inventory the barium carries 99% of the
 dose rate and arrives there by ingrowth rather than by being tabulated with its parent.
 
 An intake coefficient is `domain: instant` for a reason the field exists to catch: it multiplies
@@ -479,14 +479,14 @@ A kernel declares `shape: kernel` and `applies: fluence`, and has no `basis`: wh
 is a photon line, and the decay constant and the intensity are not a choice. It carries no
 nuclides either, so the coverage question changes shape with it. What a kernel can fail to speak
 for is an **energy**, not a nuclide: a line outside the tabulated range takes a clamped value,
-so coverage is the share of the answer that came from lines *inside* the range. On a caesium
-field against ICRP 74 that is 99.99% — the missing ten-thousandth is caesium's L X-rays, below
+so coverage is the share of the answer that came from lines *inside* the range. On a cesium
+field against ICRP 74 that is 99.99% — the missing ten-thousandth is cesium's L X-rays, below
 the curve's 10 keV floor.
 
 The first kernel closes the gap item 1 left open. H\*(10) is the operational quantity a survey
 meter reads — defined in the ICRU sphere, designed to be measurable and to be a conservative
 estimate of effective dose below about 10 MeV — and it is what makes a computed field comparable
-with an instrument. On a caesium field it comes out at 10.99 Sv/h against the ICRP 116 effective
+with an instrument. On a cesium field it comes out at 10.99 Sv/h against the ICRP 116 effective
 dose of 9.25 Sv/h, a ratio of 1.19, which is the published relationship between the two
 quantities at 662 keV. The two curves were transcribed from two publications by two different
 routes, one out of a text layer and one off an image scan, so their agreeing on that ratio is a
@@ -876,7 +876,7 @@ whole forward evolution from `t₀` to `T`, so a parent's value includes the dau
 have fed. The benefit is nonetheless booked against the **parent that was removed**, not the
 daughter that would have emitted.
 
-What it does not do is remove the daughters already present at `t₀`. Take out caesium and the
+What it does not do is remove the daughters already present at `t₀`. Take out cesium and the
 barium standing in the drum at that instant stays, because it is barium. That is exactly what a
 chemical separation does, and it is why the benefit of stripping Cs-137 an hour before the
 response is nearly nothing while stripping it thirty years ahead is nearly everything.
@@ -891,7 +891,7 @@ fair question to ask of the arithmetic.
 A selector that names nothing the inventory's chain reaches is **refused**, for the reason a pin
 naming nothing is refused: a removal that silently matches nothing reads as "taking this out is
 worth nothing", when in fact the question never arrived. But a selector that resolves and finds
-no atoms left by `t₀` is **not** an error — "there is no caesium by then" is a real answer to a
+no atoms left by `t₀` is **not** an error — "there is no cesium by then" is a real answer to a
 question someone actually asked. Keeping those two apart is why the selector is matched against
 the chain reachable from the original seed rather than against the adjoint's own index space:
 `forwardClosure()` roots only at non-zero entries, so a nuclide that has decayed away is pruned
@@ -919,7 +919,7 @@ two answers that were computed at a point. For a triage answer the inputs that p
 part of it.
 
 Each `--interval` gets its **own** report context rather than sharing the last one. The set of
-contributors carrying unmodelled continuum is a property of that window, and building one context
+contributors carrying unmodeled continuum is a property of that window, and building one context
 from the last table footnotes every ranking with the last window's emitters — which need not
 appear in the ranking they annotate. Pins are resolved per interval for the same reason: each is
 solved over its own index space, so a pin naming something one window's chain does not reach is
@@ -944,7 +944,7 @@ an aside. The CSV column is last, so adding it renumbered nothing anyone already
 | File | Role |
 | --- | --- |
 | [`nusift/triage/response.hpp`](../nusift/triage/response.hpp) | `Metric`, `Domain`, `Aggregate`, `Unit`, the pairing rules, and `ResponseTable` |
-| [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `unitScale`, `domainScale`, `assemble`, `assembleLines`, the unmodelled-energy accounting, and `requirePin` |
+| [`nusift/triage/response.cpp`](../nusift/triage/response.cpp) | `weightFor`, `unitScale`, `domainScale`, `assemble`, `assembleLines`, the unmodeled-energy accounting, and `requirePin` |
 | [`nusift/triage/ranking.cpp`](../nusift/triage/ranking.cpp) | Sorting, stop conditions, coverage, the omitted count, and the pinned tail |
 | [`nusift/triage/triage_set.hpp`](../nusift/triage/triage_set.hpp) | `CoverageRequirement`, `TriageSet`, and what greedy does and does not claim |
 | [`nusift/triage/triage_set.cpp`](../nusift/triage/triage_set.cpp) | The shared contributor space, the capped-gain greedy, and the binding point |

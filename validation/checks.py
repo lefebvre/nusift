@@ -300,7 +300,7 @@ def icrp116_rows(data):
 WAY_WIGNER_START = "1h"
 WAY_WIGNER_END = "30d"
 WAY_WIGNER_POINTS = 25
-# Way and Wigner's rule is a fit to gross fission-product behaviour, quoted as good to roughly
+# Way and Wigner's rule is a fit to gross fission-product behavior, quoted as good to roughly
 # 25% over its validity window rather than as an exact exponent, and the local slope genuinely
 # moves across that window -- measured here between -1.07 and -1.23 decade by decade. The band
 # is set to admit that spread while still rejecting anything qualitatively wrong: a single
