@@ -213,9 +213,13 @@ so a shared evaluation can be used instead of the packaged one.
 
 [**docs/**](docs/README.md) documents the methodology stage by stage — what is evaluated
 exactly, what is approximated and by how much, and what is not modelled at all.
+[**docs/scenarios.md**](docs/scenarios.md) is the same tool the other way round: one section per
+command, on a source the model actually fits, with a figure from real output and a note on what
+each answer does not say. Start there if you arrived with a question rather than with a number.
 
 | | |
 | --- | --- |
+| [**Scenarios**](docs/scenarios.md) | Every command on a worked case, organized by the question asked |
 | [Nuclear data](docs/nuclear-data.md) | Staging ENDF into a store, chain closure, and why whole photon spectra are kept |
 | [Inventory and seeding](docs/inventory.md) | Unit conversions to atoms, and sizing a fission source |
 | [The decay solve](docs/decay-solve.md) | CRAM, exact pruning, time grids, threading, determinism |
@@ -328,13 +332,18 @@ Implemented:
 - Robust triage sets: the smallest list holding a coverage floor across every metric and time
 - Piecewise task plans: a job as legs with their own distance, occupancy, and breaks
 - Seed attribution: which seeded nuclide a response is riding on, as an exact partition
+- Counterfactual interventions: what removing a nuclide or an element on a date is worth later
+- Maximum allowable scale: by what factor an inventory can be multiplied before a limit binds
+- Decay heat in watts and joules, from the three evaluated average decay energies
+- Imported fission-yield correlations, the one covariance no evaluation publishes
 - A binned photon emission spectrum, written as an MCNP `SDEF` card or an OpenMC source
 - Python bindings, with zero-copy NumPy views
 
 Planned:
 
 - Seeding an inventory from neutron activation
-- Shielding, and decay heat
+- Shielding
+- The ANS-5.1 decay-heat standard as an integral benchmark
 - Wheels for the three platforms
 
 ## License

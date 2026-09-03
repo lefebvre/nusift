@@ -1,0 +1,3 @@
+kind,time_s,end_s,value,bracket_start_s,bracket_end_s,located_to_s,refined,converged,entry_observed,exit_observed,side
+falling,26344801.59402028,,1000,24203019.286183022,30520735.517824538,0.5288956388831139,true,true,,,
+window,3600,26344801.59402028,,,,,,,false,true,above

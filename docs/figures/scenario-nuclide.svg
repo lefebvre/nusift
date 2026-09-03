@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 388" width="880" height="388" role="img" aria-label="Nuclide naming and the ZAI key">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="879" height="387" rx="6"/>
+<text class="ink" x="74.0" y="26.0" font-size="13" text-anchor="start" font-weight="600">A nuclide is one integer, and an isomer is a different one</text>
+<text class="muted" x="74.0" y="44.0" font-size="11.5" text-anchor="start" font-weight="normal">`nusift nuclide` — what the canonicalizer accepts, and what it refuses to blur</text>
+<text class="muted" x="74.0" y="82.0" font-size="10.5" text-anchor="start" font-weight="600">as typed</text>
+<text class="muted" x="264.0" y="82.0" font-size="10.5" text-anchor="start" font-weight="600">canonical</text>
+<text class="muted" x="424.0" y="82.0" font-size="10.5" text-anchor="start" font-weight="600">key  Z·10000 + A·10 + I</text>
+<text class="muted" x="74.0" y="111.0" font-size="11.5" text-anchor="start" font-weight="normal">Cs-137</text>
+<text class="ink" x="264.0" y="111.0" font-size="11.5" text-anchor="start" font-weight="600">Cs-137</text>
+<text class="ink" x="424.0" y="111.0" font-size="11.5" text-anchor="start" font-weight="normal">551370</text>
+<text class="muted" x="74.0" y="137.0" font-size="11.5" text-anchor="start" font-weight="normal">ba137m</text>
+<text class="warn" x="264.0" y="137.0" font-size="11.5" text-anchor="start" font-weight="600">Ba-137m</text>
+<text class="warn" x="424.0" y="137.0" font-size="11.5" text-anchor="start" font-weight="normal">561371</text>
+<text class="muted" x="74.0" y="163.0" font-size="11.5" text-anchor="start" font-weight="normal">TC-99M</text>
+<text class="warn" x="264.0" y="163.0" font-size="11.5" text-anchor="start" font-weight="600">Tc-99m</text>
+<text class="warn" x="424.0" y="163.0" font-size="11.5" text-anchor="start" font-weight="normal">430991</text>
+<text class="muted" x="74.0" y="189.0" font-size="11.5" text-anchor="start" font-weight="normal">u235</text>
+<text class="ink" x="264.0" y="189.0" font-size="11.5" text-anchor="start" font-weight="600">U-235</text>
+<text class="ink" x="424.0" y="189.0" font-size="11.5" text-anchor="start" font-weight="normal">922350</text>
+<text class="muted" x="74.0" y="215.0" font-size="11.5" text-anchor="start" font-weight="normal">Co60</text>
+<text class="ink" x="264.0" y="215.0" font-size="11.5" text-anchor="start" font-weight="600">Co-60</text>
+<text class="ink" x="424.0" y="215.0" font-size="11.5" text-anchor="start" font-weight="normal">270600</text>
+<text class="muted" x="74.0" y="241.0" font-size="11.5" text-anchor="start" font-weight="normal">Ba-137</text>
+<text class="ink" x="264.0" y="241.0" font-size="11.5" text-anchor="start" font-weight="600">Ba-137</text>
+<text class="ink" x="424.0" y="241.0" font-size="11.5" text-anchor="start" font-weight="normal">561370</text>
+<text class="ink" x="74.0" y="278.0" font-size="12" text-anchor="start" font-weight="normal">Ba-137 and Ba-137m differ by one in the last digit and by everything else that matters.</text>
+<text class="muted" x="74.0" y="298.0" font-size="11.5" text-anchor="start" font-weight="normal">One is stable and the other has a 153-second half-life and carries the 662 keV line that the whole cesium dose story rests on.</text>
+<text class="muted" x="74.0" y="314.0" font-size="11.5" text-anchor="start" font-weight="normal">So spelling is forgiving and identity is not: case, separators and ordering are all accepted, and an isomer is never merged</text>
+<text class="muted" x="74.0" y="330.0" font-size="11.5" text-anchor="start" font-weight="normal">into its ground state to make a name resolve.</text>
+<text class="muted" x="74.0" y="352.0" font-size="11.5" text-anchor="start" font-weight="normal">The key is the same integer in the HDF5 store, the chain index, the inventory and every CSV column — sortable, and stable</text>
+<text class="muted" x="74.0" y="368.0" font-size="11.5" text-anchor="start" font-weight="normal">across every layer, so no two parts of the tool can disagree about which nuclide they are discussing.</text>
+</svg>

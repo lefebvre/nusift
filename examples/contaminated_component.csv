@@ -1,0 +1,38 @@
+# An ILLUSTRATIVE contaminated component: a valve body pulled from a primary loop, held in a
+# shielded cell awaiting size reduction. Drum-scale rather than fuel-scale -- about a thousand
+# times less activity than examples/spent_fuel.csv -- which is what makes a job around it a
+# question of minutes rather than of seconds.
+#
+# The numbers are indicative and are not the output of any characterization. The point is the
+# SHAPE: a photon-dominant fission product that sets the field, a beta emitter that carries real
+# activity and almost no dose, an activation product from the steel, and a little alpha
+# contamination that matters for none of the above and for everything about waste class.
+#
+# The same object is assayed three times in docs/figures/data/scenario-assay.csv, which carries the
+# seven COUNTED nuclides at these same values with the assay dates and counting uncertainties
+# attached. This file is not the reconciled result of that sheet and is not meant to be. It
+# differs in two ways, both of them the point of having both files:
+#
+#   it is UNDATED, so it states Ba-137m and Y-90 explicitly, where the sheet lets reconciliation
+#   grow them in from their parents along with five other daughters nobody counted;
+#
+#   and its rows are as-measured rather than carried forward, so Co-60 here is the 2021 number
+#   rather than the quarter-decayed 2023 one that reconciling produces.
+#
+# Reconcile the sheet and compare if you want to see how much that matters.
+nuclide, quantity, unit
+
+# --- what sets the field ------------------------------------------------------
+Cs-137,  4.1e12,  Bq
+Ba-137m, 3.9e12,  Bq
+Co-60,   2.2e11,  Bq
+Eu-154,  6.0e10,  Bq
+
+# --- real activity, almost no photons -----------------------------------------
+Sr-90,   1.8e12,  Bq
+Y-90,    1.8e12,  Bq
+
+# --- alpha contamination: negligible for dose at a metre, decisive for waste class
+Am-241,  4.5e9,   Bq
+Pu-239,  1.1e9,   Bq
+Pu-240,  8.0e8,   Bq

@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 552" width="900" height="552" role="img" aria-label="A robust triage set over two metrics">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="899" height="551" rx="6"/>
+<text class="ink" x="74.0" y="26.0" font-size="13" text-anchor="start" font-weight="600">The smallest monitoring list that holds 95% of two metrics at every time</text>
+<text class="muted" x="74.0" y="44.0" font-size="11.5" text-anchor="start" font-weight="normal">`nusift shortlist --metrics activity,heat --coverage 0.95` — 20 kt fission, 1 h to 100 y</text>
+<text class="ink" x="74.0" y="95.0" font-size="11" text-anchor="start" font-weight="500">I-134</text>
+<rect class="fill-a" x="150.0" y="84.0" width="588.0" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="95.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 20.4%</text>
+<text class="ink" x="74.0" y="117.0" font-size="11" text-anchor="start" font-weight="500">Cs-138</text>
+<rect class="fill-a" x="150.0" y="106.0" width="443.3" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="117.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 15.4%</text>
+<text class="ink" x="74.0" y="139.0" font-size="11" text-anchor="start" font-weight="500">Ba-139</text>
+<rect class="fill-a" x="150.0" y="128.0" width="224.4" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="139.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 7.8%</text>
+<text class="ink" x="74.0" y="161.0" font-size="11" text-anchor="start" font-weight="500">La-142</text>
+<rect class="fill-a" x="150.0" y="150.0" width="353.9" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="161.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 12.3%</text>
+<text class="ink" x="74.0" y="183.0" font-size="11" text-anchor="start" font-weight="500">Te-134</text>
+<rect class="fill-a" x="150.0" y="172.0" width="187.1" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="183.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 6.5%</text>
+<text class="ink" x="74.0" y="205.0" font-size="11" text-anchor="start" font-weight="500">Sr-92</text>
+<rect class="fill-a" x="150.0" y="194.0" width="199.0" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="205.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 6.9%</text>
+<text class="ink" x="74.0" y="227.0" font-size="11" text-anchor="start" font-weight="500">La-141</text>
+<rect class="fill-a" x="150.0" y="216.0" width="211.0" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="227.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 7.3%</text>
+<text class="ink" x="74.0" y="249.0" font-size="11" text-anchor="start" font-weight="500">Tc-101</text>
+<rect class="fill-a" x="150.0" y="238.0" width="171.9" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="249.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 6.0%</text>
+<text class="ink" x="74.0" y="271.0" font-size="11" text-anchor="start" font-weight="500">I-135</text>
+<rect class="fill-a" x="150.0" y="260.0" width="341.6" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="271.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 11.8%</text>
+<text class="ink" x="74.0" y="293.0" font-size="11" text-anchor="start" font-weight="500">Y-92</text>
+<rect class="fill-a" x="150.0" y="282.0" width="401.2" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="293.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 13.9%</text>
+<text class="ink" x="74.0" y="315.0" font-size="11" text-anchor="start" font-weight="500">Rb-88</text>
+<rect class="fill-a" x="150.0" y="304.0" width="236.4" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="315.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 8.2%</text>
+<text class="ink" x="74.0" y="337.0" font-size="11" text-anchor="start" font-weight="500">Te-133m</text>
+<rect class="fill-a" x="150.0" y="326.0" width="98.0" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="337.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 3.4%</text>
+<text class="ink" x="74.0" y="359.0" font-size="11" text-anchor="start" font-weight="500">Kr-88</text>
+<rect class="fill-a" x="150.0" y="348.0" width="180.2" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="359.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 6.2%</text>
+<text class="ink" x="74.0" y="381.0" font-size="11" text-anchor="start" font-weight="500">Y-93</text>
+<rect class="fill-a" x="150.0" y="370.0" width="269.7" height="13.0" rx="1.5" fill-opacity="0.75" stroke-width="0"/>
+<text class="muted" x="746.0" y="381.0" font-size="10.5" text-anchor="start" font-weight="normal">peak share 9.3%</text>
+<text class="ink" x="74.0" y="416.0" font-size="12" text-anchor="start" font-weight="normal">72 nuclides hold 95% of both metrics at every one of the 40 times — 80 constraints in all.</text>
+<text class="muted" x="74.0" y="436.0" font-size="11.5" text-anchor="start" font-weight="normal">The tightest is decay heat (W) at 1 h, where the set achieves 95.06% against the 95% floor — the margin the whole set is sized by.</text>
+<text class="muted" x="74.0" y="456.0" font-size="11.5" text-anchor="start" font-weight="normal">The ORDER is not a ranking. Each member is whichever most improved the constraints still unmet given the ones before it,</text>
+<text class="muted" x="74.0" y="472.0" font-size="11.5" text-anchor="start" font-weight="normal">so the second entry is not the second largest contributor — it is the one that covered what the first left uncovered.</text>
+<text class="muted" x="74.0" y="494.0" font-size="11.5" text-anchor="start" font-weight="normal">Nor is this the smallest such set. Greedy cover is not exact, and the report says so rather than letting a numbered list</text>
+<text class="muted" x="74.0" y="510.0" font-size="11.5" text-anchor="start" font-weight="normal">be read as a proof of minimality.</text>
+<text class="muted" x="74.0" y="532.0" font-size="11" text-anchor="start" font-weight="normal">Showing the first 14 of 72.</text>
+</svg>

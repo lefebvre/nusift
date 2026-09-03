@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 378" width="880" height="378" role="img" aria-label="Store coverage: what the evaluation can be asked">
+<style>
+  .bg     { fill: #fbfbfa; stroke: #d8d6d1; }
+  .ink    { fill: #1c1b19; }
+  .muted  { fill: #6b6862; }
+  .axis   { stroke: #b4b1ab; fill: none; }
+  .grid   { stroke: #e6e4df; fill: none; }
+  .curve  { stroke: #2f6f8f; fill: none; }
+  .fill-a { fill: #2f6f8f; }
+  .fill-b { fill: #b4551f; }
+  .accent { stroke: #b4551f; fill: none; }
+  .warn   { fill: #b4551f; }
+  .band   { fill: #b4551f; }
+  .box    { fill: none; stroke: #b4b1ab; }
+  .s0 { stroke: #2f6f8f; fill: none; } .t0 { fill: #2f6f8f; }
+  .s1 { stroke: #b4551f; fill: none; } .t1 { fill: #b4551f; }
+  .s2 { stroke: #4d7c4d; fill: none; } .t2 { fill: #4d7c4d; }
+  .s3 { stroke: #7a5aa0; fill: none; } .t3 { fill: #7a5aa0; }
+  .s4 { stroke: #a03a5a; fill: none; } .t4 { fill: #a03a5a; }
+  .s5 { stroke: #7a6a3a; fill: none; } .t5 { fill: #7a6a3a; }
+  .s6 { stroke: #3a7a7a; fill: none; } .t6 { fill: #3a7a7a; }
+  .s7 { stroke: #8a5a3a; fill: none; } .t7 { fill: #8a5a3a; }
+  text    { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg     { fill: #12161c; stroke: #2b3239; }
+    .ink    { fill: #e6edf3; }
+    .muted  { fill: #9aa4ae; }
+    .axis   { stroke: #4a545e; }
+    .grid   { stroke: #232a31; }
+    .curve  { stroke: #6cb6d9; }
+    .fill-a { fill: #6cb6d9; }
+    .fill-b { fill: #e08a4c; }
+    .accent { stroke: #e08a4c; }
+    .warn   { fill: #e08a4c; }
+    .band   { fill: #e08a4c; }
+    .box    { stroke: #4a545e; }
+    .s0 { stroke: #6cb6d9; } .t0 { fill: #6cb6d9; }
+    .s1 { stroke: #e08a4c; } .t1 { fill: #e08a4c; }
+    .s2 { stroke: #7fbf7f; } .t2 { fill: #7fbf7f; }
+    .s3 { stroke: #b49ae0; } .t3 { fill: #b49ae0; }
+    .s4 { stroke: #e07f9f; } .t4 { fill: #e07f9f; }
+    .s5 { stroke: #c9b56a; } .t5 { fill: #c9b56a; }
+    .s6 { stroke: #6ac9c9; } .t6 { fill: #6ac9c9; }
+    .s7 { stroke: #d19a72; } .t7 { fill: #d19a72; }
+  }
+</style>
+<rect class="bg" x="0.5" y="0.5" width="879" height="377" rx="6"/>
+<text class="ink" x="74.0" y="26.0" font-size="13" text-anchor="start" font-weight="600">What this store can answer, and for how much of itself</text>
+<text class="muted" x="74.0" y="44.0" font-size="11.5" text-anchor="start" font-weight="normal">ENDF/B-VIII.1 as staged — `nusift data info`</text>
+<text class="ink" x="74.0" y="108.0" font-size="11.5" text-anchor="start" font-weight="500">staged from tapes</text>
+<rect class="t0" x="224.0" y="96.0" width="553.4" height="15.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="ink" x="785.4" y="108.0" font-size="11" text-anchor="start" font-weight="600">3,828</text>
+<text class="muted" x="224.0" y="125.0" font-size="10.5" text-anchor="start" font-weight="normal">every nuclide the evaluation carries a record for</text>
+<text class="ink" x="74.0" y="152.0" font-size="11.5" text-anchor="start" font-weight="500">chain, after closure</text>
+<rect class="t1" x="224.0" y="140.0" width="580.0" height="15.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="ink" x="812.0" y="152.0" font-size="11" text-anchor="start" font-weight="600">4,012</text>
+<text class="muted" x="224.0" y="169.0" font-size="10.5" text-anchor="start" font-weight="normal">plus daughters and fission products with nowhere else to land</text>
+<text class="ink" x="74.0" y="196.0" font-size="11.5" text-anchor="start" font-weight="500">unstable</text>
+<rect class="t2" x="224.0" y="184.0" width="514.9" height="15.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="ink" x="746.9" y="196.0" font-size="11" text-anchor="start" font-weight="600">3,562</text>
+<text class="muted" x="224.0" y="213.0" font-size="10.5" text-anchor="start" font-weight="normal">the ones with a decay constant at all</text>
+<text class="ink" x="74.0" y="240.0" font-size="11.5" text-anchor="start" font-weight="500">with photon lines</text>
+<rect class="t3" x="224.0" y="228.0" width="230.6" height="15.0" rx="2" fill-opacity="0.75" stroke-width="0"/>
+<text class="ink" x="462.6" y="240.0" font-size="11" text-anchor="start" font-weight="600">1,595</text>
+<text class="muted" x="224.0" y="257.0" font-size="10.5" text-anchor="start" font-weight="normal">the only ones an exposure answer can come from</text>
+<text class="ink" x="74.0" y="286.0" font-size="12" text-anchor="start" font-weight="normal">1,546 unstable nuclides have an evaluated average photon energy and no discrete lines to spend it on.</text>
+<text class="muted" x="74.0" y="304.0" font-size="11.5" text-anchor="start" font-weight="normal">That is not a defect to work around — it is the figure that decides whether an exposure answer means anything,</text>
+<text class="muted" x="74.0" y="320.0" font-size="11.5" text-anchor="start" font-weight="normal">and it is why a store with no lines refuses the question rather than returning zeros.</text>
+<text class="muted" x="74.0" y="342.0" font-size="11.5" text-anchor="start" font-weight="normal">103 nuclides have a spontaneous-fission branch and no yield set at any energy: their fission products</text>
+<text class="muted" x="74.0" y="358.0" font-size="11.5" text-anchor="start" font-weight="normal">go nowhere, which the store reports rather than silently dropping.</text>
+</svg>
