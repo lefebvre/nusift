@@ -21,6 +21,7 @@ generated figures cannot drift into different visual languages.
 from __future__ import annotations
 
 import csv
+import decimal
 import math
 import re
 from pathlib import Path
@@ -71,12 +72,43 @@ def read_csv(name):
         return list(csv.DictReader(handle))
 
 
+def _exp_correctly_rounded(x):
+    """exp(x) as the correctly-rounded double, identically on every platform.
+
+    numpy's exp is a libm call, and libm is allowed to be off by a fraction of an ulp in ways
+    that differ between builds. That is invisible almost everywhere in this file -- a curve
+    plotted to two decimal places cannot see a last-bit difference -- and it is the ENTIRE
+    signal in figure_cancellation(), where what is being drawn is the round-off left over from
+    a subtraction of two nearly equal numbers. Drawn from libm, that figure is a picture of the
+    machine that generated it: regenerating it elsewhere produces a visibly different curve and
+    a diff nobody can explain.
+
+    decimal.exp() is correctly rounded and specified, so rounding its result to a double gives
+    the same bits everywhere. Used only where the round-off is the subject; the rest of the file
+    keeps numpy, because there the round-off is noise and numpy is very much faster.
+    """
+    with decimal.localcontext() as ctx:
+        ctx.prec = 40
+        return float(decimal.Decimal(repr(float(x))).exp())
+
+
+def _exp_array(x):
+    return np.array([_exp_correctly_rounded(v) for v in np.asarray(x, dtype=float).ravel()]
+                    ).reshape(np.shape(x))
+
+
 def cumulative(t):
-    return N0 / LAMBDA * (1.0 - np.exp(-LAMBDA * t))
+    return N0 / LAMBDA * (1.0 - _exp_array(-LAMBDA * np.asarray(t, dtype=float)))
 
 
 def stable_interval(t1, dt):
-    return N0 / LAMBDA * np.exp(-LAMBDA * t1) * -np.expm1(-LAMBDA * dt)
+    # -expm1(-x) written as 1 - exp(-x) would be the very cancellation this figure is about, so
+    # the stable form is kept -- but evaluated through the same correctly-rounded exp, so the
+    # reference and the naive path differ by their ALGEBRA rather than by their libm.
+    x = LAMBDA * np.asarray(dt, dtype=float)
+    small = x < 1e-8
+    grown = np.where(small, x - x * x / 2.0, 1.0 - _exp_array(-x))
+    return N0 / LAMBDA * _exp_array(-LAMBDA * t1) * grown
 
 
 # --------------------------------------------------------------------------------------
