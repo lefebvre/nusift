@@ -39,6 +39,7 @@ add_executable(nusift_unit_tests
   unit/test_coefficient_pack.cpp
   unit/test_data_store.cpp
   unit/test_decay_engine.cpp
+  unit/test_decay_heat.cpp
   unit/test_events.cpp
   unit/test_forecast.cpp
   unit/test_intervention.cpp

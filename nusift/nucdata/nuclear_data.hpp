@@ -110,6 +110,21 @@ public:
   // lines and any continuum.
   double emEnergyEv(int index) const;
 
+  // The other two thirds of the same MT457 partition, per decay [eV]: light particles (betas,
+  // positrons, Auger and conversion electrons) and heavy ones (alphas, recoils, fission
+  // fragments). Neutrinos are excluded by the evaluation, which is what makes the sum the
+  // RECOVERABLE energy -- decay heat -- rather than the Q value.
+  //
+  // Separate accessors rather than one total, because the split is the interesting part
+  // wherever the three do not deposit in the same place: heavy particles stop within microns,
+  // light ones within millimetres, and electromagnetic energy leaves a small source entirely.
+  // A retained-versus-escaped answer needs the three apart; decay heat needs them summed.
+  double lpEnergyEv(int index) const;
+  double hpEnergyEv(int index) const;
+
+  // Sum of the three, per decay [eV]. The decay-heat weight, before lambda.
+  double decayEnergyEv(int index) const;
+
   // Photon energy per decay carried by a CONTINUOUS spectrum, which NuSIFT does not model.
   // Non-zero here means the exposure this nuclide contributes is understated. Reporting it is
   // what keeps "no photons" distinguishable from "photons we ignore" -- without it, both look

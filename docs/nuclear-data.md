@@ -41,7 +41,7 @@ Two readers run over the same MF8/MT457 sections, because they need different th
 | Half-life, decay modes, branching ratios, RFS | cram's ENDF reader | Feeds the depletion chain directly |
 | Independent fission yields (MT454) | cram's reader | Never cumulative — see §4 |
 | Atomic weight ratio | NuSIFT (`readExtras`) | Becomes molar mass; without it, gram input is refused |
-| Average electromagnetic decay energy | NuSIFT | The reference the continuum shortfall is measured against |
+| Average decay energies, all three | NuSIFT | Light-particle, electromagnetic and heavy-particle, per decay. Their sum is the decay-heat weight; the electromagnetic one is also the reference the continuum shortfall is measured against |
 | Discrete photon lines | NuSIFT | cram is deliberately a pure depletion library and carries no photon data |
 
 **Intensities are made absolute at staging time.** ENDF gives a discrete normalisation factor
@@ -162,6 +162,14 @@ the values come from:
 | half-life | MT457, the `[T, DT]` pair | 3270 of 3562 unstable nuclides |
 | mode branching | MT457, `DecayMode`'s `[BR, DBR]` | 5212 of 5212 modes |
 | independent yield | MT454, the `DFY` column | 63126 of 73264 entries |
+
+The three average decay energies are read from the same MT457 record and are staged as values
+rather than with uncertainties, because the record carries a σ for each and nothing yet consumes
+them. ENDF orders the pairs light-particle, electromagnetic, heavy-particle, and
+`numberDecayEnergies()` counts PAIRS rather than values — so each guard is its own index plus
+one, and a tape carrying fewer has stopped early rather than disagreed. 3544 of 3562 unstable
+nuclides carry at least one; 18 carry none at all and are worth zero watts, which is a different
+statement from releasing no heat and is why the coverage is stated rather than assumed.
 
 **Matched by identity, never by position.** cram builds its decay-mode list from the same MT457
 record and almost certainly preserves its order — but "almost certainly" is not a basis on which

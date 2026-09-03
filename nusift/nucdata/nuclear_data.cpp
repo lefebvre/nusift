@@ -38,6 +38,8 @@ struct NuclearData::Impl {
   std::vector<double> lambda;
   std::vector<double> molarMass;
   std::vector<double> emEnergy;
+  std::vector<double> lpEnergy;
+  std::vector<double> hpEnergy;
   std::vector<double> continuumPhoton;
 
   // Photon lines, CSR over the closed chain. Held as GammaLine rather than as parallel
@@ -181,6 +183,8 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
   impl.lambda.assign(total, 0.0);
   impl.molarMass.assign(total, 0.0);
   impl.emEnergy.assign(total, 0.0);
+  impl.lpEnergy.assign(total, 0.0);
+  impl.hpEnergy.assign(total, 0.0);
   impl.continuumPhoton.assign(total, 0.0);
 
   impl.hasAwr = !a.awr.empty();
@@ -203,6 +207,14 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
     }
     if (!a.emEnergyEv.empty()) {
       impl.emEnergy[i] = a.emEnergyEv[i];
+    }
+    // Each guarded on its own emptiness: a store staged before these columns existed carries
+    // neither, and one staged by a tool that read only some of them carries what it read.
+    if (!a.lpEnergyEv.empty()) {
+      impl.lpEnergy[i] = a.lpEnergyEv[i];
+    }
+    if (!a.hpEnergyEv.empty()) {
+      impl.hpEnergy[i] = a.hpEnergyEv[i];
     }
     if (!a.continuumPhotonEv.empty()) {
       impl.continuumPhoton[i] = a.continuumPhotonEv[i];
@@ -305,6 +317,19 @@ LineSpectrum NuclearData::lines(int index) const {
   const int begin = impl_->lineOffset[static_cast<std::size_t>(index)];
   const int end = impl_->lineOffset[static_cast<std::size_t>(index) + 1];
   return LineSpectrum(impl_->lines.data() + begin, static_cast<std::size_t>(end - begin));
+}
+
+double NuclearData::lpEnergyEv(int index) const {
+  return impl_->lpEnergy[static_cast<std::size_t>(index)];
+}
+
+double NuclearData::hpEnergyEv(int index) const {
+  return impl_->hpEnergy[static_cast<std::size_t>(index)];
+}
+
+double NuclearData::decayEnergyEv(int index) const {
+  const std::size_t i = static_cast<std::size_t>(index);
+  return impl_->emEnergy[i] + impl_->lpEnergy[i] + impl_->hpEnergy[i];
 }
 
 double NuclearData::emEnergyEv(int index) const {

@@ -349,6 +349,113 @@ def way_wigner(data, fissions=1.0e20):
     }
 
 
+# --- decay heat: shape against an empirical rule, size against an evaluation --
+
+# Way and Wigner's rule is a statement about POWER -- the beta and gamma energy release of mixed
+# fission products, quoted by Glasstone & Dolan as roughly 1.26 t^-1.2 MeV/s per fission for the
+# betas and 1.40 for the gammas. So the heat metric is the quantity the rule was actually written
+# for, where the activity check above borrows only its exponent.
+WAY_WIGNER_MEV_PER_FISSION = 2.66
+MEV_TO_J = 1.602176634e-13
+
+# The SHAPE is gated and the SIZE is not, which is the opposite of what one would expect from a
+# rule that carries a constant -- and is deliberate. Measured against this store the computed
+# power runs 57% ABOVE the rule at 1 h and settles to within 3% of it by 30 d, so the rule's
+# constant is not accurate enough at the short end to gate anything: a band loose enough to admit
+# a ratio of 1.57 would admit almost any error. The exponent is what the rule is actually known
+# for, so that is what is checked, in the same band the activity fit uses. The magnitude is
+# checked below against an evaluation instead.
+#
+# Which of the two is wrong is settled rather than assumed: the integral check below agrees with
+# an evaluated partition to 2%, so it is the empirical rule that is low at short cooling times.
+WAY_WIGNER_POWER_BAND = WAY_WIGNER_BAND
+
+
+def way_wigner_power(data, fissions=1.0e20):
+    """Decay HEAT against Way and Wigner's rule: the exponent gated, the constant reported.
+
+    This exercises what the activity path never touches -- the three MT457 average decay
+    energies -- since an inventory correct in every atom but staged with the wrong energies
+    would pass the activity fit and fail here.
+
+    Neutrinos are excluded on both sides: ENDF's averages are the recoverable energies and
+    Way-Wigner was fitted to measured heating, so the two describe the same quantity.
+    """
+    inventory = nusift.seed_fission(data, "U-235", energy="thermal", fissions=fissions)
+    times = nusift.logspace(WAY_WIGNER_START, WAY_WIGNER_END, WAY_WIGNER_POINTS)
+    result = nusift.decay(data, inventory, times)
+    table = nusift.response(data, result, metric="heat", units="W")
+
+    t = np.asarray(times, dtype=float)
+    watts = np.asarray(table.totals, dtype=float)
+    predicted = WAY_WIGNER_MEV_PER_FISSION * t**-1.2 * MEV_TO_J * fissions
+    ratio = watts / predicted
+
+    log_t, log_p = np.log10(t), np.log10(watts)
+    slope = float(np.polyfit(log_t, log_p, 1)[0])
+
+    low, high = WAY_WIGNER_POWER_BAND
+    return {
+        "times": t,
+        "watts": watts,
+        "predicted": predicted,
+        "ratio": ratio,
+        "ratio_first": float(ratio[0]),
+        "ratio_last": float(ratio[-1]),
+        "slope": slope,
+        "band": WAY_WIGNER_POWER_BAND,
+        "within": low <= slope <= high,
+        "source": "glasstone1977",
+    }
+
+
+# Recoverable energy released by fission-product DECAY, per fission of U-235 at thermal energy:
+# the delayed beta and delayed gamma terms of the ENDF MT458 energy-release partition, 6.50 and
+# 6.33 MeV. Neutrinos (8.75 MeV) are excluded from both sides, prompt terms are not decay, and
+# the fission fragments' kinetic energy is already spent before the first decay.
+#
+# This is the sharp check on the decay energies, and it is sharp because it is an integral: every
+# yield, every branch of the chain and every staged average energy contributes exactly once, and
+# no time grid or cooling window can hide a term. A rule fitted to measurements cannot do this --
+# only an evaluation of the same fission can.
+FISSION_DELAYED_BETA_MEV = 6.50
+FISSION_DELAYED_GAMMA_MEV = 6.33
+FISSION_DECAY_ENERGY_MEV = FISSION_DELAYED_BETA_MEV + FISSION_DELAYED_GAMMA_MEV
+# Two evaluations of one fission, arrived at by different routes: MT458 partitions the Q value,
+# while this sums MT457 averages over the MT454 yields and the whole chain beneath them. Agreeing
+# to a few percent is the claim; agreeing exactly would mean one was derived from the other.
+FISSION_DECAY_ENERGY_TOLERANCE = 0.05
+
+
+def fission_decay_energy(data, fissions=1.0e20):
+    """Total recoverable decay energy per fission, against the MT458 delayed partition.
+
+    Integrated to 1e13 s -- three hundred thousand years, long past the last fission product
+    that carries meaningful energy -- so this is the whole release rather than a window of it.
+    The count of decays per fission is returned alongside because it is the same integral with
+    the energies taken out, and about six is the textbook figure for how far a fission fragment
+    is from stability.
+    """
+    inventory = nusift.seed_fission(data, "U-235", energy="thermal", fissions=fissions)
+    interval = nusift.integrate(data, inventory, 0.0, 1.0e13)
+    joules = float(np.sum(np.asarray(
+        nusift.response(data, interval, metric="heat", units="J").totals, dtype=float)))
+    decays = float(np.sum(np.asarray(
+        nusift.response(data, interval, metric="activity", units="decays").totals, dtype=float)))
+
+    mev = joules / MEV_TO_J / fissions
+    residual = (mev - FISSION_DECAY_ENERGY_MEV) / FISSION_DECAY_ENERGY_MEV
+    return {
+        "mev_per_fission": mev,
+        "reference_mev": FISSION_DECAY_ENERGY_MEV,
+        "decays_per_fission": decays / fissions,
+        "residual": residual,
+        "tolerance": FISSION_DECAY_ENERGY_TOLERANCE,
+        "within": abs(residual) <= FISSION_DECAY_ENERGY_TOLERANCE,
+        "source": "endf458",
+    }
+
+
 # What the engine is required to reproduce a closed form to. The measured disagreement is three
 # orders below this -- it is double-precision round-off on a chained exponential rather than
 # anything the solver needs headroom for.

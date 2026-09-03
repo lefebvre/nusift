@@ -515,6 +515,8 @@ def main():
     yields = checks.chain_yield_rows(data)
     icrp = checks.icrp116_rows(data)
     wigner = checks.way_wigner(data)
+    heat = checks.way_wigner_power(data)
+    energy = checks.fission_decay_energy(data)
     curves = checks.equilibrium_curves(data)
     fine, summaries = checks.cross_code_rows(data)
 
@@ -707,6 +709,42 @@ def main():
     add(table(["window", "local slope"],
               [[label, f"{slope:.3f}"] for label, slope in wigner["segments"]]))
     add("")
+    add("## Decay heat")
+    add("")
+    add("Way and Wigner wrote their rule for **power**, not activity, so decay heat is the")
+    add("quantity it actually describes -- and unlike activity it runs through the three MT457")
+    add("average decay energies. An inventory correct in every atom but staged with the wrong")
+    add("energies passes the fit above and fails here.")
+    add("")
+    add(f"Fitted log-log slope **{heat['slope']:.3f}** over {checks.WAY_WIGNER_START} to")
+    add(f"{checks.WAY_WIGNER_END}, accepted within")
+    add(f"[{heat['band'][0]}, {heat['band'][1]}].")
+    add("")
+    add("Only the exponent is gated. Against the rule's constant of 2.66 MeV/s per fission the")
+    add(f"computed power runs **{heat['ratio_first']:.2f}x** at 1 h, settling to")
+    add(f"**{heat['ratio_last']:.2f}x** by 30 d. That is the rule's own accuracy at the short end")
+    add("rather than anything about this store, so it is reported and not used as a gate -- and")
+    add("which of the two is low is settled by the integral below rather than assumed:")
+    add("")
+    add(table(["quantity", "NuSIFT", "reference", "residual", "band"],
+              [["recoverable decay energy per fission",
+                f"{energy['mev_per_fission']:.3f} MeV",
+                f"{energy['reference_mev']:.2f} MeV",
+                f"{energy['residual']:+.2%}",
+                f"{energy['tolerance']:.0%}"],
+               ["decays per fission", f"{energy['decays_per_fission']:.3f}", "about 6", "--",
+                "reported"]]))
+    add("")
+    add("The reference is the delayed beta and delayed gamma terms of the ENDF MT458")
+    add("energy-release partition for U-235 thermal fission, 6.50 and 6.33 MeV, with the")
+    add("8.75 MeV of neutrinos excluded from both sides. This is the sharp check on the decay")
+    add("energies because it is an **integral**: every yield, every branch and every staged")
+    add("average energy contributes exactly once, and no cooling window can hide a term. The two")
+    add("sides are separate evaluations of one fission reached by different routes -- MT458")
+    add("partitions the Q value, this sums MT457 over the MT454 yields and the chain beneath")
+    add("them -- so agreeing to a few percent is the claim; agreeing exactly would mean one was")
+    add("derived from the other.")
+    add("")
 
     add("## Real chains against their closed forms")
     add("")
@@ -793,7 +831,10 @@ def main():
     print(f"  half-lives       {len(half_lives)} gated")
     print(f"  chain yields     {len(yields)} gated")
     print(f"  cross-code       {sum(s['comparisons'] for s in summaries)} comparisons")
-    print(f"  Way-Wigner slope {wigner['slope']:.3f}")
+    print(f"  Way-Wigner slope {wigner['slope']:.3f} (activity), "
+          f"{heat['slope']:.3f} (heat)")
+    print(f"  decay energy     {energy['mev_per_fission']:.3f} MeV/fission "
+          f"({energy['residual']:+.2%})")
     print(f"  figures written to {FIGURES.relative_to(ROOT)}")
 
 

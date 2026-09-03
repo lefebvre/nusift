@@ -12,7 +12,7 @@ CI gates on cannot be two different numbers.
 
 |  |  |
 | --- | --- |
-| store | `data/nusift_b8.1.h5`, ENDF/B-VIII.1, staged 2026-08-13T15:29:37Z |
+| store | `data/nusift_b8.1.h5`, ENDF/B-VIII.1, staged 2026-09-03T12:57:58Z |
 | coverage | 3828 nuclides staged, 4012 in the closed chain |
 | nusift | 0.1.0 |
 | cross-code | radioactivedecay 0.6.1 (pinned 0.6.1), ICRP-107 decay data |
@@ -219,6 +219,38 @@ Fitted log-log slope **-1.121** over 1h to
 | 1 h - 10 h | -1.101 |
 | 10 h - 100 h | -1.223 |
 | 100 h - 30 d | -1.073 |
+
+## Decay heat
+
+Way and Wigner wrote their rule for **power**, not activity, so decay heat is the
+quantity it actually describes -- and unlike activity it runs through the three MT457
+average decay energies. An inventory correct in every atom but staged with the wrong
+energies passes the fit above and fails here.
+
+Fitted log-log slope **-1.288** over 1h to
+30d, accepted within
+[-1.35, -1.05].
+
+Only the exponent is gated. Against the rule's constant of 2.66 MeV/s per fission the
+computed power runs **1.57x** at 1 h, settling to
+**1.03x** by 30 d. That is the rule's own accuracy at the short end
+rather than anything about this store, so it is reported and not used as a gate -- and
+which of the two is low is settled by the integral below rather than assumed:
+
+| quantity | NuSIFT | reference | residual | band |
+| --- | --- | --- | --- | --- |
+| recoverable decay energy per fission | 12.584 MeV | 12.83 MeV | -1.92% | 5% |
+| decays per fission | 6.156 | about 6 | -- | reported |
+
+The reference is the delayed beta and delayed gamma terms of the ENDF MT458
+energy-release partition for U-235 thermal fission, 6.50 and 6.33 MeV, with the
+8.75 MeV of neutrinos excluded from both sides. This is the sharp check on the decay
+energies because it is an **integral**: every yield, every branch and every staged
+average energy contributes exactly once, and no cooling window can hide a term. The two
+sides are separate evaluations of one fission reached by different routes -- MT458
+partitions the Q value, this sums MT457 over the MT454 yields and the chain beneath
+them -- so agreeing to a few percent is the claim; agreeing exactly would mean one was
+derived from the other.
 
 ## Real chains against their closed forms
 
