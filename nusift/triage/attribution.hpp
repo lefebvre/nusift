@@ -26,7 +26,7 @@
 // uncertainty data to be meaningful. See engine/adjoint_engine.hpp for why one adjoint solve
 // yields all of them at once.
 //
-// NOT MODELLED HERE: interval domains. The shares are of an instantaneous response; attributing
+// NOT MODELED HERE: interval domains. The shares are of an instantaneous response; attributing
 // a time-integrated total to its seed needs the integrated adjoint, which is a different solve.
 //
 #include <cstdint>

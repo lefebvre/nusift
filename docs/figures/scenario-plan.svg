@@ -65,7 +65,7 @@
 <line class="axis" x1="202.0" y1="280.0" x2="822.0" y2="280.0" stroke-width="1.0"/>
 <text class="ink" x="74.0" y="302.0" font-size="12" text-anchor="start" font-weight="normal">The budget of 0.02 Sv is spent 14.3 m into "survey" — the plan as written accrues 782% of it.</text>
 <text class="muted" x="74.0" y="322.0" font-size="11.5" text-anchor="start" font-weight="normal">The mean-rate column is what makes breaking a job into legs worth doing: two legs with the same dose are different problems</text>
-<text class="muted" x="74.0" y="338.0" font-size="11.5" text-anchor="start" font-weight="normal">when one is fifteen minutes at two metres and the other is forty-five at one, and only the rate separates them.</text>
+<text class="muted" x="74.0" y="338.0" font-size="11.5" text-anchor="start" font-weight="normal">when one is fifteen minutes at two meters and the other is forty-five at one, and only the rate separates them.</text>
 <text class="muted" x="74.0" y="360.0" font-size="11.5" text-anchor="start" font-weight="normal">Naming the leg and the minute is the point. A plan that simply reports 'over budget' leaves the reader to work out which part</text>
 <text class="muted" x="74.0" y="376.0" font-size="11.5" text-anchor="start" font-weight="normal">to shorten, move further out, or share between two people — and those are the only three things anyone can actually do.</text>
 <text class="muted" x="74.0" y="398.0" font-size="11.5" text-anchor="start" font-weight="normal">A break carries no dose and still carries time, so the legs after it start later against a source that has decayed further.</text>

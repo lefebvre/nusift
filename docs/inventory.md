@@ -105,9 +105,9 @@ number nobody can check is a disclaimer, not a warning.
 
 ### What reconciliation cannot do
 
-It propagates what a sheet **measured**. A daughter that grew in during the carry is modelled and
+It propagates what a sheet **measured**. A daughter that grew in during the carry is modeled and
 appears; a daughter that was present at an assay and simply not written down is not recovered by
-anything. So the merged rows mix measured and modelled amounts, and which a given row is depends
+anything. So the merged rows mix measured and modeled amounts, and which a given row is depends
 on how far its assay was carried — the Sr-90 sheet above arrives with Y-90 beside it because the
 model grew it in, while the Cs-137 sheet arrives with no Ba-137m because the sheet did not list
 any and the epoch gave the model no time to make some. No column can show that, so the report says

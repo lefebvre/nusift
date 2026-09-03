@@ -28,7 +28,7 @@ Three objects run through them, each chosen because the tool's model fits it:
   photon strength, decay heat. Debris on the ground is a distributed source and NuSIFT's point
   kernel is not a model of one, so Track 1 never asks it for a dose at a distance.
 - **A contaminated valve body** ([`examples/contaminated_component.csv`](../examples/contaminated_component.csv)),
-  compact enough that a point source at a few metres *is* the model. The dose-at-a-distance
+  compact enough that a point source at a few meters *is* the model. The dose-at-a-distance
   questions live here.
 - **A tonne of irradiated fuel** ([`examples/spent_fuel.csv`](../examples/spent_fuel.csv)) for the
   transport question, where the interesting answer is how far from shippable it is.
@@ -286,7 +286,7 @@ the reader's; the tool's contribution is refusing to let the two be confused for
 
 ## Track 2 — working around a compact source
 
-Now there is an object and a person who has to approach it. A point source at a few metres is the
+Now there is an object and a person who has to approach it. A point source at a few meters is the
 model, and it fits: the object is compact.
 
 ```mermaid
@@ -312,7 +312,7 @@ contributes through its daughter. Sr-90 and Y-90 appear in the exposure list too
 rounded zero, for the different reason that they are beta emitters.
 
 A becquerel of Sr-90 and a becquerel of Cs-137 are the same number of decays per second and
-nothing like the same hazard at two metres. The inventory did not change between this figure and
+nothing like the same hazard at two meters. The inventory did not change between this figure and
 the activity ranking — the question did.
 
 **What it does not say.** What a survey meter will read. This is ICRP 116 effective dose through

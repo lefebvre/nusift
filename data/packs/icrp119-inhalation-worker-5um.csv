@@ -18,7 +18,7 @@
 # Where ICRP gives several absorption types -- 468 of the 730 do -- this pack takes the LARGEST
 # coefficient, the most restrictive and so the conservative choice for screening, with the row's
 # note saying which type it came from. The type that applies to a real aerosol follows from the
-# chemical form, which a pack cannot know: a fast-absorbing caesium salt and a slow-absorbing
+# chemical form, which a pack cannot know: a fast-absorbing cesium salt and a slow-absorbing
 # oxide of the same nuclide are different intakes.
 #
 # Everything in the ingestion pack's header about what this quantity IS applies here: a

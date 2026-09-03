@@ -15,7 +15,7 @@
 # THE GEOMETRY IS THE ASSUMPTION, and it is a large one. These coefficients are computed for a
 # person standing in a UNIFORMLY CONTAMINATED, SEMI-INFINITE cloud -- infinite compared with the
 # mean free path of the photons carrying the dose, which in air at 1 MeV is of order a hundred
-# metres. A real plume that is smaller, or not uniform, or not surrounding the person, gives
+# meters. A real plume that is smaller, or not uniform, or not surrounding the person, gives
 # less, and this pack has no way to know that. It answers "what would standing inside a cloud of
 # this composition commit", not "what does the plume over there deliver".
 #

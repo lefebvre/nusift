@@ -74,7 +74,7 @@ double pointEffectiveDoseCoeff(double energyEv, const PointSourceGeometry& geome
     return 0.0;
   }
   // Fluence at the point [1/m^2 per photon/s], times Sv*m^2 per photon/m^2, times seconds per
-  // hour: the metres and the photons cancel and what is left is Sv/h per photon/s emitted.
+  // hour: the meters and the photons cancel and what is left is Sv/h per photon/s emitted.
   return spreadingAndAttenuation(energyEv, geometry) *
          effectiveDosePerFluence(energyEv, geometry.irradiation) * units::kSecondsPerHour;
 }

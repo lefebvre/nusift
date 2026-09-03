@@ -356,7 +356,7 @@ def test_exposure_tables_carry_their_air_path(data, result):
     )
     depth = np.asarray(far.mean_optical_depth)
     assert depth.shape == (len(far.times),)
-    # A hundred metres of air is most of a mean free path at fission-product energies.
+    # A hundred meters of air is most of a mean free path at fission-product energies.
     assert (depth > 0.1).all()
     assert far.rank(at="1h", top=1).mean_optical_depth == pytest.approx(depth[0])
 
@@ -759,7 +759,7 @@ def test_h10_is_the_conservative_estimator_of_effective_dose(data):
     """Two kernels transcribed from two publications by two different routes -- ICRP 116 out of a
     text layer, ICRP 74 off an image scan -- reproducing the relationship between the quantities
     they describe. H*(10) is designed to be a conservative estimate of effective dose for photons
-    up to about 10 MeV, and on a caesium field it exceeds it by the expected fifth."""
+    up to about 10 MeV, and on a cesium field it exceeds it by the expected fifth."""
     pack = nusift.load_pack(str(PACKS / "icrp74-ambient-dose-h10.csv"))
     assert pack.unit == "Sv/s"
     assert pack.size == 0, "a kernel carries no nuclides; it applies to whatever lines exist"
@@ -778,7 +778,7 @@ def test_h10_is_the_conservative_estimator_of_effective_dose(data):
     assert 1.1 < ratio < 1.3, f"H*(10) should exceed effective dose by about a fifth here: {ratio}"
 
     # Almost all of the answer comes from lines inside the curve's range, but not quite all:
-    # caesium's L X-rays sit below ICRP 74's 10 keV floor and take a clamped value. That is the
+    # cesium's L X-rays sit below ICRP 74's 10 keV floor and take a clamped value. That is the
     # coverage figure doing its job -- it is a share of the ANSWER, so a few soft lines carrying
     # a ten-thousandth of the dose show up as a ten-thousandth rather than as a warning.
     coverage = float(ambient.pack_coverage[0])
@@ -808,7 +808,7 @@ def test_a_concentration_pack_needs_the_extent_it_is_spread_through(data):
     # Twice the volume is half the concentration and half the dose rate.
     assert float(large.totals[1]) == pytest.approx(float(small.totals[1]) / 2.0)
 
-    # Caesium's own coefficient is negligible; the dose comes from the barium the chain grows in,
+    # Cesium's own coefficient is negligible; the dose comes from the barium the chain grows in,
     # which is exactly the combination FGR-15 tells its readers to make for themselves.
     labels = list(small.labels)
     assert small.rank(at=86400.0, top=1).contributors[0].label == "Ba-137m"
@@ -818,7 +818,7 @@ def test_a_concentration_pack_needs_the_extent_it_is_spread_through(data):
 @needs_store
 @needs_pack
 def test_intake_and_external_hazard_rank_differently(data):
-    """The whole argument for ranking by the metric you care about, a fourth time. Caesium leads
+    """The whole argument for ranking by the metric you care about, a fourth time. Cesium leads
     the ingestion hazard and strontium the inhalation hazard, on one inventory at one instant."""
     inv = nusift.Inventory()
     inv.add("Cs-137", 1.0e18)
@@ -1093,7 +1093,7 @@ def test_an_intervention_is_exact_against_a_forward_solve(data):
         data, inv, remove_at="30d", at="30y", interventions=plan
     )
 
-    # Rebuild the counterfactual by hand: decay to t0, drop every caesium atom, decay on.
+    # Rebuild the counterfactual by hand: decay to t0, drop every cesium atom, decay on.
     res = nusift.decay(data, inv, [nusift.parse_duration("30d")])
     after = nusift.Inventory()
     for label, atoms in zip(res.nuclides, res.atoms[0]):
@@ -1108,7 +1108,7 @@ def test_an_intervention_is_exact_against_a_forward_solve(data):
 @needs_store
 def test_the_benefit_is_booked_against_what_was_removed(data):
     """Removing Cs-137 takes with it the Ba-137m it would have fed -- but the benefit belongs to
-    the caesium that was removed, not to the barium that would have emitted."""
+    the cesium that was removed, not to the barium that would have emitted."""
     inv = nusift.Inventory()
     inv.add("Cs-137", 1.0e20)
 
@@ -1161,7 +1161,7 @@ def test_alternatives_share_one_baseline(data):
 
     assert len(study) == 3
     full, half, both = study.effects
-    # Linear in the inventory: removing half the caesium is worth exactly half of removing it all.
+    # Linear in the inventory: removing half the cesium is worth exactly half of removing it all.
     assert half.removed == pytest.approx(full.removed / 2.0, rel=1e-9)
     assert both.removed > full.removed
     for effect in study.effects:

@@ -1,7 +1,7 @@
 # NuSIFT methodology
 
 How NuSIFT gets from an isotopic inventory to a ranked answer, stage by stage: what is
-evaluated exactly, what is approximated and by how much, and what is not modelled at all.
+evaluated exactly, what is approximated and by how much, and what is not modeled at all.
 
 Each stage has its own document. Read them in order for the whole method, or jump to the one
 that produced the number you are looking at.
@@ -104,14 +104,14 @@ evaluated-data sensitivity and uncertainty, a binned photon emission spectrum wr
 transport code's source definition, and Python bindings throughout.
 [scenarios.md](scenarios.md) shows each of them on a worked case.
 
-Not modelled, each of which would *raise* a reported exposure: scattered photons beyond an
+Not modeled, each of which would *raise* a reported exposure: scattered photons beyond an
 explicit `--buildup` factor, source self-absorption, bremsstrahlung and any continuous photon
 spectrum, and beta, alpha, or neutron dose. Not yet implemented: neutron activation as a source
 term, and shielding.
 
 The limits are quantified per store rather than asserted in general — run `nusift data info`
 and it will tell you how many nuclides in *this* evaluation emit photons it cannot model. See
-[Exposure §7](exposure.md#7-what-is-not-modelled-and-what-it-costs).
+[Exposure §7](exposure.md#7-what-is-not-modeled-and-what-it-costs).
 
 ## Validation
 

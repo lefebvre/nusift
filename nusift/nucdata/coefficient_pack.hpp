@@ -100,7 +100,7 @@ const char* packShapeName(PackShape shape);
 // assumed because a curve against energy could just as well weight the photons EMITTED, and
 // those two differ by the whole point geometry.
 enum class PackApplies {
-  Fluence,  // per photon arriving per square metre at the point the geometry names
+  Fluence,  // per photon arriving per square meter at the point the geometry names
 };
 
 // What the coefficient multiplies. A published table states this, usually in its units: an A2
@@ -148,7 +148,7 @@ struct PackProvenance {
   std::string source;
   std::string path;  // where it was read from, for a report that has to say
   // Concentration packs only: the denominator of the concentration, "m2", "m3" or "kg". Ground
-  // deposition is per square metre and a cloud is per cubic metre, and confusing the two is not
+  // deposition is per square meter and a cloud is per cubic meter, and confusing the two is not
   // a units slip but a different question answered.
   std::string per;
   PackShape shape = PackShape::Nuclide;

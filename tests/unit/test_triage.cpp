@@ -575,7 +575,7 @@ TEST(ResponseExposure, ScalesWithGeometry) {
 //
 // At 662 keV they nearly do -- ICRP's own Table A.2 puts effective dose at 1.02 times air
 // kerma there, which is the coincidence that let the old air-kerma-as-sievert column look
-// right for caesium and cobalt.
+// right for cesium and cobalt.
 TEST(ResponseExposure, SievertIsEffectiveDoseAndNotAConvertedRoentgen) {
   const NuclearData data = chainWithOnePhotonEmitter();  // one 661.657 keV line
   Inventory inv;
@@ -638,7 +638,7 @@ TEST(ResponseExposure, TheIrradiationGeometryReachesTheWeight) {
   const double facing = buildResponse(data, result, ap).totals[0];
   const double away = buildResponse(data, result, pa).totals[0];
   EXPECT_GT(facing, away);
-  // ICRP 116 Table A.1 at 0.662 MeV, AP over PA. Not to the last digit: the caesium line is
+  // ICRP 116 Table A.1 at 0.662 MeV, AP over PA. Not to the last digit: the cesium line is
   // 661.657 keV, a few hundred eV below ICRP's grid point, so both columns are interpolated
   // and the ratio moves in the fifth figure.
   EXPECT_NEAR(facing / away, 3.17 / 2.62, 1.0e-3);
@@ -728,7 +728,7 @@ int columnOfLabel(const ResponseTable& table, const std::string& label) {
       return c;
     }
   }
-  throw NusiftError("test: no column labelled " + label);
+  throw NusiftError("test: no column labeled " + label);
 }
 
 std::string packText(const char* progeny, const char* rows, const char* domain = "instant") {
@@ -1088,7 +1088,7 @@ TEST(ResponseLines, IntervalLineTotalMatchesTheNuclideTotal) {
 
 // Matching totals is not enough to say an interval was aggregated by line: per-nuclide columns
 // sum to exactly the same number. The columns themselves have to be lines, carrying an energy
-// and a labelled emitter, or `--by line` over a window silently answers a different question
+// and a labeled emitter, or `--by line` over a window silently answers a different question
 // from the same flag over an instant.
 TEST(ResponseLines, IntervalColumnsAreLinesRatherThanNuclides) {
   const NuclearData data = chainWithStrongAndTraceLines();
@@ -1123,7 +1123,7 @@ TEST(ResponseLines, IntervalColumnsAreLinesRatherThanNuclides) {
 
 // A count of flagged nuclides says nothing about magnitude: a hundred negligible ones and
 // three dominant ones look identical. The energy fraction is what separates them, and it is
-// activity-weighted so a large unmodelled fraction on a negligible nuclide stays negligible.
+// activity-weighted so a large unmodeled fraction on a negligible nuclide stays negligible.
 TEST(ResponseExposure, ReportsHowMuchPhotonEnergyIsUnmodelled) {
   StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
   // The emitter carries a 1 MeV line at unit intensity, plus an equal amount of continuum.
@@ -1149,7 +1149,7 @@ TEST(ResponseExposure, ReportsHowMuchPhotonEnergyIsUnmodelled) {
   EXPECT_NEAR(rank(table, 0, RankRequest{}).unmodeledEnergyFraction, 0.5, 1e-9);
 }
 
-// Nothing unmodelled means nothing to warn about, rather than a zero that still prints.
+// Nothing unmodeled means nothing to warn about, rather than a zero that still prints.
 TEST(ResponseExposure, UnmodelledFractionIsZeroWhenEveryPhotonIsAccountedFor) {
   StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
   arrays.emEnergyEv = {0.0, 1.0e6, 0.0};
@@ -1462,7 +1462,7 @@ TEST(ResponsePhoton, RefusesAUnitThatDoesNotMeasureTheMetric) {
   }
 }
 
-// An unmodelled continuum understates a photon count exactly as it understates an exposure:
+// An unmodeled continuum understates a photon count exactly as it understates an exposure:
 // the flag, the energy fraction, and the ranking must all carry it. And the optical-depth
 // caveat attaches only to the quantity that actually used the point geometry -- a strength
 // number has no path to be thick, a fluence number carries the path it was built in.

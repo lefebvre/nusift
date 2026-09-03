@@ -386,7 +386,7 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
     if (per == fields.end() || per->second.empty()) {
       throw InputError(tagged(
           kModule, sourceName + ": a concentration pack has to say `per` what -- m2, m3 or kg. "
-                                "Deposition per square metre and a cloud per cubic metre are "
+                                "Deposition per square meter and a cloud per cubic meter are "
                                 "different questions with the same-looking coefficients"));
     }
     const std::string unit = lowered(per->second);
@@ -510,7 +510,7 @@ std::vector<double> CoefficientPack::weights(const NuclearData& data, const Inve
         break;
       case PackBasis::Concentration:
         // Per becquerel of concentration: lambda gives the becquerel, and the extent turns them
-        // into becquerel per square metre, cubic metre or kilogram.
+        // into becquerel per square meter, cubic meter or kilogram.
         weights[static_cast<std::size_t>(i)] = it->second * data.decayConstant(i) / extent.value;
         break;
       case PackBasis::Mass: {

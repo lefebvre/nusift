@@ -148,7 +148,7 @@ def _at(curve, px):
 def place_labels(ax, series, min_gap=14.0, min_dx=48.0, margin=34.0, candidates=41):
     """Anchor each curve's label where that curve is furthest from every other one.
 
-    Labelling each curve at its own maximum is the obvious rule and it fails badly on a decay
+    Labeling each curve at its own maximum is the obvious rule and it fails badly on a decay
     plot: the curves that start highest all peak at the first sample, so every label lands in the
     same corner on top of the others. What makes a label readable is not that its curve is high
     there but that no OTHER curve is near it there, which is what this maximizes.
@@ -683,7 +683,7 @@ def figure_rank_component(path):
     y = 88 + len(rows) * 22 + 24
     parts.append(text(74, y, "Sr-90 and Y-90 carry more activity than anything else in this object and are nowhere in this list.", "ink", 12))
     parts.append(text(74, y + 20, "They are beta emitters: a curie of Sr-90 and a curie of Cs-137 are the same number of decays per second and nothing like", "muted", 11.5))
-    parts.append(text(74, y + 36, "the same hazard at two metres. Which is the point of having metrics at all — the inventory did not change, the question did.", "muted", 11.5))
+    parts.append(text(74, y + 36, "the same hazard at two meters. Which is the point of having metrics at all — the inventory did not change, the question did.", "muted", 11.5))
     parts.append(text(74, y + 58, "A point source at 2 m is the model here, and it fits: the object is compact. The same kernel pointed at a contaminated field", "muted", 11.5))
     parts.append(text(74, y + 74, "would not be, which is why the fission-debris figures above are all in quantities that need no geometry.", "muted", 11.5))
     write(path, w, y + 94, parts, "Exposure ranking around a compact source")
@@ -772,7 +772,7 @@ def figure_plan(path):
     else:
         parts.append(text(left, y, f"The budget of {si(budget)} Sv is spent {duration(spent_at)} into \"{spent_in}\" — the plan as written accrues {total / budget * 100:.0f}% of it.", "ink", 12))
     parts.append(text(left, y + 20, "The mean-rate column is what makes breaking a job into legs worth doing: two legs with the same dose are different problems", "muted", 11.5))
-    parts.append(text(left, y + 36, "when one is fifteen minutes at two metres and the other is forty-five at one, and only the rate separates them.", "muted", 11.5))
+    parts.append(text(left, y + 36, "when one is fifteen minutes at two meters and the other is forty-five at one, and only the rate separates them.", "muted", 11.5))
     parts.append(text(left, y + 58, "Naming the leg and the minute is the point. A plan that simply reports 'over budget' leaves the reader to work out which part", "muted", 11.5))
     parts.append(text(left, y + 74, "to shorten, move further out, or share between two people — and those are the only three things anyone can actually do.", "muted", 11.5))
     parts.append(text(left, y + 96, "A break carries no dose and still carries time, so the legs after it start later against a source that has decayed further.", "muted", 11.5))

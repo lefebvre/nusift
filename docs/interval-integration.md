@@ -275,7 +275,7 @@ Two further cost properties, both of which follow from the code rather than from
   ([`nusift.cpp:410`](../nusift_apps/nusift.cpp#L410)) re-seeds, re-prunes, and re-augments per
   window, so N windows cost N times a single window. This is deliberate at the reporting layer:
   each window gets its own index space and therefore its own footnote about which contributors
-  carry unmodelled continuum, which would otherwise be attributed to the wrong ranking.
+  carry unmodeled continuum, which would otherwise be attributed to the wrong ranking.
 
 ## 9. What this method does not do
 
@@ -325,7 +325,7 @@ tab = nusift.response(nd, window, metric="exposure", units="R")
 tab.rank(top=5)
 ```
 
-**Not modelled at all** (unchanged from the instantaneous path): scatter buildup beyond an
+**Not modeled at all** (unchanged from the instantaneous path): scatter buildup beyond an
 explicit `--buildup` factor, source self-absorption, bremsstrahlung, and beta or neutron dose.
 Photon energy the store carries as continuum is reported as an understatement footnote rather
 than silently dropped.

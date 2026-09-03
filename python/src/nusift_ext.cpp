@@ -405,7 +405,7 @@ NB_MODULE(_core, m) {
             if (i < 0) {
               return 0.0;
             }
-            // Vacuum at one metre, so the 1/(4 pi d^2) is the whole geometry and the result is
+            // Vacuum at one meter, so the 1/(4 pi d^2) is the whole geometry and the result is
             // distance-independent -- the same construction gammaConstant() uses, and what
             // makes this comparable with a published per-activity coefficient.
             exposure::PointSourceGeometry vacuum;

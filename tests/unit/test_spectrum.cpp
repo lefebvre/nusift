@@ -271,7 +271,7 @@ TEST(SourceDeck, McnpSaysTheCardCarriesNoStrength) {
   const DecayResult result = decay(data, seeded(), std::vector<double>{1000.0});
   const std::string text =
       deck(binnedSpectrum(data, result, 0, BinningSpec{}), SourceFormat::McnpSdef);
-  // The one thing a reader must not assume. MCNP normalises SP, so a deck that did not say so
+  // The one thing a reader must not assume. MCNP normalizes SP, so a deck that did not say so
   // would silently be off by fourteen orders of magnitude.
   EXPECT_NE(text.find("SHAPE, NOT A STRENGTH"), std::string::npos);
   EXPECT_NE(text.find("photons/s"), std::string::npos);

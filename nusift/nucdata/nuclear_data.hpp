@@ -117,7 +117,7 @@ public:
   //
   // Separate accessors rather than one total, because the split is the interesting part
   // wherever the three do not deposit in the same place: heavy particles stop within microns,
-  // light ones within millimetres, and electromagnetic energy leaves a small source entirely.
+  // light ones within millimeters, and electromagnetic energy leaves a small source entirely.
   // A retained-versus-escaped answer needs the three apart; decay heat needs them summed.
   double lpEnergyEv(int index) const;
   double hpEnergyEv(int index) const;

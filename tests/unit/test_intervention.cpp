@@ -15,7 +15,7 @@ namespace nusift {
 namespace {
 
 // Sn-100 -> Sb-100 -> Te-100 (stable). Three DIFFERENT elements on one mass chain, which is
-// what makes "remove the caesium and the barium stays" testable at all.
+// what makes "remove the cesium and the barium stays" testable at all.
 NuclearData twoStepChain(double parent, double daughter) {
   StoreArrays arrays = synth::linearChain({parent, daughter});
   return NuclearData::fromArrays(std::move(arrays));

@@ -31,13 +31,13 @@
 // the importance g_i already carries the whole forward evolution from t0 to T, so a parent's
 // value includes the daughters it would have fed.
 //
-// What it does not do is remove the daughters already present at t0. Take out caesium and the
+// What it does not do is remove the daughters already present at t0. Take out cesium and the
 // barium standing in the drum at that instant stays, because it is barium. That is exactly what
 // a chemical separation does, and stating it matters: the benefit of removing Cs-137 an hour
 // before the response is nearly nothing, since the Ba-137m doing the emitting is already there
-// and is not caesium.
+// and is not cesium.
 //
-// NOT MODELLED HERE: separation efficiency as a function of chemistry, where the removed
+// NOT MODELED HERE: separation efficiency as a function of chemistry, where the removed
 // material goes, the dose incurred DURING the processing, and any interval response -- the
 // shares are of an instantaneous R(T), for the same reason attribution refuses intervals.
 //
@@ -136,7 +136,7 @@ struct InterventionStudy {
 // half of something twice is not a stated quantity, and guessing which of 75% or 100% was meant
 // would be worse than refusing.
 //
-// A selector that resolves but finds no atoms at t0 is NOT an error: "there is no caesium left
+// A selector that resolves but finds no atoms at t0 is NOT an error: "there is no cesium left
 // to remove by then" is a real answer to a question someone actually asked.
 InterventionStudy compareInterventions(const NuclearData& data, const Inventory& inventory,
                                        double interventionTime, double responseTime,

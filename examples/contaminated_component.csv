@@ -32,7 +32,7 @@ Eu-154,  6.0e10,  Bq
 Sr-90,   1.8e12,  Bq
 Y-90,    1.8e12,  Bq
 
-# --- alpha contamination: negligible for dose at a metre, decisive for waste class
+# --- alpha contamination: negligible for dose at a meter, decisive for waste class
 Am-241,  4.5e9,   Bq
 Pu-239,  1.1e9,   Bq
 Pu-240,  8.0e8,   Bq

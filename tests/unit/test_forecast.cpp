@@ -42,7 +42,7 @@ int columnOfLabel(const ResponseTable& table, const std::string& label) {
       return c;
     }
   }
-  throw NusiftError("test: no column labelled " + label);
+  throw NusiftError("test: no column labeled " + label);
 }
 
 ResponseTable tableOver(const NuclearData& data, const Inventory& inventory,
@@ -247,7 +247,7 @@ TEST(Forecast, PinnedTrackIsFollowedEvenThoughItNeverReachesTheTop) {
 }
 
 // A pin on a contributor the forecast already surfaced is not a second track, and it is not
-// re-labelled as pinned either -- it earned its place.
+// re-labeled as pinned either -- it earned its place.
 TEST(Forecast, PinningAContenderDoesNotDuplicateIt) {
   const NuclearData data = twoIndependentEmitters(1.0e-3, 1.0e-6);
   Inventory inv;

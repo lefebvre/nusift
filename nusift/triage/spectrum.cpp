@@ -130,7 +130,7 @@ BinnedSpectrum build(const NuclearData& data, std::span<const std::int64_t> keys
     // photon output is ENTIRELY continuum places no line anywhere, so a scan over what landed
     // in the histogram would drop precisely the worst case.
     //
-    // Modelled energy is the DISCRETE line sum rather than the staged average electromagnetic
+    // Modeled energy is the DISCRETE line sum rather than the staged average electromagnetic
     // energy, which matches unmodeledEnergyFractions() in response.cpp exactly. The two are
     // close but not equal, and the whole value of this figure is that a source deck and a
     // ranking of the same inventory cannot report different amounts of missing photon power.

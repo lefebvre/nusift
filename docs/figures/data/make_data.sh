@@ -36,7 +36,7 @@ S=(--store "$STORE")
 #   F  a 20 kt fission source -- the SOURCE TERM questions, asked in geometry-free quantities
 #      (activity, photon strength, decay heat) because debris on the ground is a distributed
 #      source and the point kernel is not a model of it;
-#   C  a contaminated valve body, drum-scale and compact, where a point source at a few metres
+#   C  a contaminated valve body, drum-scale and compact, where a point source at a few meters
 #      IS the model, so the dose-at-a-distance questions belong here;
 #   I  a tonne of irradiated fuel, for the waste and disposal questions.
 F=(--seed-fission U-235 --energy thermal --yield-kt 20)

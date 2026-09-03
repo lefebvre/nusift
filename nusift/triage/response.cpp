@@ -22,7 +22,7 @@ constexpr const char* kModule = "response";
 constexpr const char* kUnitsModule = "units";
 constexpr const char* kPinModule = "pin";
 
-// Above this fraction of a nuclide's photon energy sitting in an unmodelled continuum, the
+// Above this fraction of a nuclide's photon energy sitting in an unmodeled continuum, the
 // emitter is flagged. Named once because three places test it -- the two table assemblers and
 // the caveats the adjoint path reports -- and a threshold that drifted between them would flag
 // an emitter in one report and not in another for the same store.
@@ -277,7 +277,7 @@ std::string bucketLabel(Aggregate aggregate, std::int64_t key, std::int64_t domi
       return label;
     }
     case Aggregate::GammaLine:
-      break;  // labelled at construction, where the energy is in hand
+      break;  // labeled at construction, where the energy is in hand
   }
   return {};
 }
@@ -521,14 +521,14 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
 }
 
 // Fraction of the emitted photon energy rate that lives in a spectrum NuSIFT does not model.
-// Activity-weighted, so a nuclide with a large unmodelled fraction but negligible activity
+// Activity-weighted, so a nuclide with a large unmodeled fraction but negligible activity
 // contributes negligibly -- which is the whole point of reporting a magnitude rather than a
 // count of flagged nuclides.
 std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
                                              std::span<const std::int64_t> keys,
                                              const std::vector<std::vector<double>>& atomsByTime) {
   const std::size_t nNuc = keys.size();
-  std::vector<double> modelled(nNuc, 0.0);
+  std::vector<double> modeled(nNuc, 0.0);
   std::vector<double> missing(nNuc, 0.0);
 
   for (std::size_t i = 0; i < nNuc; ++i) {
@@ -540,7 +540,7 @@ std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
     if (lambda <= 0.0) {
       continue;
     }
-    modelled[i] = lambda * discretePhotonEnergyEv(data.lines(index));
+    modeled[i] = lambda * discretePhotonEnergyEv(data.lines(index));
     missing[i] = lambda * data.continuumPhotonEv(index);
   }
 
@@ -550,7 +550,7 @@ std::vector<double> unmodeledEnergyFractions(const NuclearData& data,
     double missingTotal = 0.0;
     for (std::size_t i = 0; i < nNuc; ++i) {
       const double atoms = atomsByTime[k][i];
-      modelledTotal += modelled[i] * atoms;
+      modelledTotal += modeled[i] * atoms;
       missingTotal += missing[i] * atoms;
     }
     const double total = modelledTotal + missingTotal;
@@ -592,7 +592,7 @@ std::vector<double> meanOpticalDepths(const NuclearData& data, std::span<const s
 }
 
 // The caveats a table carries depend on which part of the photon model it actually used. The
-// unmodelled continuum understates every photon metric -- an exposure and a photon count
+// unmodeled continuum understates every photon metric -- an exposure and a photon count
 // alike -- so both carry the energy fraction. The air-path depth is a property only of an
 // answer that USED the geometry: a photon-strength number at no distance has no path to be
 // thick, and footnoting one with a depth computed from a geometry it never used would report

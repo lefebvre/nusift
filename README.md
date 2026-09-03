@@ -155,12 +155,12 @@ itself. NuSIFT attaches photon lines to the nuclide that actually emits them, so
 source's exposure is correctly attributed to its Ba-137m daughter and the published gamma
 constant falls out of the equilibrium ratio rather than being folded into a table.
 
-Exposure is modelled as an unshielded point source in air: inverse-square spreading, air
+Exposure is modeled as an unshielded point source in air: inverse-square spreading, air
 attenuation applied per photon line, and air kerma converted to roentgen. Because attenuation
 is energy-dependent it sits *inside* the sum over lines, which is why the data store keeps
 whole spectra rather than one constant per nuclide -- no single constant is right at more than
 one distance. Scatter buildup, source self-absorption, bremsstrahlung, and beta/neutron dose
-are not modelled; what a nuclide emits as continuum is recorded and reported, so an
+are not modeled; what a nuclide emits as continuum is recorded and reported, so an
 understated row says so rather than looking merely small.
 
 Solves are parallel across time points and deterministic: `--threads` defaults to every core,
@@ -212,7 +212,7 @@ so a shared evaluation can be used instead of the packaged one.
 ## Documentation
 
 [**docs/**](docs/README.md) documents the methodology stage by stage — what is evaluated
-exactly, what is approximated and by how much, and what is not modelled at all.
+exactly, what is approximated and by how much, and what is not modeled at all.
 [**docs/scenarios.md**](docs/scenarios.md) is the same tool the other way round: one section per
 command, on a source the model actually fits, with a figure from real output and a note on what
 each answer does not say. Start there if you arrived with a question rather than with a number.

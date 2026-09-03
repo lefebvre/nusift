@@ -46,7 +46,7 @@ std::string whenText(const BinnedSpectrum& spectrum) {
 }
 
 // The sentence both decks need and neither code can infer: what the tally has to be multiplied
-// by, and why the deck cannot do it. MCNP normalises SP; OpenMC scores per source particle.
+// by, and why the deck cannot do it. MCNP normalizes SP; OpenMC scores per source particle.
 // Different mechanisms, same arithmetic left to the user, so it is said once and worded twice.
 std::string strengthNote(const BinnedSpectrum& spectrum) {
   return sci(spectrum.total) + " " + unitText(spectrum);
@@ -271,7 +271,7 @@ void writeMcnp(std::ostream& out, const BinnedSpectrum& spectrum, const ReportCo
   out << "c ==========================================================================\n";
   writeProvenance(out, spectrum, context, "c  ");
   out << "c --------------------------------------------------------------------------\n";
-  out << "c  THE SP CARD BELOW IS A SHAPE, NOT A STRENGTH. MCNP normalises SP to unity\n";
+  out << "c  THE SP CARD BELOW IS A SHAPE, NOT A STRENGTH. MCNP normalizes SP to unity\n";
   out << "c  and scores every tally per source particle, so multiply your tally by\n";
   out << "c\n";
   out << "c      " << strengthNote(spectrum) << "\n";

@@ -32,7 +32,7 @@ REPORT = ROOT / "docs" / "validation.md"
 
 
 def write(path, content):
-    # Explicit LF: the repository normalises to LF and the drift check compares bytes.
+    # Explicit LF: the repository normalizes to LF and the drift check compares bytes.
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
@@ -280,7 +280,7 @@ def figure_way_wigner(path, result):
             ["Nothing in NuSIFT was fitted to this rule: the exponent falls out of the yield "
              "set, the chain topology, the solve, and the activity weights together.",
              f"Local slope by decade — {segments}.",
-             "The rule is a fit to gross behaviour rather than an exact exponent, which is why "
+             "The rule is a fit to gross behavior rather than an exact exponent, which is why "
              "the local slope moves across the window and the band admits that."], width)
     write(path, svg(width, max(height, after + 16), "\n".join(parts), "Fission-product activity against t^-1.2"))
 
