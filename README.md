@@ -343,8 +343,13 @@ Planned:
 
 - Seeding an inventory from neutron activation
 - Shielding
-- The ANS-5.1 decay-heat standard as an integral benchmark
 - Wheels for the three platforms
+
+Not planned, and worth saying why: a decay-heat benchmark against the ANS-5.1 standard. It is
+sold rather than published, the open reproductions of its coefficients are a 403 and a scanned
+fax, and the underlying measurements are tabulated per counting interval rather than as a burst
+function. Decay heat is instead gated on its slope and on its total energy release; see
+[docs/validation.md](docs/validation.md) for what that does and does not constrain.
 
 ## License
 

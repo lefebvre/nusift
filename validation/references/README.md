@@ -211,6 +211,29 @@ staged: NuSIFT fetches only the decay and fission-yield sublibraries, and MT458 
 neutron sublibrary, so this is an outside number rather than one the store could be checked
 against itself. That is the point of it.
 
+**`ans51`** — ANSI/ANS-5.1, *Decay Heat Power in Light Water Reactors*. **Not used, and the
+reason is recorded here so nobody spends the afternoon twice.**
+
+It would be the right reference for a time-dependent decay-heat benchmark: an evaluated standard,
+with uncertainties, for exactly the seeds this tool builds. It is sold rather than published, and
+its 23 exponential coefficients are inside the document. Two open reproductions of those
+coefficients were checked and neither serves — the Argonne SAS documentation page refuses the
+request, and the NRC's public estimating document is a scanned fax carrying no text layer, so a
+transcription would be OCR guesswork on the digits that carry the whole answer.
+
+The primary measurements behind the standard ARE free: J.K. Dickens et al., *Fission-Product
+Energy Release for Times Following Thermal-Neutron Fission of 235-U Between 2 and 14000 Seconds*,
+ORNL/NUREG-14 (1977), <https://www.osti.gov/servlets/purl/5348997>. They were checked too, and
+they do not serve either, for two independent reasons. The OCR corrupts the numerals — rows read
+`0,,241 > 0.020`, with `¥` standing in for ± — and the tables give energy released per counting
+interval for 1, 10 and 100 second irradiations rather than a burst decay-heat function, so
+turning them into one means deconvolving the irradiation and counting windows. That is a physics
+task with its own error budget, not a transcription.
+
+So decay heat is checked against `glasstone1977` for its slope and `endf458` for its total, and
+the shape below about an hour is left explicitly unconstrained. The rule this respects is the one
+every other entry here follows: a reference has to be something a reader can check.
+
 **`radioactivedecay`** — Malins, A., & Lemoine, T. (2022). *radioactivedecay: A Python package
 for radioactive decay calculations.* Journal of Open Source Software 7(71), 3318.
 <https://doi.org/10.21105/joss.03318>

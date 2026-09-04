@@ -252,6 +252,29 @@ partitions the Q value, this sums MT457 over the MT454 yields and the chain bene
 them -- so agreeing to a few percent is the claim; agreeing exactly would mean one was
 derived from the other.
 
+### What these two bracket, and what they leave open
+
+They are not two versions of one check. The empirical rule gates the **slope** of the
+curve over 1 h to 30 d; the evaluated partition gates the **area** under it over all
+time. A curve with the right slope and the right integral has little room left to be
+wrong in between.
+
+What neither constrains is the shape below about an hour -- seconds to minutes. That is
+where a loss-of-coolant analysis lives, and it is deliberately not claimed here.
+
+The benchmark that would close it is the ANS-5.1 decay-heat standard, and it is **not
+obtainable on the terms this suite runs on**. The standard is sold rather than
+published and its exponential coefficients live inside it; the open reproductions of
+those coefficients are a refused request and a scanned fax with no text layer. The
+primary measurements ([Dickens et al., ORNL/NUREG-14](https://www.osti.gov/servlets/purl/5348997)) are freely available and still do not
+serve: the OCR corrupts the digits, and the tables are energy per counting interval for
+1, 10 and 100 second irradiations rather than a burst function, so using them means
+deconvolving the irradiation and counting windows.
+
+Every other reference in this report is a table a reader can check against a citable
+source. An OCR-recovered fit would be the first that nobody could audit, which costs
+more than the check is worth -- so the gap is named instead of filled badly.
+
 ## Real chains against their closed forms
 
 ![Equilibria](figures/validation-equilibria.svg)
