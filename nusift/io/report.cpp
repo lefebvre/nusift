@@ -943,8 +943,8 @@ void writeInterventionsText(std::ostream& out, const InterventionStudy& study,
   }
 
   out << "  " << std::left << std::setw(static_cast<int>(nameWidth)) << "intervention" << std::right
-      << "  " << std::setw(12) << "after" << "  " << std::setw(12) << "removed"
-      << "  " << std::setw(8) << "of base" << "  driven by\n";
+      << "  " << std::setw(12) << "after" << "  " << std::setw(12) << "removed" << "  "
+      << std::setw(8) << "of base" << "  driven by\n";
   for (const InterventionEffect& effect : study.effects) {
     out << "  " << std::left << std::setw(static_cast<int>(nameWidth)) << effect.name << std::right
         << "  " << std::setw(12) << sci(effect.response) << "  " << std::setw(12)
