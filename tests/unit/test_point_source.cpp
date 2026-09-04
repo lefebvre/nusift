@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <numbers>
 #include <vector>
 
 #include "nusift/core/error.hpp"
@@ -304,7 +305,7 @@ TEST(PointSource, FluenceRateMatchesSpreadingAttenuationAndBuildup) {
   const double d = geometry.distanceM;
   double expected = 0.0;
   for (const auto& line : lines) {
-    expected += line.intensity / (4.0 * M_PI * d * d) *
+    expected += line.intensity / (4.0 * std::numbers::pi * d * d) *
                 std::exp(-airMassAttenuation(line.energyEv) * geometry.airDensityKgM3 * d) *
                 geometry.buildup;
   }
@@ -335,7 +336,8 @@ TEST(PointSource, FluenceIsExactlyInverseSquareInVacuum) {
   EXPECT_NEAR(atTwo, atOne / 4.0, atOne * 1e-14);
   EXPECT_NEAR(atTen, atOne / 100.0, atOne * 1e-14);
   geometry.distanceM = 1.0;
-  EXPECT_DOUBLE_EQ(fluenceRatePerBecquerel(spanOf(unity), geometry), 1.0 / (4.0 * M_PI));
+  EXPECT_DOUBLE_EQ(fluenceRatePerBecquerel(spanOf(unity), geometry),
+                   1.0 / (4.0 * std::numbers::pi));
 }
 
 // The guards the exposure path has must hold on the fluence path as well: a zero distance

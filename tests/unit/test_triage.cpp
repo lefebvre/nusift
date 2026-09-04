@@ -1286,13 +1286,13 @@ TEST(ResponsePhoton, FluenceMatchesSpreadingAttenuationAndBuildup) {
 
   const double activity = lambda1 * synth::batemanN1(n0, lambda0, lambda1, t);
   const double withAir =
-      activity * 0.9 / (4.0 * M_PI * d * d) *
+      activity * 0.9 / (4.0 * std::numbers::pi * d * d) *
       std::exp(-exposure::airMassAttenuation(661657.0) * spec.geometry.airDensityKgM3 * d) *
       buildup;
   EXPECT_NEAR(buildResponse(data, result, spec).totals[0], withAir, withAir * 1e-12);
 
   spec.geometry.airAttenuation = false;
-  const double inVacuum = activity * 0.9 / (4.0 * M_PI * d * d) * buildup;
+  const double inVacuum = activity * 0.9 / (4.0 * std::numbers::pi * d * d) * buildup;
   EXPECT_NEAR(buildResponse(data, result, spec).totals[0], inVacuum, inVacuum * 1e-12);
 }
 
