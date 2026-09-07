@@ -104,20 +104,44 @@ TaskPlan runTaskPlan(const NuclearData& data, const Inventory& inventory, const 
   if (plan.budget > 0.0 && plan.total > plan.budget) {
     plan.budgetSpent = true;
     double before = 0.0;
+    // The last leg that actually put something on the meter, and when it ended. A budget
+    // exhausted at a boundary was exhausted THERE, not at the start of whatever comes next --
+    // and what comes next may be a break, minutes later, during which nothing accrued.
+    int lastAccruing = -1;
+    double lastAccrualEnd = plan.startSeconds;
     for (std::size_t i = 0; i < plan.legs.size(); ++i) {
       const LegResult& leg = plan.legs[i];
       if (leg.cumulative <= plan.budget) {
         before = leg.cumulative;
+        if (leg.accrued > 0.0) {
+          lastAccruing = static_cast<int>(i);
+          lastAccrualEnd = leg.endSeconds;
+        }
         continue;
       }
-      plan.spentInLeg = static_cast<int>(i);
 
-      ResponseSpec legSpec = spec;
-      legSpec.aggregate = Aggregate::Nuclide;
-      legSpec.geometry = legs[i].geometry;
       // The budget left when this leg starts, divided by the occupancy, because what the
       // integral has to reach is the UNOCCUPIED accrual that scales to it.
       const double remaining = (plan.budget - before) / leg.occupancy;
+      if (!(remaining > 0.0)) {
+        // Nothing left by the time this leg opens: an earlier leg's cumulative met the budget
+        // exactly, which is what happens when the budget was read off a previous run's report.
+        // There is no root to find inside this leg -- stayTime is asked for a duration, and a
+        // budget of zero is not a question about one -- and the honest instant is the end of
+        // the leg that spent it. Reporting the start of THIS leg would be wrong by the length
+        // of any break between the two.
+        //
+        // `lastAccruing` is set: reaching here needs `before` equal to a positive budget, and
+        // only a leg that accrued something can have raised it that far.
+        plan.spentInLeg = lastAccruing;
+        plan.spentAtSeconds = lastAccrualEnd;
+        break;
+      }
+
+      plan.spentInLeg = static_cast<int>(i);
+      ResponseSpec legSpec = spec;
+      legSpec.aggregate = Aggregate::Nuclide;
+      legSpec.geometry = legs[i].geometry;
       const StayTime stay = stayTime(data, inventory, legSpec, leg.startSeconds, remaining,
                                      leg.endSeconds - leg.startSeconds, options);
       // Bounded by construction: this leg's full accrual already exceeds what is left, which is
