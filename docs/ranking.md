@@ -206,27 +206,38 @@ holding 95% of **both** activity and exposure at every one of the 80 constrained
 | | nuclides |
 | --- | --- |
 | union of the per-time 95% prefixes, both metrics | 86 |
-| the covering answer | **73** |
+| the covering answer | **74** |
 | candidates it chose from | 1045 |
 
 The union is not *wrong* — it over-delivers, holding 97.1% at its worst point rather than the 95%
 asked for. It is simply not minimal, and it was not chosen. Adding the exposure requirement to the
-activity one costs exactly **one** further nuclide (72 → 73), which is the sort of thing only a
+activity one costs exactly **one** further nuclide (73 → 74), which is the sort of thing only a
 joint answer can tell you.
+
+### Every constraint counts once, whatever it is measured in
+
+The greedy scores a candidate by what it closes of the constraints still unmet, and each of those
+is counted as a **fraction of its own required coverage** before the sum is taken. Adding raw
+shortfalls would be adding becquerels to sieverts per hour — the activity requirement's numbers are
+twenty orders of magnitude larger, so the exposure requirement would have no say in who is chosen
+at all, and the same question asked in curies rather than becquerels could come back a different
+list. The normalisation is also what makes an early time and a late one weigh alike within a single
+requirement: "95% at every time" makes each time an equal constraint, not one scaled by how much
+activity happened to be present then.
 
 ### What the report leads with
 
-Not the list. A list of seventy-three says nothing about whether it is comfortable or exactly on
+Not the list. A list of seventy-four says nothing about whether it is comfortable or exactly on
 the edge, so the **binding point** comes first — the (requirement, time) where the achieved
 coverage is closest to the floor:
 
 ```
-closest to failing: exposure (R/h) at 1 h -- holds 95.1% against 95.0%
+closest to failing: activity (Bq) at 16.23 d -- holds 95.0% against 95.0%
 ```
 
 The order members are listed in is **not a ranking**, and the report says so. The second member is
 whichever most improved the constraints still unmet *given* the first, which is usually not the
-second largest contributor to anything. A member with a peak share of 0.8% is there to hold up one
+second largest contributor to anything. A member with a peak share of 0.2% is there to hold up one
 particular instant; dropping it is exactly what the floor forbids.
 
 ### What it does not claim

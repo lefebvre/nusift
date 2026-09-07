@@ -1920,6 +1920,10 @@ void writeTriageSetText(std::ostream& out, const TriageSet& set,
         << sci(member.closedShortfall) << '\n';
   }
 
+  out << "\n  \"closed\" is what the member closed of the constraints still unmet when it\n"
+         "  was chosen, each counted as a fraction of its own required coverage and then\n"
+         "  summed -- dimensionless, so a requirement in Bq and one in Sv/h weigh alike.\n";
+
   out << "\n  The order is not a ranking. The second member is whichever most improved the\n"
          "  constraints still unmet GIVEN the first, which is usually not the second largest\n"
          "  contributor to anything -- a member with a small peak share is there to hold up one\n"

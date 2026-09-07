@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 #include <vector>
@@ -148,6 +149,68 @@ TEST(TriageSet, SatisfiesEveryRequirementJointly) {
   // And the joint set is at least as large as either alone, since it satisfies strictly more.
   const std::vector<CoverageRequirement> justA = {require(a, 0.95, "sheet A")};
   EXPECT_GE(joint.members.size(), robustTriageSet(justA).members.size());
+}
+
+// Re-expressing one requirement in a different unit must not change the answer.
+//
+// Nothing about the covering question depends on whether an activity is stated in Bq or in Ci,
+// or on whether it sits beside an exposure whose numbers are twenty orders of magnitude smaller.
+// The requirement is a FRACTION of its own total, so the constraint is already scale-free; what
+// was not, before the gains were normalised, was the greedy's choice of who to take next. Adding
+// raw shortfalls across requirements let whichever one happened to carry the larger numbers
+// decide the whole list, and the same problem stated in another unit came back a different list.
+//
+// Scaling one table's inventory is exactly the change a unit conversion makes -- every value and
+// its total move by one common factor -- and the factor here is Bq per Ci, so this is the
+// conversion rather than a stand-in for it.
+//
+// The two slowest nuclides and a grid inside their decade: what is being compared is two runs of
+// the same search, so both have to be reading real numbers. Ten thousand e-foldings of the fast
+// nuclide would leave a total that is pure solver round-off, whose SIGN is arbitrary, and a
+// negative total is a constraint with nothing to cover -- the runs would then differ over which
+// constraints exist at all, which is a fact about the grid and not about the units.
+TEST(TriageSet, DoesNotDependOnTheUnitsARequirementIsStatedIn) {
+  const NuclearData data = fourNuclides();
+  const std::vector<double> times = {1.0, 1.0e4, 1.0e5};
+  const Zai faster{50, 102, 0};  // lambda 1e-4
+  const Zai slower{50, 103, 0};  // lambda 1e-6
+
+  Inventory heavyOnFaster;
+  heavyOnFaster.add(faster, 1.0e22);
+  heavyOnFaster.add(slower, 1.0e18);
+
+  // The same second requirement twice, differing only by the factor its numbers are carried in.
+  const double becquerelPerCurie = 3.7e10;
+  Inventory heavyOnSlower;
+  heavyOnSlower.add(faster, 1.0e18);
+  heavyOnSlower.add(slower, 1.0e22);
+  Inventory heavyOnSlowerRescaled;
+  heavyOnSlowerRescaled.add(faster, 1.0e18 * becquerelPerCurie);
+  heavyOnSlowerRescaled.add(slower, 1.0e22 * becquerelPerCurie);
+
+  const ResponseTable a = activityOver(data, heavyOnFaster, times);
+  const ResponseTable b = activityOver(data, heavyOnSlower, times);
+  const ResponseTable bRescaled = activityOver(data, heavyOnSlowerRescaled, times);
+
+  const std::vector<CoverageRequirement> asStated = {require(a, 0.95, "sheet A"),
+                                                     require(b, 0.95, "sheet B")};
+  const std::vector<CoverageRequirement> rescaled = {require(a, 0.95, "sheet A"),
+                                                     require(bRescaled, 0.95, "sheet B")};
+
+  const TriageSet first = robustTriageSet(asStated);
+  const TriageSet second = robustTriageSet(rescaled);
+
+  ASSERT_FALSE(first.members.empty());
+  ASSERT_EQ(first.members.size(), second.members.size());
+  for (std::size_t i = 0; i < first.members.size(); ++i) {
+    EXPECT_EQ(first.members[i].id.key, second.members[i].id.key);
+    EXPECT_EQ(first.members[i].order, second.members[i].order);
+    // And the marginal value that earned each its place is a fraction of a required coverage,
+    // not an amount in anyone's unit, so it too survives the conversion.
+    EXPECT_NEAR(first.members[i].closedShortfall, second.members[i].closedShortfall,
+                1.0e-9 * std::abs(first.members[i].closedShortfall));
+  }
+  expectCoversEverywhere(second, rescaled);
 }
 
 // A monitoring list that changed between runs would be worse than no list. Ties are broken by

@@ -153,10 +153,24 @@ TriageSet robustTriageSet(std::span<const CoverageRequirement> requirements) {
         if (chosen[static_cast<std::size_t>(global)]) {
           continue;
         }
-        // Credit is capped at the shortfall it actually closes. Without the cap a contributor
-        // that overwhelms one already-nearly-met constraint would outrank one that is the only
-        // way to move three others, which is the failure mode plain greedy has here.
-        gain[static_cast<std::size_t>(global)] += std::min(values[c], remaining);
+        // Credit is capped at the shortfall it actually closes, then divided by what this
+        // constraint requires. Both halves matter and they guard different things.
+        //
+        // The CAP stops a contributor that overwhelms one already-nearly-met constraint from
+        // outranking one that is the only way to move three others -- the failure mode plain
+        // greedy has here.
+        //
+        // The DIVISION makes the sum meaningful across requirements at all. Raw shortfalls
+        // carry each requirement's own unit, so adding activity in Bq to exposure in Sv/h adds
+        // 1e18 to 1e-3 and the second requirement has no say in who is chosen; the same set
+        // asked for in Ci rather than Bq could come back with different members. Dividing by
+        // `required` -- fixed for the run, not the shrinking `remaining`, which would restore
+        // the very over-weighting of nearly-met constraints the cap exists to prevent -- makes
+        // each term the fraction of that constraint's own target this candidate closes. Every
+        // requirement then contributes on one scale, and the answer no longer depends on the
+        // units the caller happened to build the tables in.
+        gain[static_cast<std::size_t>(global)] +=
+            std::min(values[c], remaining) / constraint.required;
       }
     }
 
