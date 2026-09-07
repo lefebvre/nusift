@@ -46,6 +46,16 @@ struct DecayOptions {
   // omitting thousands of permanently-zero rows.
   bool prune = true;
 
+  // Let a stated seed uncertainty reach as well as a stated quantity. The closure is normally
+  // rooted at the nuclides the inventory gives atoms to, which is the right set for a forward
+  // solve: nothing else can ever be nonzero. Propagating an error bar asks a wider question --
+  // what the response would be for a seed NEAR this one -- and a row assayed as 0 +/- sigma is
+  // a row the answer depends on despite contributing no atoms. Rooting the closure at those
+  // rows too keeps the solve exact for every seed it must differentiate against, and costs a
+  // slightly larger reduced matrix. Off by default, so decay() and the ordinary adjoint keep
+  // the identical index space they are documented to share.
+  bool sigmaSeedsClosure = false;
+
   // Worker threads for the per-time solves. 0 means "as many as the hardware reports"; 1
   // forces the serial path.
   //

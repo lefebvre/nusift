@@ -155,6 +155,14 @@ twice would not, but a file cannot say that and neither can the reader.
 A σ *larger* than its own quantity is accepted. That is what a measurement near a detection limit
 honestly reports, and refusing it would refuse exactly the rows an error bar is most wanted for.
 
+The limiting case of that is a quantity of **zero** — a non-detect written `0 ± MDA` — and it
+carries its σ like any other row. Such a row has no share of any response, since it contributes no
+atoms, but the response's error bar still depends on it through `dR/dn₀`: the derivative is a
+property of the decay matrix, not of the seed's own value. Propagation therefore roots the pruning
+closure at rows with a stated σ as well as at rows with atoms, so a nuclide named only by a
+non-detect still reaches the index space and still contributes its variance. Reporting an error bar
+that quietly omitted a measurement the sheet made would be the worse answer.
+
 ### The header row now names the columns
 
 `assayed` shipped as the fourth positional field, so a file wanting an uncertainty and no dates

@@ -52,19 +52,48 @@ std::vector<double> seedVector(const NuclearData& data, const Inventory& invento
   return seed;
 }
 
-// Indices forward-reachable from the seed, ascending.
+// Where the closure starts. Ordinarily the nuclides the inventory gives atoms to: nothing
+// else can ever be nonzero under a forward solve, which is what makes the restriction exact.
+//
+// With sigmaSeedsClosure, a row that states an uncertainty is a root as well, whatever its
+// quantity. A sheet reporting a non-detect as 0 +/- MDA is asserting that the true seed lies in
+// an interval that does not contain only zero, and the response's error bar depends on that row
+// through dR/dn0 even though its share of R is nil. Rooting it here is what puts it in the
+// index space at all; dropping it would silently discard a stated measurement. Enlarging a
+// closed set keeps every importance in the smaller one exact -- exp(A^T T) restricted to a
+// production-closed set agrees with the full solve on that set -- so this widens what is
+// reported without moving any number that was already reported.
+std::vector<char> closureRoots(const NuclearData& data, const Inventory& inventory,
+                               const std::vector<double>& seedFull, const DecayOptions& options) {
+  std::vector<char> roots(seedFull.size(), 0);
+  for (std::size_t i = 0; i < seedFull.size(); ++i) {
+    roots[i] = seedFull[i] != 0.0 ? 1 : 0;
+  }
+  if (!options.sigmaSeedsClosure) {
+    return roots;
+  }
+  for (const InventoryEntry& entry : inventory.entries()) {
+    if (entry.sigmaAtoms > 0.0) {
+      // seedVector already rejected a key the store does not carry, so this cannot be negative.
+      roots[static_cast<std::size_t>(data.indexOfKey(entry.zaiKey))] = 1;
+    }
+  }
+  return roots;
+}
+
+// Indices forward-reachable from the roots, ascending.
 //
 // Reachability is read off the decay matrix's own sparsity rather than re-walking decay modes:
 // A(j, i) != 0 means i produces j, which captures decay daughters, branching, and spontaneous
 // fission products uniformly, with no chance of disagreeing with the matrix actually solved.
 // The resulting set is closed under production, so restricting to it is exact.
 std::vector<int> forwardClosure(const Eigen::SparseMatrix<double>& a,
-                                const std::vector<double>& seed) {
-  const int n = static_cast<int>(seed.size());
+                                const std::vector<char>& roots) {
+  const int n = static_cast<int>(roots.size());
   std::vector<char> reached(static_cast<std::size_t>(n), 0);
   std::deque<int> queue;
   for (int i = 0; i < n; ++i) {
-    if (seed[static_cast<std::size_t>(i)] != 0.0) {
+    if (roots[static_cast<std::size_t>(i)] != 0) {
       reached[static_cast<std::size_t>(i)] = 1;
       queue.push_back(i);
     }
@@ -191,7 +220,7 @@ Prepared prepare(const NuclearData& data, const Inventory& inventory, const Deca
 
   Prepared out;
   if (options.prune) {
-    out.keep = forwardClosure(full, seedFull);
+    out.keep = forwardClosure(full, closureRoots(data, inventory, seedFull, options));
   } else {
     out.keep.resize(static_cast<std::size_t>(n));
     for (int i = 0; i < n; ++i) {
