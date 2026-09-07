@@ -66,8 +66,14 @@ struct SetMember {
   // largest contributor to anything. Reported because the order is the argument for the set.
   int order = 0;
 
-  // The share of the total shortfall this member closed when it was chosen, summed over every
-  // constraint still unmet at that moment. The marginal value that earned it its place.
+  // What this member closed when it was chosen, summed over every constraint still unmet at
+  // that moment. The marginal value that earned it its place.
+  //
+  // Each term is a FRACTION of that constraint's own required coverage, not an amount in the
+  // requirement's unit, so the sum is dimensionless and a run in Ci reports what the same run
+  // in Bq does. It is therefore comparable between members of one set, and not between sets
+  // built from different numbers of requirements -- an unmet constraint can contribute at most
+  // 1 to it.
   double closedShortfall = 0.0;
 
   // The largest share of any single requirement's total this contributor holds, over all times.
