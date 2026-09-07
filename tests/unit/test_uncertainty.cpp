@@ -210,6 +210,52 @@ TEST(Uncertainty, SaysHowMuchOfTheAnswerCarriesNoUncertaintyAtAll) {
   EXPECT_DOUBLE_EQ(silent->varianceFraction, 0.0);
 }
 
+// A row measured as zero still states an uncertainty, and it has to count.
+//
+// This is how a sheet reports a non-detect: 0 +/- MDA, meaning the true quantity is somewhere
+// under the detection limit rather than known to be nothing. The response's error bar depends on
+// that row through dR/dn0 exactly as any other row's does -- the derivative is a property of the
+// decay matrix, not of the seed's own value -- so a propagation that skipped it would quote an
+// error bar that silently ignored a measurement the sheet actually made.
+//
+// Seeded at the MIDDLE of the chain, with the sigma on the parent above it. The parent is not
+// forward-reachable from the middle, so nothing but the uncertainty itself puts it in the index
+// space: this fails on the pruning as well as on the summation if either drops the row.
+TEST(Uncertainty, PropagatesARowMeasuredAsZeroWithAStatedUncertainty) {
+  const NuclearData data = chain();
+  const double sigma = 1.0e18;
+  const double time = 1.0e6;
+
+  Inventory nonDetect;
+  nonDetect.add(kParent, 0.0, sigma);  // 0 +/- MDA, and upstream of everything seeded
+  nonDetect.add(kMiddle, 1.0e20, 0.0);
+
+  ResponseSpec spec;  // activity, becquerel
+  const ResponseUncertainty u =
+      responseUncertainty(data, std::vector<AssayGroup>{assay("2024-01-01", nonDetect)},
+                          parseCalendarDate("2024-01-01"), time, spec);
+
+  const auto parent = std::find_if(u.seeds.begin(), u.seeds.end(),
+                                   [](const SeedUncertainty& s) { return s.label == "Sn-100"; });
+  ASSERT_NE(parent, u.seeds.end()) << "a stated sigma has to reach the index space";
+  EXPECT_DOUBLE_EQ(parent->seedAtoms, 0.0);
+  EXPECT_DOUBLE_EQ(parent->share, 0.0) << "no atoms means no share of R, which stays true";
+  EXPECT_GT(parent->sigmaContribution, 0.0) << "but its uncertainty is the whole error bar";
+  EXPECT_GT(u.sigma, 0.0);
+  EXPECT_EQ(u.rowsWithSigma, 1);
+
+  // And the seed's own value does not decide whether its uncertainty counts. Giving the row one
+  // atom instead of none changes R by a part in 1e20 and must leave sigma_R where it was: the
+  // importance is the same vector either way, which is the reason the zero row belongs at all.
+  Inventory oneAtom;
+  oneAtom.add(kParent, 1.0, sigma);
+  oneAtom.add(kMiddle, 1.0e20, 0.0);
+  const ResponseUncertainty nudged =
+      responseUncertainty(data, std::vector<AssayGroup>{assay("2024-01-01", oneAtom)},
+                          parseCalendarDate("2024-01-01"), time, spec);
+  EXPECT_NEAR(u.sigma, nudged.sigma, 1.0e-12 * nudged.sigma);
+}
+
 TEST(Uncertainty, RefusesAQuestionItCannotAnswer) {
   const NuclearData data = chain();
   const std::vector<AssayGroup> assays = {assay("2024-01-01", one(kParent, 1.0e20, 1.0e19))};

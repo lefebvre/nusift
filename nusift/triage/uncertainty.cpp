@@ -54,6 +54,11 @@ ResponseUncertainty responseUncertainty(const NuclearData& data, std::span<const
 
   const std::vector<double> weight = responseWeights(data, spec);
 
+  // A row assayed as 0 +/- sigma has to reach the index space, or its stated uncertainty is
+  // dropped without a word. See DecayOptions::sigmaSeedsClosure.
+  DecayOptions closureOptions = options;
+  closureOptions.sigmaSeedsClosure = true;
+
   ResponseUncertainty result;
   result.metric = spec.metric;
   result.unit = spec.unit;
@@ -80,11 +85,20 @@ ResponseUncertainty responseUncertainty(const NuclearData& data, std::span<const
     // the response interval share one decay matrix and their exponentials commute. So this is
     // the same solve `attribute` runs, at a later time for an older sheet.
     const SeedImportance importance =
-        seedImportance(data, assay.inventory, weight, time + carried, options);
+        seedImportance(data, assay.inventory, weight, time + carried, closureOptions);
 
     for (std::size_t i = 0; i < importance.nuclideKeys.size(); ++i) {
       const double atoms = importance.seedAtoms[i];
-      if (!(atoms > 0.0)) {
+      // From the assay's OWN row, which is the only place a diagonal sigma is meaningful. A
+      // nuclide the adjoint reaches but the sheet never listed carries none, and says so.
+      const double sigma = sigmaOf(assay.inventory, importance.nuclideKeys[i]);
+      // Two ways to be a seed here, and a row needs only one of them. Atoms make a share of R;
+      // a stated sigma makes a term in its variance. A non-detect reported as 0 +/- MDA has the
+      // second without the first, and is exactly the row whose uncertainty must not vanish --
+      // dropping it would quote an error bar that silently ignores a measurement the sheet
+      // made. Everything the closure merely REACHED -- a daughter the sheet never listed -- has
+      // neither, and is not a seed at all.
+      if (!(atoms > 0.0) && !(sigma > 0.0)) {
         continue;
       }
       SeedUncertainty seed;
@@ -96,9 +110,6 @@ ResponseUncertainty responseUncertainty(const NuclearData& data, std::span<const
       seed.importance = importance.importance[i];
       seed.share = seed.importance * atoms;
 
-      // From the assay's OWN row, which is the only place a diagonal sigma is meaningful. A
-      // nuclide the adjoint reaches but the sheet never listed carries none, and says so.
-      const double sigma = sigmaOf(assay.inventory, seed.key);
       seed.sigmaAtoms = sigma;
       seed.sigmaContribution = std::abs(seed.importance) * sigma;
       variance += seed.sigmaContribution * seed.sigmaContribution;
