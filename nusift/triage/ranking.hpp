@@ -40,7 +40,7 @@ struct RankRequest {
   // table, with the pinned contributors appended below it carrying the rank they actually
   // hold. That is the only way "and where does Cs-137 stand?" can be asked without either
   // printing the whole chain or guessing a --top large enough to reach it.
-  std::vector<std::int64_t> pinned;
+  std::vector<std::int64_t> pinned{};
 };
 
 struct Contributor {
