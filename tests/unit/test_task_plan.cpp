@@ -177,6 +177,48 @@ TEST(TaskPlan, SaysWhereABudgetRunsOutRatherThanOnlyThatItDoes) {
   EXPECT_EQ(fits.spentInLeg, -1);
 }
 
+// A budget exhausted exactly at a leg boundary is spent AT the boundary, not inside anything.
+//
+// The natural way to reach this is to read a leg's accrual off one run and ask the next what
+// happens on precisely that budget, which round-trips exactly through the JSON report. The leg
+// that spent it then clears the budget rather than exceeding it, so the search moves on to the
+// next leg with nothing left to spend -- and a root-find for a duration on a budget of zero is
+// not a question about a duration. Answering it as the end of the leg that did the spending is
+// both the truthful instant and the one that needs no search.
+TEST(TaskPlan, LocatesABudgetExhaustedExactlyAtALegBoundary) {
+  const NuclearData data = oneEmitter();
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  const std::vector<PlanLeg> legs = {leg("a", 600.0, 1.0), leg("b", 600.0, 1.0)};
+  const TaskPlan whole = runTaskPlan(data, seeded(), spec, 0.0, legs);
+
+  const TaskPlan plan = runTaskPlan(data, seeded(), spec, 0.0, legs, whole.legs[0].accrued);
+  EXPECT_TRUE(plan.budgetSpent);
+  EXPECT_EQ(plan.spentInLeg, 0) << "the leg that spent it, not the one that would have";
+  EXPECT_DOUBLE_EQ(plan.spentAtSeconds, plan.legs[0].endSeconds);
+}
+
+// And the instant is the end of the leg that spent it even when the clock runs on before
+// anything else accrues. A break between the two is the case that separates "the end of the last
+// leg that cost something" from "the start of the next leg that does": only the first is when
+// the budget actually ran out, and they differ by the whole length of the break.
+TEST(TaskPlan, DoesNotChargeABoundaryExhaustionToTheFarSideOfABreak) {
+  const NuclearData data = oneEmitter();
+  ResponseSpec spec;
+  spec.unit = Unit::Decays;
+
+  const std::vector<PlanLeg> legs = {leg("a", 600.0, 1.0), breakFor("lunch", 1800.0),
+                                     leg("b", 600.0, 1.0)};
+  const TaskPlan whole = runTaskPlan(data, seeded(), spec, 0.0, legs);
+
+  const TaskPlan plan = runTaskPlan(data, seeded(), spec, 0.0, legs, whole.legs[0].accrued);
+  EXPECT_TRUE(plan.budgetSpent);
+  EXPECT_EQ(plan.spentInLeg, 0);
+  EXPECT_DOUBLE_EQ(plan.spentAtSeconds, plan.legs[0].endSeconds);
+  EXPECT_LT(plan.spentAtSeconds, plan.legs[2].startSeconds) << "the break is not on the meter";
+}
+
 TEST(TaskPlan, FractionsPartitionTheTotal) {
   const NuclearData data = oneEmitter();
   ResponseSpec spec;
