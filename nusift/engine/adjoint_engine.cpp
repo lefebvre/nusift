@@ -46,7 +46,8 @@ SeedImportance seedImportance(const NuclearData& data, const Inventory& inventor
 
   Eigen::VectorXd w = Eigen::VectorXd::Zero(m);
   for (int k = 0; k < m; ++k) {
-    w(k) = weight[static_cast<std::size_t>(prepared.keep[static_cast<std::size_t>(k)])];
+    const int global = prepared.keep[static_cast<std::size_t>(k)];
+    w(k) = weight[static_cast<std::size_t>(global)];
   }
 
   SeedImportance out;
