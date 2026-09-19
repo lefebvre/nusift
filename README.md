@@ -39,6 +39,10 @@ nusift rank -i inventory.csv --at 30d --metric exposure --distance 2 --units Gy/
 # Build the inventory from fission instead of reading one
 nusift rank --seed-fission U-235 --energy thermal --yield-kt 20 --at 1h --metric exposure
 
+# Snapshot a cooled solve as an inventory every other command will read -- and ask the
+# question a ranking cannot, which is how much of it there is rather than how fast it decays
+nusift decay --seed-fission U-235 --yield-kt 20 --at 30d --write cooled.csv --write-units kg
+
 # Which of the nuclides I seeded is the answer riding on?
 nusift attribute --seed-fission U-235 --yield-kt 20 --at 30d --top 8
 
@@ -327,6 +331,8 @@ Implemented:
 - Staging a data store from ENDF decay and fission-yield tapes, with AME2020 masses for the
   chain members no decay evaluation covers
 - Seeding an inventory from fission, by fission count, kilotons, or joules
+- A solve snapshotted back out as an inventory, in any unit, so a cooled state is a file rather
+  than a derivation to repeat
 - Dominance forecasting: who leads, and when that changes
 - Located events: crossings, turns, level windows, and when a fixed-length task fits a budget
 - Stay times: how long a stay beginning at a given time can run before it spends a dose budget

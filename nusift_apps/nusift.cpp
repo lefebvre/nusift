@@ -868,7 +868,74 @@ int runForecast(const CommonOptions& options, const ForecastOptions& forecast, c
   return 0;
 }
 
-int runDecay(const CommonOptions& options, const char* argv0) {
+// What `decay --write` needs beyond the common options. Separate for the same reason
+// ReconcileOptions is: nothing else takes these, and folding them into the shared set would
+// put --write in the help of a dozen commands that have no inventory to write.
+struct DecayWriteOptions {
+  std::string writePath;
+  std::string writeUnit = "atoms";
+};
+
+// Snapshot one time point of a solve as a reusable inventory.
+//
+// This is the step that closes the loop between commands. Every analysis command takes an
+// inventory and none produced one, so "seed from fission, let it cool a month, now ask what
+// that weighs" -- or hand it to someone else, or check it into a record -- meant reshaping the
+// trajectory matrix by hand. The matrix is per nuclide PER TIME and an inventory is a single
+// moment, so this writes one time and refuses several rather than picking one.
+//
+// NON-POSITIVE ENTRIES ARE DROPPED, and counted. A CRAM solve leaves numerical dust in the
+// nuclides that have effectively vanished -- values around 1e-30 of the inventory, some of
+// them negative -- and an atom count is non-negative by definition, so Inventory::add rejects
+// them outright. Dropping them silently would be the wrong trade for a file meant to be read
+// back and believed, so the count goes to stderr with everything else the write reports.
+void writeDecaySnapshot(const DecayResult& result, const NuclearData& data,
+                        const DecayWriteOptions& write, const std::string& inventoryDescription) {
+  if (result.timeCount() != 1) {
+    throw InputError(
+        "decay: --write needs exactly one time, because an inventory is a single moment; "
+        "this run has " +
+        std::to_string(result.timeCount()) + ". Give one --at, or drop --write");
+  }
+
+  Quantity unit = Quantity::Atoms;
+  if (!parseQuantity(write.writeUnit, unit)) {
+    throw InputError("decay: \"" + write.writeUnit + "\" is not a unit");
+  }
+
+  Inventory snapshot;
+  int dropped = 0;
+  const std::span<const double> atoms = result.atomsAt(0);
+  for (int i = 0; i < result.nuclideCount(); ++i) {
+    if (!(atoms[static_cast<std::size_t>(i)] > 0.0)) {
+      ++dropped;
+      continue;
+    }
+    snapshot.addKey(result.nuclideKeys[static_cast<std::size_t>(i)],
+                    atoms[static_cast<std::size_t>(i)]);
+  }
+  snapshot.setProvenance(inventoryDescription + ", decayed to " +
+                         formatDuration(result.times.front()));
+
+  std::ofstream file(write.writePath);
+  if (!file) {
+    throw InputError("decay: cannot write to \"" + write.writePath + "\"");
+  }
+  if (write.writePath.size() >= 5 &&
+      write.writePath.compare(write.writePath.size() - 5, 5, ".json") == 0) {
+    writeInventoryJson(file, snapshot, data, unit);
+  } else {
+    writeInventoryCsv(file, snapshot, data, unit);
+  }
+
+  std::cerr << "  wrote " << snapshot.size() << " nuclides to " << write.writePath;
+  if (dropped > 0) {
+    std::cerr << " (" << dropped << " at or below zero dropped)";
+  }
+  std::cerr << "\n";
+}
+
+int runDecay(const CommonOptions& options, const DecayWriteOptions& write, const char* argv0) {
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
@@ -877,22 +944,44 @@ int runDecay(const CommonOptions& options, const char* argv0) {
   const std::vector<double> times = timesFrom(options);
   const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
 
+  if (!write.writePath.empty()) {
+    writeDecaySnapshot(result, data, write, inventory.provenance());
+  }
+
   OutputStream out(options.output);
   std::ostream& os = out.get();
-  os << "nuclide";
-  for (const double t : result.times) {
-    os << ',' << t;
+  const bool json = options.format == "json";
+
+  if (json) {
+    os << "{\n  \"times_s\": [";
+    for (std::size_t k = 0; k < result.times.size(); ++k) {
+      os << (k == 0 ? "" : ", ") << result.times[k];
+    }
+    os << "],\n  \"atoms\": {\n";
+  } else {
+    os << "nuclide";
+    for (const double t : result.times) {
+      os << ',' << t;
+    }
+    os << '\n';
   }
-  os << '\n';
+
   for (int i = 0; i < result.nuclideCount(); ++i) {
     const Zai zai = Zai::fromKey(result.nuclideKeys[static_cast<std::size_t>(i)]);
-    os << formatNuclideName(zai);
+    if (json) {
+      os << "    \"" << formatNuclideName(zai) << "\": [";
+    } else {
+      os << formatNuclideName(zai);
+    }
     for (int k = 0; k < result.timeCount(); ++k) {
       char buffer[32];
       std::snprintf(buffer, sizeof(buffer), "%.6e", result.atomsAt(k)[i]);
-      os << ',' << buffer;
+      os << (json ? (k == 0 ? "" : ", ") : ",") << buffer;
     }
-    os << '\n';
+    os << (json ? (i + 1 < result.nuclideCount() ? "],\n" : "]\n") : "\n");
+  }
+  if (json) {
+    os << "  }\n}\n";
   }
   return 0;
 }
@@ -2347,8 +2436,22 @@ int main(int argc, char** argv) {
                         "comparing them");
 
   CommonOptions decayCmdOptions;
+  DecayWriteOptions decayWriteOptions;
   CLI::App* decayCmd = app.add_subcommand("decay", "Raw inventory versus time, unranked");
   addCommonOptions(decayCmd, decayCmdOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  decayCmd->add_option("--write", decayWriteOptions.writePath,
+                       "Also write this solve as a reusable inventory file; needs exactly "
+                       "one time");
+  decayCmd->add_option("--write-units", decayWriteOptions.writeUnit,
+                       "Units for --write (atoms, g, kg, Bq, Ci, ...)");
+  // decay renders a MATRIX, not a report: there is no text layout for four thousand nuclides
+  // against sixty times, and the report default of "text" was being accepted and silently
+  // answered with CSV. It takes its own --format with the two machine formats instead, so a
+  // format it cannot produce is refused at the parser rather than quietly substituted.
+  decayCmd->remove_option(decayCmd->get_option("--format"));
+  decayCmdOptions.format = "csv";
+  decayCmd->add_option("--format", decayCmdOptions.format, "csv or json")
+      ->check(CLI::IsMember({"csv", "json"}));
 
   std::string dataStorePath;
   CLI::App* dataCmd = app.add_subcommand("data", "Inspect the nuclear-data store");
@@ -2443,7 +2546,7 @@ int main(int argc, char** argv) {
       return runIntervene(intervenOptions, intervenExtra, argv0);
     }
     if (decayCmd->parsed()) {
-      return runDecay(decayCmdOptions, argv0);
+      return runDecay(decayCmdOptions, decayWriteOptions, argv0);
     }
     if (dataInfoCmd->parsed()) {
       return runDataInfo(dataStorePath, argv0);
