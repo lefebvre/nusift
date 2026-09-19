@@ -182,6 +182,27 @@ TEST(InventoryIo, CsvRoundTrips) {
   EXPECT_NEAR(back.atomsOf(kStable), original.atomsOf(kStable), 1e10);
 }
 
+// A snapshot written in a MASS unit and read back is the same inventory. This is the path
+// `decay --write --write-units kg` takes, and it runs the molar mass in both directions: out
+// through atoms -> grams, back in through grams -> atoms. A wrong or missing atomic weight
+// cancels itself in a round trip only if it is the same wrong weight both ways, so this pins
+// the plumbing rather than the value -- which is what the validation suite is for.
+TEST(InventoryIo, MassUnitsRoundTrip) {
+  const NuclearData data = chain();
+  const Inventory original = parse("Sn-100, 1.0e20\nSb-100, 5.0e19\n", data);
+
+  std::ostringstream written;
+  writeInventoryCsv(written, original, data, Quantity::Kilograms);
+  EXPECT_NE(written.str().find("kg"), std::string::npos) << written.str();
+
+  std::istringstream reread(written.str());
+  const Inventory back = readInventoryCsv(reread, data, "roundtrip-kg.csv");
+
+  ASSERT_EQ(back.size(), original.size());
+  EXPECT_NEAR(back.atomsOf(kUnstable), original.atomsOf(kUnstable), 1.0e8);
+  EXPECT_NEAR(back.atomsOf(kStable), original.atomsOf(kStable), 1.0e8);
+}
+
 // Writing in a unit one nuclide cannot express must not abort the whole file or emit a wrong
 // number: that row falls back to atoms and says so in its unit column.
 TEST(InventoryIo, WriteFallsBackPerRowRatherThanFailing) {

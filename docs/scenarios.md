@@ -107,7 +107,9 @@ ever fell would be the signature of a chain that was not solved, and no ranking 
 by the time La-140 leads anything, most of what is there arrived from somewhere else.
 
 This is the one command that applies no weight at all. Everything else in this document is this
-matrix multiplied by something.
+matrix multiplied by something. It is also the one that can hand its answer back as an
+inventory: `--write` snapshots a single time as a file every other command will read, which is
+what makes [the two-step questions](#two-step-questions) below possible.
 
 **What it does not say.** Which of these matters. That is what a metric is for, and the next
 track is about choosing one.
@@ -452,6 +454,92 @@ package type, the LSA and SCO provisions — is not a weighted sum and does not 
 The pack's edition travels with the answer because the A2 values themselves move between editions.
 
 ---
+
+## Two-step questions
+
+Most of the sections above are one command. A few useful questions are two, because they need
+an inventory that does not exist yet — one that is the *result* of a calculation rather than
+the input to it. Every analysis command consumes an inventory, and three commands produce one,
+so the pattern is always the same: make the file, then ask the question of it.
+
+### Snapshot a solve, then weigh it
+
+```bash
+nusift decay --seed-fission U-235 --energy fast --yield-kt 365 --at 30d \
+        --write cooled.csv --write-units kg
+grep -E "^(Ba|La|Ce)-140," cooled.csv
+```
+
+```
+Ba-140,0.1439902070421733,kg
+La-140,0.021824493415383055,kg
+Ce-140,0.569485742341488,kg
+```
+
+**Why you would need it.** *How much of this do I have* is not a question any ranking answers.
+A ranking is a rate — becquerels, sieverts per hour, watts — and a mass chain that dominates
+the activity at thirty days may be a gram, while the stable end point nobody ranks is most of
+the kilogram. `--write-units` runs the inventory through the staged atomic weights and gives
+the amount rather than the rate, which is the number that matters for shipping, storage,
+separation or an accountancy record.
+
+It is also how a calculation becomes a record. A fission seed is a derivation — 365 kt, an
+energy, a yield set — and anyone who wants the same starting point has to repeat it and get the
+same answer. The snapshot is the answer itself, a file that can be attached to a report, diffed
+against next month's, or handed to someone who should not have to re-derive it. Reading it back
+gives the same ranking as the original solve, because it is the same atoms.
+
+`--write` takes **one** time and refuses several, because an inventory is a single moment
+rather than a trajectory. Non-positive entries are dropped and counted: a solve leaves
+numerical dust around 1e-30 of the inventory in nuclides that have effectively vanished, some
+of it negative, and an atom count is non-negative by definition.
+
+### Bring assays to one date, then analyse
+
+```bash
+nusift reconcile -i assays.csv --write merged.csv --write-units Bq
+nusift rank -i merged.csv --at 30d --metric exposure --units Sv/h
+```
+
+**Why you would need it.** Sheets arrive on the dates someone happened to count them, and every
+command downstream needs a single epoch. Doing it in two steps rather than one means the merged
+inventory is a file you can look at, question and keep — which matters precisely because
+reconciliation is the step that moves numbers. See [`reconcile`](#reconcile--three-sheets-three-dates-one-inventory)
+for what it will not do.
+
+### Normalise the units, then trust the file
+
+```bash
+nusift inventory convert -i messy.csv --units Bq -o normalised.csv
+```
+
+**Why you would need it.** A sheet whose rows are variously in grams, curies and becquerels is
+valid input, and unreadable as a document: no two rows compare, and a typo hides. Converting
+once gives a file whose rows are on one scale, so an outlier is visible. It is also the cheapest
+gate in a pipeline — every nuclide name, unit and quantity is validated here, and an unknown
+name fails in a second rather than forty minutes into a sweep.
+
+### Emit rows instead of a report
+
+```bash
+nusift rank -i inventory.csv --at 30d --format csv -o rank.csv
+nusift decay -i inventory.csv --times 1h:100y:log:60 --format json
+```
+
+**Why you would need it.** The text reports are for reading; `--format csv` and `--format json`
+are for plotting, spreadsheets and notebooks. Every figure in this document is drawn from a
+committed file produced this way rather than from numbers typed into a plotting script, which
+is what stops a figure claiming something the tool does not print — see [Regenerating](#regenerating).
+
+`decay` takes `csv` or `json` only: its output is a matrix of every nuclide against every time,
+and there is no text layout for four thousand rows.
+
+### What does not compose yet
+
+`intervene` answers what removing Cs and Sr on a date is worth later, but does not write the
+post-removal inventory, so a counterfactual cannot be carried into a second question the way a
+snapshot can. The other commands are all terminal by nature: they answer about an inventory
+rather than producing one.
 
 ## Where the pattern stops
 

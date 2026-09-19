@@ -21,6 +21,7 @@ flowchart LR
     Y --> P
     P --> I["Inventory<br/>sorted by ZAI key, in ATOMS"]
     I --> E["decay engine"]
+    E -.->|"decay --write"| C
 ```
 
 An `Inventory` is a sorted-by-key list of `(ZAI, atoms)`. Adding the same nuclide twice
@@ -55,6 +56,12 @@ Co-60,   0.8,      Ci
 A header row is **detected, not required**. Each row carries its own unit, so an inventory
 assembled from three sources that each quoted a different quantity needs no pre-conversion —
 which is exactly when a hand conversion gets made once and wrong.
+
+**The unit column may be omitted, and then the quantity is atoms.** Two columns is what a
+machine writes: `decay --write` produces it, and so does anything that has already done its own
+conversion. Atoms is the default because it is the one unit that needs nothing from the store
+to interpret — no half-life, no atomic weight — so a two-column file means the same thing
+against any evaluation.
 
 JSON is the secondary format. It round-trips provenance, which CSV cannot carry, and it is what
 a programmatic layer hands back and forth. The parser is chosen by extension: `.json` for JSON,
