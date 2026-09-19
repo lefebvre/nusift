@@ -61,48 +61,48 @@
 <circle class="t0" cx="450.0" cy="106.0" r="3.4"/>
 <text class="ink" x="138.0" y="109.6" font-size="11" text-anchor="end" font-weight="600">H-3</text>
 <text class="muted" x="760.0" y="109.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="126.0" x2="450.3" y2="126.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.3" cy="126.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="126.0" x2="450.0" y2="126.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="126.0" r="3.4"/>
 <text class="ink" x="138.0" y="129.6" font-size="11" text-anchor="end" font-weight="600">C-14</text>
 <text class="muted" x="760.0" y="129.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="146.0" x2="450.1" y2="146.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.1" cy="146.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="146.0" x2="450.0" y2="146.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="146.0" r="3.4"/>
 <text class="ink" x="138.0" y="149.6" font-size="11" text-anchor="end" font-weight="600">Co-60</text>
 <text class="muted" x="760.0" y="149.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="166.0" x2="450.2" y2="166.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.2" cy="166.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="166.0" x2="450.0" y2="166.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="166.0" r="3.4"/>
 <text class="ink" x="138.0" y="169.6" font-size="11" text-anchor="end" font-weight="600">Sr-90</text>
 <text class="muted" x="760.0" y="169.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="186.0" x2="450.1" y2="186.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.1" cy="186.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="186.0" x2="450.0" y2="186.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="186.0" r="3.4"/>
 <text class="ink" x="138.0" y="189.6" font-size="11" text-anchor="end" font-weight="600">Cs-137</text>
 <text class="muted" x="760.0" y="189.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="206.0" x2="450.2" y2="206.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.2" cy="206.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="206.0" x2="450.0" y2="206.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="206.0" r="3.4"/>
 <text class="ink" x="138.0" y="209.6" font-size="11" text-anchor="end" font-weight="600">I-131</text>
 <text class="muted" x="760.0" y="209.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="226.0" x2="450.3" y2="226.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.3" cy="226.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="226.0" x2="450.0" y2="226.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="226.0" r="3.4"/>
 <text class="ink" x="138.0" y="229.6" font-size="11" text-anchor="end" font-weight="600">Pm-147</text>
 <text class="muted" x="760.0" y="229.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="246.0" x2="450.4" y2="246.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.4" cy="246.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="246.0" x2="450.0" y2="246.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="246.0" r="3.4"/>
 <text class="ink" x="138.0" y="249.6" font-size="11" text-anchor="end" font-weight="600">Ce-144</text>
 <text class="muted" x="760.0" y="249.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="266.0" x2="450.4" y2="266.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.4" cy="266.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="266.0" x2="450.0" y2="266.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="266.0" r="3.4"/>
 <text class="ink" x="138.0" y="269.6" font-size="11" text-anchor="end" font-weight="600">Ir-192</text>
 <text class="muted" x="760.0" y="269.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="286.0" x2="449.7" y2="286.0" stroke-width="1.6"/>
-<circle class="t0" cx="449.7" cy="286.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="286.0" x2="450.0" y2="286.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="286.0" r="3.4"/>
 <text class="ink" x="138.0" y="289.6" font-size="11" text-anchor="end" font-weight="600">Ra-226</text>
-<text class="muted" x="760.0" y="289.6" font-size="10" text-anchor="start" font-weight="normal">-0.0%</text>
-<line class="s0" x1="450.0" y1="306.0" x2="450.1" y2="306.0" stroke-width="1.6"/>
-<circle class="t0" cx="450.1" cy="306.0" r="3.4"/>
+<text class="muted" x="760.0" y="289.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
+<line class="s0" x1="450.0" y1="306.0" x2="450.0" y2="306.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="306.0" r="3.4"/>
 <text class="ink" x="138.0" y="309.6" font-size="11" text-anchor="end" font-weight="600">Pu-239</text>
 <text class="muted" x="760.0" y="309.6" font-size="10" text-anchor="start" font-weight="normal">+0.0%</text>
-<line class="s0" x1="450.0" y1="326.0" x2="449.8" y2="326.0" stroke-width="1.6"/>
-<circle class="t0" cx="449.8" cy="326.0" r="3.4"/>
+<line class="s0" x1="450.0" y1="326.0" x2="450.0" y2="326.0" stroke-width="1.6"/>
+<circle class="t0" cx="450.0" cy="326.0" r="3.4"/>
 <text class="ink" x="138.0" y="329.6" font-size="11" text-anchor="end" font-weight="600">Am-241</text>
 <text class="muted" x="760.0" y="329.6" font-size="10" text-anchor="start" font-weight="normal">-0.0%</text>
 <text class="ink" x="58.0" y="30.0" font-size="13.5" text-anchor="start" font-weight="600">Staged atomic weights against AME2020</text>

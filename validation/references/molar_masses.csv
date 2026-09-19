@@ -1,11 +1,21 @@
-# Atomic masses from AME2020, against the molar mass NuSIFT derives from the staged ENDF
-# atomic weight ratio. Since the 2019 redefinition of the mole, the molar mass in g/mol equals
-# the atomic mass in u to within 3e-10, so the two are compared directly.
+# Atomic masses from AME2020, against the molar mass NuSIFT derives from the staged atomic
+# weight ratio. Since the 2019 redefinition of the mole, the molar mass in g/mol equals the
+# atomic mass in u to within 3e-10, so the two are compared directly.
 #
-# This is the only check in the suite that exercises the staged atomic weight, and everything
-# expressed per gram goes through it: an inventory given in grams, and any specific activity.
-# The band is 0.01%, which is far tighter than anything else here and still cleared by three
-# orders of magnitude -- ENDF's AWR and AME2020 are evaluations of the same measurements.
+# THIS IS A STAGING CHECK, NOT AN INDEPENDENT ONE. The store takes its masses from AME2020, so
+# these rows compare the table with itself and cannot say whether AME is right. What they do
+# exercise is the whole path from the published file to a molar mass: the fixed-column parse of
+# mass_1.mas20.txt, the recombination of the whole-u and micro-u halves, the '#'-for-decimal
+# convention, and the division by the neutron mass. A column offset or a stray factor of 1e6
+# moves these rows at once, which is worth keeping even though the independence is gone.
+#
+# The comparison that IS independent runs in staging, which checks every nuclide's AME mass
+# against the AWR its ENDF decay tape states and reports each disagreement. It found seven
+# tapes stating a mass where a ratio belongs; those are pinned in tests/validation.
+#
+# The band is 0.01%. It was chosen when these came from ENDF and the two evaluations had to
+# agree to rounding; it is now cleared by construction, and kept as the tripwire width rather
+# than tightened to something a rounding change would trip.
 #
 # There is no specific-activity table. It would be ln(2) N_A / (T_half M) over two quantities
 # that already have their own tables, and published specific-activity tables disagree with each

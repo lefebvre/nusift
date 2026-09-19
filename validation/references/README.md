@@ -78,6 +78,10 @@ mass in g/mol equals the atomic mass in u to within 3×10⁻¹⁰, so the two ar
 One parsing trap worth recording: the integer part of the tabulated mass is `floor(mass in u)`,
 not the mass number — Co-60 reads 59.933… because the mass defect pulls it below 60.
 
+This same file is now also a staging *input* — the store takes its masses from it, with ENDF's
+atomic weight ratio only as a fallback — so the `molar_masses` rows built from it no longer
+compare two evaluations. See the note on that table for what they still establish.
+
 **`ensdf2022`** — Evaluated Nuclear Structure Data File, April 2022 snapshot, via the IAEA
 Nuclear Data Section Livechart API.
 <https://nds.iaea.org/relnsd/vcharthtml/VChartHTML.html>

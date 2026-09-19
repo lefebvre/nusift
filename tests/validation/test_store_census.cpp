@@ -35,6 +35,9 @@ struct Census {
   int noSpectrumAtAll = 0;
   int sfWithoutYields = 0;
   int withWeights = 0;
+  int weightsFromEndf = 0;
+  int weightsFromAme = 0;
+  int weightsExtrapolated = 0;
 };
 
 // Deliberately the same traversal `nusift data info` performs (runDataInfo in
@@ -67,6 +70,19 @@ Census censusOf(const NuclearData& data) {
     }
     if (data.molarMassGPerMol(i) > 0.0) {
       ++c.withWeights;
+      switch (data.massSource(i)) {
+        case MassSource::Ame:
+          ++c.weightsFromAme;
+          break;
+        case MassSource::AmeEstimated:
+          ++c.weightsFromAme;
+          ++c.weightsExtrapolated;
+          break;
+        case MassSource::Endf:
+        case MassSource::None:
+          ++c.weightsFromEndf;
+          break;
+      }
     }
   }
   c.sfWithoutYields = static_cast<int>(data.spontaneousFissionWithoutYields().size());
@@ -94,7 +110,48 @@ TEST(StoreCensus, CoverageCountsAreUnchanged) {
   EXPECT_EQ(c.unstable, 3562);
   EXPECT_EQ(c.withLines, 1595);
   EXPECT_EQ(c.partialContinuum, 34);
-  EXPECT_EQ(c.withWeights, 3576);
+  EXPECT_EQ(c.withWeights, 3947);
+}
+
+// Masses are the one field this store draws from two evaluations, so the split is pinned as
+// well as the total. AME2020 is the primary source and covers every nuclide in this chain that
+// ENDF states a ratio for, so the ENDF fallback -- which exists for a store staged without
+// --ame -- never fires here. The extrapolated share is large because most of a closed chain is
+// nuclides too short-lived or too exotic to have been measured.
+TEST(StoreCensus, MassProvenanceIsUnchanged) {
+  const Census c = censusOf(committedStore());
+  EXPECT_EQ(c.weightsFromEndf, 0) << "atomic weight ratios taken from ENDF decay tapes";
+  EXPECT_EQ(c.weightsFromAme, 3947) << "masses taken from AME2020";
+  EXPECT_EQ(c.weightsExtrapolated, 725) << "of those, AME extrapolations rather than measurements";
+  // The irreducible remainder: chain members AME2020 does not tabulate either, so no mass
+  // exists for them in any published evaluation and they cannot be given or reported in grams.
+  // Cf-258 is the recognizable one -- AME2020 stops at Cf-256.
+  EXPECT_EQ(committedStore().size() - c.withWeights, 65) << "chain members with no mass anywhere";
+}
+
+// Seven ENDF/B-VIII.1 decay tapes put the ATOMIC MASS IN U in their AWR field rather than the
+// ratio to the neutron mass. Staging those as ratios would multiply them by the neutron mass a
+// second time, a uniform +0.87% error in the molar mass -- and 0.87% is both far too small to
+// notice in a report and far too large for a quantity every gram conversion runs through.
+//
+// This is why AME is preferred over ENDF rather than the other way round, so it is pinned
+// against the specific nuclides that forced the choice. Each expected value is AME2020's
+// atomic mass; the value a preference for ENDF would produce is 1.00866 times it.
+TEST(StoreCensus, TheTapesThatMisstateTheirAtomicWeightAreNotStagedAsRatios) {
+  const struct {
+    const char* nuclide;
+    double ame2020GPerMol;
+  } cases[] = {
+      {"Cu-81", 80.965743},   {"Zr-110", 109.954675}, {"Rh-123", 122.947192},
+      {"Pd-125", 124.942072}, {"Pd-126", 125.944401}, {"I-145", 144.955845},
+      {"Ba-153", 152.960848},
+  };
+  for (const auto& c : cases) {
+    const int index = committedStore().indexOf(requireNuclideName(c.nuclide));
+    ASSERT_GE(index, 0) << c.nuclide;
+    EXPECT_NEAR(committedStore().molarMassGPerMol(index), c.ame2020GPerMol, 1.0e-3)
+        << c.nuclide << " should carry AME2020's mass, not the tape's AWR field times m_n";
+  }
 }
 
 // The four coverage GAPS, pinned separately because they are four different problems and

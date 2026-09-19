@@ -1,7 +1,7 @@
 store:            data/nusift_b8.1.h5
 schema version:   1
 library:          ENDF/B-VIII.1
-staged:           2026-09-03T12:57:58Z
+staged:           2026-09-19T18:41:22Z
 staged by:        0.1.0
 tapes staged:     3821
 nuclides staged:  3828
@@ -17,7 +17,11 @@ unstable nuclides:              3562
     of those, clamped lines:    1471
   emit photons, no spectrum:    1546
   SF branch, no yields staged:  103
-nuclides with atomic weights:   3576
+nuclides with atomic weights:   3947
+  from AME2020:                 3947
+    of those, extrapolated:     725
+  from ENDF decay tapes:        0
+  with no mass, unweighable:    65
 
 1546 unstable nuclides have an evaluated average photon energy but no discrete
 spectrum in this evaluation. They contribute ZERO to an exposure ranking while

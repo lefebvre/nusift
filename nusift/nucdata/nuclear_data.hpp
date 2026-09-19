@@ -96,11 +96,16 @@ public:
   // metric multiplies by, so it is precomputed rather than derived at every use.
   double decayConstant(int index) const;
 
-  // g/mol, from the staged ENDF atomic weight ratio. Returns 0 when AWR was never staged,
-  // which the inventory reader turns into a specific error rather than a wrong mass: a store
-  // built from a depletion-chain XML carries no AWR, so gram input is genuinely unavailable
-  // rather than merely imprecise.
+  // g/mol, from the staged atomic weight ratio. Returns 0 when no AWR was staged for this
+  // nuclide, which the inventory reader turns into a specific error rather than a wrong mass:
+  // a store built from a depletion-chain XML carries no AWR at all, so gram input is genuinely
+  // unavailable rather than merely imprecise.
   double molarMassGPerMol(int index) const;
+
+  // Which evaluation the mass above came from: AME2020 where it has an entry, the nuclide's
+  // own ENDF atomic weight ratio otherwise, and whether AME measured the mass or extrapolated
+  // it. None means no mass is available and molarMassGPerMol returns 0.
+  MassSource massSource(int index) const;
 
   // The nuclide's discrete photon lines, as a view into the store's flat arrays. Empty for a
   // stable nuclide, for a closure-added daughter, and for any store staged without lines.

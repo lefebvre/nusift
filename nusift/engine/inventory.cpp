@@ -199,12 +199,13 @@ double toAtoms(double value, Quantity quantity, int index, const NuclearData& da
     if (molar <= 0.0) {
       // Deliberately not falling back on A as the molar mass. That approximation is wrong by
       // ~0.1% for mid-A nuclides and worse for light ones, and silently applying it would put
-      // an unattributable error into every mass-specified inventory. A store without atomic
-      // weights genuinely cannot answer this.
+      // an unattributable error into every mass-specified inventory. A nuclide reaching here
+      // has no mass in ENDF and none in AME2020 either, so no evaluation states one at all:
+      // this is genuinely unanswerable rather than merely unstaged.
       throw InputError(tagged(kModule, "cannot convert mass for " + formatNuclideName(zai) +
                                            ": the data store carries no atomic weight ratio "
-                                           "(stage from ENDF, or give this nuclide in atoms, "
-                                           "moles, or an activity unit)"));
+                                           "(stage from ENDF and AME2020, or give this "
+                                           "nuclide in atoms, moles, or an activity unit)"));
     }
     return value * grams / molar * units::kAvogadro;
   }

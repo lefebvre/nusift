@@ -939,6 +939,13 @@ int runDataInfo(const std::string& storePath, const char* argv0) {
   int noSpectrumAtAll = 0;   // emits EM energy, but no discrete lines are evaluated
   int partialContinuum = 0;  // has lines, and a continuum tail above 5%
   int withWeights = 0;
+  // Split by where the mass came from. A store's masses are legitimately mixed: AME2020 is
+  // the primary source, a nuclide's own ENDF ratio is the fallback where AME has no entry,
+  // and an extrapolated AME mass is a weaker claim than a measured one. A single total would
+  // report all three as the same thing.
+  int weightsFromEndf = 0;
+  int weightsFromAme = 0;
+  int weightsExtrapolated = 0;
   // Lines whose air coefficients are clamped end points rather than interpolations, and the
   // nuclides carrying them. Third gap, and a different one again: these lines are staged,
   // ranked, and counted, but the exposure model has nothing tabulated to evaluate them with.
@@ -970,6 +977,19 @@ int runDataInfo(const std::string& storePath, const char* argv0) {
     }
     if (data.molarMassGPerMol(i) > 0.0) {
       ++withWeights;
+      switch (data.massSource(i)) {
+        case MassSource::Ame:
+          ++weightsFromAme;
+          break;
+        case MassSource::AmeEstimated:
+          ++weightsFromAme;
+          ++weightsExtrapolated;
+          break;
+        case MassSource::Endf:
+        case MassSource::None:
+          ++weightsFromEndf;
+          break;
+      }
     }
   }
   // The fourth gap, and the only one that costs atoms rather than photons: a spontaneous-fission
@@ -984,6 +1004,10 @@ int runDataInfo(const std::string& storePath, const char* argv0) {
   std::printf("  emit photons, no spectrum:    %d\n", noSpectrumAtAll);
   std::printf("  SF branch, no yields staged:  %zu\n", sfWithoutYields.size());
   std::printf("nuclides with atomic weights:   %d\n", withWeights);
+  std::printf("  from AME2020:                 %d\n", weightsFromAme);
+  std::printf("    of those, extrapolated:     %d\n", weightsExtrapolated);
+  std::printf("  from ENDF decay tapes:        %d\n", weightsFromEndf);
+  std::printf("  with no mass, unweighable:    %d\n", data.size() - withWeights);
 
   if (noSpectrumAtAll > 0) {
     std::printf(
@@ -1074,7 +1098,8 @@ int runDataNuclide(const std::string& storePath, const std::vector<std::string>&
       std::printf("  half-life        stable\n");
     }
     if (data.molarMassGPerMol(index) > 0.0) {
-      std::printf("  molar mass       %.6g g/mol\n", data.molarMassGPerMol(index));
+      std::printf("  molar mass       %.6g g/mol  (%s)\n", data.molarMassGPerMol(index),
+                  massSourceName(data.massSource(index)));
     }
 
     const LineSpectrum lines = data.lines(index);

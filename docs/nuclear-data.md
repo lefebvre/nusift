@@ -17,6 +17,7 @@ the build.
 flowchart LR
     A["ENDF decay tapes<br/>~3800 files"] --> S["nusift_stage_data"]
     B["fission-yield tapes<br/>NFY / SFY"] --> S
+    C["AME2020 mass table<br/>mass_1.mas20.txt"] --> S
     S --> H[("store.h5<br/>schema v1")]
     H --> R["every runtime:<br/>CLI, library, Python"]
     style S stroke-dasharray: 4 3
@@ -40,7 +41,7 @@ Two readers run over the same MF8/MT457 sections, because they need different th
 | --- | --- | --- |
 | Half-life, decay modes, branching ratios, RFS | cram's ENDF reader | Feeds the depletion chain directly |
 | Independent fission yields (MT454) | cram's reader | Never cumulative — see §4 |
-| Atomic weight ratio | NuSIFT (`readExtras`) | Becomes molar mass; without it, gram input is refused |
+| Atomic weight ratio | NuSIFT (`readExtras`) | Read from every section including the stable ones, whose head record is the only place their mass appears. A fallback: masses come from AME2020 first (§7) |
 | Average decay energies, all three | NuSIFT | Light-particle, electromagnetic and heavy-particle, per decay. Their sum is the decay-heat weight; the electromagnetic one is also the reference the continuum shortfall is measured against |
 | Discrete photon lines | NuSIFT | cram is deliberately a pure depletion library and carries no photon data |
 
@@ -253,7 +254,8 @@ $ nusift data info
 store:            data/nusift_b8.1.h5
 schema version:   1
 library:          ENDF/B-VIII.1
-staged:           2026-08-13T15:29:37Z
+staged:           2026-09-19T18:41:22Z
+staged by:        0.1.0
 tapes staged:     3821
 nuclides staged:  3828
 chain size:       4012  (staged, plus decay daughters and fission products
@@ -268,7 +270,11 @@ unstable nuclides:              3562
     of those, clamped lines:    1471
   emit photons, no spectrum:    1546
   SF branch, no yields staged:  103
-nuclides with atomic weights:   3576
+nuclides with atomic weights:   3947
+  from ENDF decay tapes:        0
+  from AME2020:                 3947
+    of those, extrapolated:     725
+  with no mass, unweighable:    65
 ```
 
 Three of those lines are load-bearing limitations rather than statistics:
@@ -289,6 +295,27 @@ branch removes their atoms and produces nothing in their place, so a chain passi
 does not conserve atoms (§4). All lie above A = 180, out of reach of any fission-product source;
 an actinide inventory is where the count matters, and `data info` names the nuclides so it can
 be judged against the inventory in hand.
+
+**65 chain members have no mass in any published evaluation**, so they can be neither given nor
+reported in grams. Masses come from **AME2020** (`data/ame/fetch_ame.sh`), with a nuclide's own
+ENDF atomic weight ratio as the fallback where AME has no entry — a fallback that never fires
+for this store, because AME covers every nuclide these tapes state a ratio for. The final 65
+are past even AME's tabulation; Cf-258 is the recognizable one, as AME2020 stops at Cf-256.
+
+**AME is preferred over ENDF because ENDF/B-VIII.1's decay sublibrary is wrong for some
+nuclides.** Seven tapes — Cu-81, Zr-110, Rh-123, Pd-125, Pd-126, I-145 and Ba-153 — put the
+atomic mass in u in their AWR field instead of the ratio to the neutron mass. Staging those as
+ratios multiplies them by the neutron mass a second time, a uniform +0.87% error in the molar
+mass: far too small to notice in a report, and far too large for a quantity every gram
+conversion runs through. Staging cross-checks the two evaluations on every nuclide and names
+each disagreement, which is how those seven were found; `tests/validation` pins their staged
+masses so a change of preference cannot quietly reintroduce the error.
+
+That AME's coverage is mostly extrapolated — 725 of 3947 — is a property of a closed chain
+rather than a weakness. Most of it is nuclides too short-lived or too exotic to have been
+measured, and AME's extrapolation uncertainties run to a few MeV: a part in 1e5 of a fission
+product's mass, far below anything a gram conversion resolves and far below the uncertainty on
+the inventory being weighed.
 
 ## 8. Finding the store
 
