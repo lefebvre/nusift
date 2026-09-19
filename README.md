@@ -324,7 +324,8 @@ Implemented:
 - ICRP 116 effective dose in Sv/h, in any of the six irradiation geometries
 - Coefficient packs: a published per-nuclide table as a metric, with its version, scenario and
   coverage carried into the answer
-- Staging a data store from ENDF decay and fission-yield tapes
+- Staging a data store from ENDF decay and fission-yield tapes, with AME2020 masses for the
+  chain members no decay evaluation covers
 - Seeding an inventory from fission, by fission count, kilotons, or joules
 - Dominance forecasting: who leads, and when that changes
 - Located events: crossings, turns, level windows, and when a fixed-length task fits a budget

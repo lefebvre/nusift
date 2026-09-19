@@ -40,6 +40,28 @@ enum class DataSource : int {
 
 const char* dataSourceName(DataSource source);
 
+// Where ONE nuclide's atomic weight ratio came from, written per nuclide because a store's
+// masses are legitimately mixed. AME2020 is the primary source: it is the evaluation ENDF's
+// own ratios derive from, it covers nuclides no decay evaluation ever touched, and a handful
+// of ENDF/B-VIII.1 decay tapes state their AWR field wrongly (see the note at the fill site in
+// nusift_stage_data.cpp). ENDF's ratio is used where AME has no entry for the nuclide at all.
+//
+// The tiers are distinguished because they are three different claims, not three spellings of
+// one. Numerically the distinction is nearly irrelevant for a mass -- even AME's extrapolated
+// entries carry uncertainties around a part in 1e5 of a fission product's mass -- but "this is
+// what the evaluation measured" and "this is what a mass model extrapolates" are not the same
+// statement, and a store that reported both as a bare number could not be asked which it held.
+//
+// A STORE FORMAT: these integers are written into HDF5 and must never be renumbered.
+enum class MassSource : int {
+  None = 0,         // no mass staged; gram conversion is unavailable for this nuclide
+  Endf = 1,         // the AWR of the nuclide's own MF8/MT457 head record; AME has no entry
+  Ame = 2,          // AME2020, measured
+  AmeEstimated = 3  // AME2020, extrapolated rather than measured (marked '#' in the table)
+};
+
+const char* massSourceName(MassSource source);
+
 // The wire encoding of xs_reaction_type, and a STORE FORMAT rather than a program detail:
 // these integers are written into HDF5 and must never be renumbered. They are spelled out
 // here instead of being a static_cast of cram::ReactionType precisely because cram's enum is
@@ -92,7 +114,26 @@ struct StoreArrays {
   // is only half an answer without the sigma_lambda it multiplies, and staging reads MT457
   // for the half-life already, so the tape data is in hand the moment this is wanted.
   std::vector<double> halfLifeUncertainty;
-  std::vector<double> awr;                // ENDF atomic weight ratio; 0 if unstaged
+  std::vector<double> awr;  // atomic weight ratio; 0 if unstaged
+  // Which evaluation each AWR above came from, as MassSource. Optional and, when absent,
+  // read back as Endf for every nuclide carrying a nonzero AWR -- which is what a store
+  // staged before masses were mixed actually held.
+  std::vector<int> awrSource;
+
+  // --- masses for chain members that are NOT on the nuclide axis ----------
+  //
+  // The loader closes the chain after reading the store: it registers every fission-yield
+  // product and every reachable decay daughter, so that nothing can be produced into a gap.
+  // Those nuclides have no row on the axis above -- they carry no evaluated data of any kind,
+  // which is the whole reason the store distinguishes its staged count from its chain size --
+  // and so they have nowhere to keep a mass either. Without one they cannot be given or
+  // reported in grams, although they are perfectly real members of the inventory.
+  //
+  // So masses for them travel separately, keyed rather than positional, and are matched to
+  // chain indices after closure. Sorted ascending by key and all three the same length.
+  std::vector<std::int64_t> closureMassKey;
+  std::vector<double> closureAwr;
+  std::vector<int> closureAwrSource;      // MassSource, as above
   std::vector<double> emEnergyEv;         // MT457 average electromagnetic energy per decay
   std::vector<double> lpEnergyEv;         // MT457 average light-particle energy (decay heat)
   std::vector<double> hpEnergyEv;         // MT457 average heavy-particle energy (decay heat)

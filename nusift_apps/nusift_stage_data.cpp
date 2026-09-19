@@ -19,12 +19,14 @@
 #include <ENDFtk.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <optional>
 #include <set>
@@ -98,14 +100,23 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
       continue;
     }
     const auto section = material.section(8, 457).parse<8, 457>();
-    if (section.isStable()) {
-      continue;
-    }
 
     const std::int64_t key =
         keyFromZa(static_cast<int>(section.ZA()), static_cast<int>(section.LISO()));
     ExtraData extra;
     extra.awr = static_cast<double>(section.atomicWeightRatio());
+
+    // A stable material has no decay data to read, but its head record still carries the
+    // atomic weight ratio -- and that is the ONLY place a stable nuclide's molar mass can come
+    // from, because it appears in none of the other sublibraries staged here. Skipping the
+    // whole section left every stable chain end point unweighable, which is most of an
+    // inventory's MASS once the short-lived activity has gone: at a year a fission source is
+    // almost entirely stable end points, so a gram conversion was refusing the bulk of what it
+    // was asked to weigh. So the AWR is taken and only the decay data below is skipped.
+    if (section.isStable()) {
+      extras[key] = std::move(extra);
+      continue;
+    }
 
     // [T, dT]: the value and its 1-sigma, in that order, as every uncertain quantity in MT457
     // is written.
@@ -207,6 +218,111 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
 
     extras[key] = std::move(extra);
   }
+}
+
+// Surrounding blanks off a fixed-width field. The AME table right-justifies its numbers into
+// columns, so every field arrives padded.
+std::string trimmed(std::string text) {
+  const auto notSpace = [](unsigned char c) { return std::isspace(c) == 0; };
+  text.erase(text.begin(), std::find_if(text.begin(), text.end(), notSpace));
+  text.erase(std::find_if(text.rbegin(), text.rend(), notSpace).base(), text.end());
+  return text;
+}
+
+// One nuclide's mass as AME2020 states it.
+struct AmeMass {
+  double massAmu = 0.0;
+  bool estimated = false;  // extrapolated from systematics rather than measured
+};
+
+// Read the AME2020 atomic mass table (mass_1.mas20.txt) into a map keyed by (Z, A).
+//
+// PARSED BY COLUMN, never by splitting on whitespace. The table is Fortran-formatted
+//
+//   a1,i3,i5,i5,i5,1x,a3,a4,1x,f14.6,f12.6,f13.5,1x,f10.5,1x,a2,f13.5,f11.5,1x,i3,1x,f13.6,f12.6
+//
+// and its fields run together: a wide enough mass excess touches the field beside it, and an
+// element symbol can carry an origin flag like "-n" or "-pp" in the column after it. Splitting
+// on spaces reads a different quantity for some rows than for others, and silently.
+//
+// The atomic mass is the last value pair, and is written in micro-u SPLIT ACROSS TWO FIELDS:
+// an integer count of whole u (i3) and the remainder in micro-u (f13.6), so the neutron is
+// "  1 008664.91590". The two are recombined here rather than stored apart.
+//
+// ESTIMATED VALUES carry '#' in place of the decimal point. They are taken -- see the note in
+// data/ame/fetch_ame.sh on why an extrapolated mass is still far more precision than a gram
+// conversion needs -- but the flag is kept so the store can report which is which.
+std::map<std::pair<int, int>, AmeMass> readAmeMasses(const std::string& path) {
+  // Field extents, 0-based and half-open, straight off the format above.
+  constexpr std::size_t kZBegin = 9;
+  constexpr std::size_t kZEnd = 14;
+  constexpr std::size_t kABegin = 14;
+  constexpr std::size_t kAEnd = 19;
+  constexpr std::size_t kMassWholeBegin = 106;
+  constexpr std::size_t kMassWholeEnd = 109;
+  constexpr std::size_t kMassMicroBegin = 110;
+  constexpr std::size_t kMassMicroEnd = 123;
+
+  std::ifstream in(path);
+  if (!in) {
+    throw std::runtime_error("cannot open AME mass table " + path);
+  }
+
+  // The table opens with ~35 lines of prose and column headings. Rather than counting them --
+  // a count that differs between AME releases -- every line is offered to the same parse and
+  // one that does not yield an integer Z, an integer A, and a mass is skipped. A heading line
+  // cannot pass all three.
+  std::map<std::pair<int, int>, AmeMass> masses;
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.size() < kMassMicroEnd) {
+      continue;
+    }
+    const auto integerField = [&line](std::size_t begin, std::size_t end) -> std::optional<int> {
+      const std::string text = trimmed(line.substr(begin, end - begin));
+      if (text.empty()) {
+        return std::nullopt;
+      }
+      try {
+        std::size_t consumed = 0;
+        const int value = std::stoi(text, &consumed);
+        return consumed == text.size() ? std::optional<int>(value) : std::nullopt;
+      } catch (const std::exception&) {
+        return std::nullopt;
+      }
+    };
+
+    const std::optional<int> z = integerField(kZBegin, kZEnd);
+    const std::optional<int> a = integerField(kABegin, kAEnd);
+    const std::optional<int> whole = integerField(kMassWholeBegin, kMassWholeEnd);
+    if (!z || !a || !whole || *a <= 0) {
+      continue;
+    }
+
+    std::string micro = trimmed(line.substr(kMassMicroBegin, kMassMicroEnd - kMassMicroBegin));
+    const bool estimated = micro.find('#') != std::string::npos;
+    std::replace(micro.begin(), micro.end(), '#', '.');
+    double microU = 0.0;
+    try {
+      std::size_t consumed = 0;
+      microU = std::stod(micro, &consumed);
+      if (consumed != micro.size()) {
+        continue;
+      }
+    } catch (const std::exception&) {
+      continue;
+    }
+
+    constexpr double kMicroUPerU = 1.0e6;
+    masses[{*z, *a}] =
+        AmeMass{.massAmu = (static_cast<double>(*whole) * kMicroUPerU + microU) / kMicroUPerU,
+                .estimated = estimated};
+  }
+
+  if (masses.empty()) {
+    throw std::runtime_error("no masses parsed from " + path + "; is it the AME mass table?");
+  }
+  return masses;
 }
 
 // The ENDF NFY incident-energy grid: thermal, fast, and 14 MeV, plus 0 for spontaneous
@@ -399,6 +515,7 @@ int main(int argc, char** argv) {
   std::vector<std::string> yieldDirs;
   std::vector<std::string> sfyDirs;
   std::vector<std::tuple<std::string, int, int>> namedYieldTapes;
+  std::string amePath;
   std::string output;
   std::string library = "ENDF/B-VIII.1";
 
@@ -417,6 +534,10 @@ int main(int argc, char** argv) {
   app.add_option("--sfy-dir", sfyDirs, "Directory of spontaneous fission-yield tapes")
       ->expected(1, -1)
       ->check(CLI::ExistingDirectory);
+  app.add_option("--ame", amePath,
+                 "AME2020 atomic mass table (mass_1.mas20.txt), for the nuclides ENDF states "
+                 "no atomic weight ratio for")
+      ->check(CLI::ExistingFile);
   app.add_option("-o,--output", output, "Output store path (.h5)")->required();
   app.add_option("--library", library, "Evaluation name recorded in the store's provenance");
 
@@ -435,6 +556,11 @@ int main(int argc, char** argv) {
   try {
     cram::DepletionChain chain;
     std::map<std::int64_t, ExtraData> extras;
+    std::map<std::pair<int, int>, AmeMass> ameMasses;
+    if (!amePath.empty()) {
+      ameMasses = readAmeMasses(amePath);
+      std::printf("staged AME mass table %s: %zu nuclide(s)\n", amePath.c_str(), ameMasses.size());
+    }
     int tapesRead = 0;
     int tapesFailed = 0;
 
@@ -522,6 +648,11 @@ int main(int argc, char** argv) {
     int withBranchingSigma = 0;
     int unmatchedModes = 0;
     int halfLifeMismatches = 0;
+    int massFromEndf = 0;
+    int massFromAme = 0;
+    int massFromAmeEstimated = 0;
+    int massMismatches = 0;
+    std::vector<Zai> withoutMass;
     for (const std::int64_t key : keys) {
       const Zai zai = Zai::fromKey(key);
       const cram::Zai cramZai{zai.z, zai.a, zai.i};
@@ -555,7 +686,63 @@ int main(int argc, char** argv) {
         }
       }
       arrays.halfLifeUncertainty.push_back(halfLifeSigma);
-      arrays.awr.push_back(haveExtra ? extra->second.awr : 0.0);
+      // AME2020 FIRST, ENDF only where AME has no entry.
+      //
+      // Both are atomic weight ratios against the neutron mass by the time they land in this
+      // column -- AME states the atomic mass the ratio is formed from, ENDF states the ratio
+      // directly -- so nothing downstream has to know which of the two a nuclide's mass came
+      // from. The source column records it anyway, because "the evaluation measured this" and
+      // "a mass model extrapolates this" are different claims about the same number.
+      //
+      // AME wins because ENDF/B-VIII.1's decay sublibrary is demonstrably wrong for some
+      // nuclides and AME is what its correct values are derived from in the first place. Seven
+      // tapes -- Cu-81, Zr-110, Rh-123, Pd-125, Pd-126, I-145, Ba-153 -- put the atomic mass
+      // in u in the AWR field instead of the ratio to the neutron mass, which is a uniform
+      // +0.87% error in the molar mass, exactly the neutron-mass factor. The cross-check below
+      // is what found them, and preferring ENDF would mean knowingly staging a value the check
+      // has just reported as wrong.
+      //
+      // AME is keyed by (Z, A) and carries no isomeric states, so an isomer takes its GROUND
+      // STATE mass. The excitation energy that omits is at most a few MeV, a part in 1e5 of a
+      // fission product's mass and orders below anything a gram conversion resolves.
+      const double endfAwr = haveExtra ? extra->second.awr : 0.0;
+      const auto ame = ameMasses.find({zai.z, zai.a});
+      const bool haveAme = ame != ameMasses.end();
+      const double ameAwr = haveAme ? ame->second.massAmu / units::kNeutronMassAmu : 0.0;
+
+      double awr = 0.0;
+      MassSource massSource = MassSource::None;
+      if (haveAme) {
+        awr = ameAwr;
+        massSource = ame->second.estimated ? MassSource::AmeEstimated : MassSource::Ame;
+        if (ame->second.estimated) {
+          ++massFromAmeEstimated;
+        } else {
+          ++massFromAme;
+        }
+        // The same kind of cross-check the half-life sigma rests on, and for the same reason:
+        // two readers, two evaluations, one nuclide. ENDF's ratios derive from AME's masses,
+        // so they agree to rounding wherever both exist, and a real disagreement means one of
+        // the two tapes is stating something other than what it claims to. Reported per
+        // nuclide rather than reconciled, because which one is wrong is a judgement about that
+        // evaluation and the count belongs in front of whoever restages.
+        constexpr double kMassAgreement = 1.0e-4;  // relative; ENDF rounds AWR, AME does not
+        if (endfAwr > 0.0 && std::abs(endfAwr - ameAwr) > kMassAgreement * ameAwr) {
+          std::fprintf(stderr,
+                       "  warning: %s atomic weight differs between ENDF and AME2020 "
+                       "(%.6f vs %.6f); the AME value is staged\n",
+                       formatNuclideName(zai).c_str(), endfAwr, ameAwr);
+          ++massMismatches;
+        }
+      } else if (endfAwr > 0.0) {
+        awr = endfAwr;
+        massSource = MassSource::Endf;
+        ++massFromEndf;
+      } else {
+        withoutMass.push_back(zai);
+      }
+      arrays.awr.push_back(awr);
+      arrays.awrSource.push_back(static_cast<int>(massSource));
       arrays.emEnergyEv.push_back(haveExtra ? extra->second.emEnergyEv : 0.0);
       arrays.lpEnergyEv.push_back(haveExtra ? extra->second.lpEnergyEv : 0.0);
       arrays.hpEnergyEv.push_back(haveExtra ? extra->second.hpEnergyEv : 0.0);
@@ -612,6 +799,56 @@ int main(int argc, char** argv) {
     // them for decay heat, which is not implemented, and an empty field is honestly "never
     // staged" whereas a column of zeros would read as "no energy".
 
+    // Masses for the nuclides the LOADER will add but the axis does not carry. Which ones
+    // those are is not something this tool can work out from its own chain: closure happens
+    // when the store is read, from the fission-yield products and decay daughters the arrays
+    // name. So the arrays are loaded here exactly as a run will load them, and every chain
+    // member past the staged axis is looked up in AME -- the only evaluation that has a mass
+    // for a nuclide nothing else evaluated at all.
+    {
+      const NuclearData closed = NuclearData::fromArrays(arrays);
+      for (int i = closed.stagedCount(); i < closed.size(); ++i) {
+        const Zai zai = closed.zaiAt(i);
+        const auto ame = ameMasses.find({zai.z, zai.a});
+        if (ame == ameMasses.end()) {
+          withoutMass.push_back(zai);
+          continue;
+        }
+        arrays.closureMassKey.push_back(zai.key());
+        arrays.closureAwr.push_back(ame->second.massAmu / units::kNeutronMassAmu);
+        arrays.closureAwrSource.push_back(
+            static_cast<int>(ame->second.estimated ? MassSource::AmeEstimated : MassSource::Ame));
+        if (ame->second.estimated) {
+          ++massFromAmeEstimated;
+        } else {
+          ++massFromAme;
+        }
+      }
+      // The axis is sorted ascending by key and closure appends in chain order, which is not
+      // the same order. Sorted here because the loader binary-searches this table.
+      std::vector<std::size_t> order(arrays.closureMassKey.size());
+      for (std::size_t k = 0; k < order.size(); ++k) {
+        order[k] = k;
+      }
+      std::sort(order.begin(), order.end(), [&](std::size_t l, std::size_t r) {
+        return arrays.closureMassKey[l] < arrays.closureMassKey[r];
+      });
+      std::vector<std::int64_t> keys;
+      std::vector<double> awrs;
+      std::vector<int> sources;
+      keys.reserve(order.size());
+      awrs.reserve(order.size());
+      sources.reserve(order.size());
+      for (const std::size_t k : order) {
+        keys.push_back(arrays.closureMassKey[k]);
+        awrs.push_back(arrays.closureAwr[k]);
+        sources.push_back(arrays.closureAwrSource[k]);
+      }
+      arrays.closureMassKey = std::move(keys);
+      arrays.closureAwr = std::move(awrs);
+      arrays.closureAwrSource = std::move(sources);
+    }
+
     // The one coverage gap the decay matrix cannot report for itself: a spontaneous-fission
     // branch with no yield set of any energy removes the parent's atoms and produces nothing
     // in their place. Counted by loading the arrays exactly as a run will, so the number here
@@ -648,6 +885,29 @@ int main(int argc, char** argv) {
                    "  warning: %d nuclide(s) had disagreeing half-lives between the two readers "
                    "and carry no half-life uncertainty\n",
                    halfLifeMismatches);
+    }
+    // The mass census, by where each one came from. Reported like the uncertainty census
+    // above and for the same reason: which nuclides can be given or reported in grams is a
+    // property of the store a user has to be able to ask about, and one total would hide that
+    // the answer differs per nuclide.
+    std::printf(
+        "  atomic weights: %d from AME2020, %d AME2020-estimated, %d from ENDF, "
+        "%zu with none\n",
+        massFromAme, massFromAmeEstimated, massFromEndf, withoutMass.size());
+    if (!withoutMass.empty()) {
+      std::fprintf(stderr,
+                   "  warning: %zu nuclide(s) have no atomic weight from any source, so they "
+                   "cannot be given or reported in grams (first: %s).%s\n",
+                   withoutMass.size(), formatNuclideName(withoutMass.front()).c_str(),
+                   ameMasses.empty() ? " Pass --ame with the AME2020 mass table to cover the"
+                                       " nuclides ENDF states no AWR for."
+                                     : "");
+    }
+    if (massMismatches > 0) {
+      std::fprintf(stderr,
+                   "  warning: %d nuclide(s) have ENDF and AME2020 atomic weights that "
+                   "disagree by more than rounding; the ENDF value is staged for each\n",
+                   massMismatches);
     }
   } catch (const std::exception& e) {
     std::fprintf(stderr, "nusift_stage_data: %s\n", e.what());

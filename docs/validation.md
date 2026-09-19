@@ -12,7 +12,7 @@ CI gates on cannot be two different numbers.
 
 |  |  |
 | --- | --- |
-| store | `data/nusift_b8.1.h5`, ENDF/B-VIII.1, staged 2026-09-03T12:57:58Z |
+| store | `data/nusift_b8.1.h5`, ENDF/B-VIII.1, staged 2026-09-19T18:41:22Z |
 | coverage | 3828 nuclides staged, 4012 in the closed chain |
 | nusift | 0.1.0 |
 | cross-code | radioactivedecay 0.6.1 (pinned 0.6.1), ICRP-107 decay data |
@@ -161,26 +161,39 @@ all of it convention rather than disagreement.
 ## Atomic weights
 
 Everything expressed per gram goes through the staged atomic weight ratio: an inventory
-given in grams, and any specific activity derived from one. AME2020 is an independent
-evaluation of the same masses, which makes this the one check that pins that conversion
-against something outside the ENDF pipeline.
+given in grams, and any specific activity derived from one.
+
+**This is a staging check, not an independent one.** The store takes its masses from
+AME2020, so the rows below compare the table with itself and the residuals are zero by
+construction. What they exercise is the path from the published file to a molar mass —
+the fixed-column parse of `mass_1.mas20.txt`, the recombination of the whole-u and
+micro-u halves of each atomic mass, the `#`-for-decimal convention, and the division by
+the neutron mass. A column offset or a stray factor of 1e6 moves these rows at once.
+
+The comparison that *is* independent runs during staging, which checks every nuclide's
+AME mass against the atomic weight ratio its ENDF decay tape states and reports each
+disagreement. Eleven nuclides disagree by more than rounding, and seven of those —
+Cu-81, Zr-110, Rh-123, Pd-125, Pd-126, I-145 and Ba-153 — do so because the tape puts
+the atomic mass in u in the AWR field instead of the ratio, a uniform +0.87% error in
+the molar mass if staged as written. That is why AME is preferred over ENDF here; the
+staged masses of those seven are pinned in the C++ suite.
 
 ![Atomic weights](figures/validation-molar-masses.svg)
 
 | nuclide | AME2020 | staged | residual | status | note |
 | --- | --- | --- | --- | --- | --- |
 | H-3 | 3.016049 | 3.016049 | +0.00000% | gated |  |
-| C-14 | 14.003242 | 14.003245 | +0.00002% | gated |  |
-| Co-60 | 59.933816 | 59.933820 | +0.00001% | gated | the mass defect puts this below 60; a parser assuming the leading integer is A mis-reads it |
-| Sr-90 | 89.907728 | 89.907741 | +0.00001% | gated |  |
-| Cs-137 | 136.907089 | 136.907098 | +0.00001% | gated | independently confirmed against the IAEA Livechart atomic_mass field |
-| I-131 | 130.906126 | 130.906147 | +0.00002% | gated |  |
-| Pm-147 | 146.915145 | 146.915172 | +0.00002% | gated |  |
-| Ce-144 | 143.913653 | 143.913688 | +0.00002% | gated |  |
-| Ir-192 | 191.962602 | 191.962651 | +0.00003% | gated |  |
-| Ra-226 | 226.025408 | 226.025366 | -0.00002% | gated |  |
-| Pu-239 | 239.052162 | 239.052173 | +0.00000% | gated |  |
-| Am-241 | 241.056827 | 241.056794 | -0.00001% | gated |  |
+| C-14 | 14.003242 | 14.003242 | +0.00000% | gated |  |
+| Co-60 | 59.933816 | 59.933816 | +0.00000% | gated | the mass defect puts this below 60; a parser assuming the leading integer is A mis-reads it |
+| Sr-90 | 89.907728 | 89.907728 | +0.00000% | gated |  |
+| Cs-137 | 136.907089 | 136.907089 | +0.00000% | gated | independently confirmed against the IAEA Livechart atomic_mass field |
+| I-131 | 130.906126 | 130.906126 | +0.00000% | gated |  |
+| Pm-147 | 146.915145 | 146.915145 | +0.00000% | gated |  |
+| Ce-144 | 143.913653 | 143.913653 | +0.00000% | gated |  |
+| Ir-192 | 191.962602 | 191.962602 | +0.00000% | gated |  |
+| Ra-226 | 226.025408 | 226.025408 | +0.00000% | gated |  |
+| Pu-239 | 239.052162 | 239.052162 | +0.00000% | gated |  |
+| Am-241 | 241.056827 | 241.056827 | -0.00000% | gated |  |
 
 There is no specific-activity sweep. It would be ln(2)·N_A/(T½·M) over two quantities
 that already have their own tables above, and published specific-activity tables

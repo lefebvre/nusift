@@ -18,7 +18,8 @@ constexpr const char* kModule = "nucdata store";
 // never staged", which is a legitimate state for the optional fields (a store built from a
 // depletion-chain XML has no photon lines or AWR) and is distinguishable from "staged as
 // zero" precisely because the array is absent rather than full of zeros.
-void requireNuclideArray(const std::vector<double>& v, int n, const char* name, bool optional) {
+template <typename T>
+void requireNuclideArray(const std::vector<T>& v, int n, const char* name, bool optional) {
   const int size = static_cast<int>(v.size());
   if (size == n) {
     return;
@@ -89,6 +90,20 @@ const char* dataSourceName(DataSource source) {
   return "none";
 }
 
+const char* massSourceName(MassSource source) {
+  switch (source) {
+    case MassSource::Endf:
+      return "endf";
+    case MassSource::Ame:
+      return "ame2020";
+    case MassSource::AmeEstimated:
+      return "ame2020-estimated";
+    case MassSource::None:
+      break;
+  }
+  return "none";
+}
+
 void validateStoreArrays(const StoreArrays& a) {
   const int n = a.nuclideCount();
 
@@ -98,10 +113,28 @@ void validateStoreArrays(const StoreArrays& a) {
   requireNuclideArray(a.halfLifeUncertainty, n, "nuclide_half_life_uncertainty",
                       /*optional=*/true);
   requireNuclideArray(a.awr, n, "nuclide_awr", /*optional=*/true);
+  requireNuclideArray(a.awrSource, n, "nuclide_awr_source", /*optional=*/true);
   requireNuclideArray(a.emEnergyEv, n, "nuclide_em_energy_ev", /*optional=*/true);
   requireNuclideArray(a.lpEnergyEv, n, "nuclide_lp_energy_ev", /*optional=*/true);
   requireNuclideArray(a.hpEnergyEv, n, "nuclide_hp_energy_ev", /*optional=*/true);
   requireNuclideArray(a.continuumPhotonEv, n, "nuclide_continuum_photon_ev", /*optional=*/true);
+
+  // The off-axis mass table is keyed, so it is checked against ITSELF rather than against n:
+  // a key with no mass beside it, or a mass with no key, would be matched to the wrong
+  // nuclide or to none.
+  if (a.closureAwr.size() != a.closureMassKey.size() ||
+      a.closureAwrSource.size() != a.closureMassKey.size()) {
+    fail("closure_mass_key, closure_awr and closure_awr_source must be the same length (" +
+         std::to_string(a.closureMassKey.size()) + ", " + std::to_string(a.closureAwr.size()) +
+         ", " + std::to_string(a.closureAwrSource.size()) + ")");
+  }
+  for (std::size_t i = 1; i < a.closureMassKey.size(); ++i) {
+    if (a.closureMassKey[i] <= a.closureMassKey[i - 1]) {
+      fail("closure_mass_key must be sorted ascending and unique; index " + std::to_string(i) +
+           " has key " + std::to_string(a.closureMassKey[i]) + " after " +
+           std::to_string(a.closureMassKey[i - 1]));
+    }
+  }
 
   // The sort order is a contract, not a convenience: NuclearData binary-searches the key
   // array, and a store whose axis is unsorted would silently fail those lookups. Duplicates

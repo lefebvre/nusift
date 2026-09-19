@@ -184,6 +184,10 @@ void writeStore(const std::string& path, const StoreArrays& a) {
   writeArray(file.get(), "nuclide_half_life", a.halfLife);
   writeArray(file.get(), "nuclide_half_life_uncertainty", a.halfLifeUncertainty);
   writeArray(file.get(), "nuclide_awr", a.awr);
+  writeArray(file.get(), "nuclide_awr_source", a.awrSource);
+  writeArray(file.get(), "closure_mass_key", a.closureMassKey);
+  writeArray(file.get(), "closure_awr", a.closureAwr);
+  writeArray(file.get(), "closure_awr_source", a.closureAwrSource);
   writeArray(file.get(), "nuclide_em_energy_ev", a.emEnergyEv);
   writeArray(file.get(), "nuclide_lp_energy_ev", a.lpEnergyEv);
   writeArray(file.get(), "nuclide_hp_energy_ev", a.hpEnergyEv);
@@ -267,6 +271,10 @@ StoreArrays readStore(const std::string& path) {
   readArray(file.get(), "nuclide_half_life", a.halfLife);
   readArray(file.get(), "nuclide_half_life_uncertainty", a.halfLifeUncertainty);
   readArray(file.get(), "nuclide_awr", a.awr);
+  readArray(file.get(), "nuclide_awr_source", a.awrSource);
+  readArray(file.get(), "closure_mass_key", a.closureMassKey);
+  readArray(file.get(), "closure_awr", a.closureAwr);
+  readArray(file.get(), "closure_awr_source", a.closureAwrSource);
   readArray(file.get(), "nuclide_em_energy_ev", a.emEnergyEv);
   readArray(file.get(), "nuclide_lp_energy_ev", a.lpEnergyEv);
   readArray(file.get(), "nuclide_hp_energy_ev", a.hpEnergyEv);

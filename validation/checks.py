@@ -194,16 +194,28 @@ def gamma_constant_rows(data):
 def molar_mass_rows(data):
     """Staged atomic weights against AME2020.
 
-    The store carries ENDF's atomic weight ratio, and everything expressed per gram goes
-    through it: an inventory given in grams, and every specific activity. AME2020 is an
-    independent evaluation of the same masses, so this is the one check that pins that
-    conversion against something outside the ENDF pipeline.
+    Everything expressed per gram goes through the staged atomic weight: an inventory given in
+    grams, and every specific activity.
 
-    It also stands in for a specific-activity sweep, which would be ln(2) N_A / (T_half M) over
-    two quantities that already have their own tables here. Published specific-activity tables
-    disagree with each other by more than the staging error being looked for -- Am-241 is
-    tabulated anywhere between 3.2 and 3.5 Ci/g depending on which half-life the compiler used
-    -- so checking the two inputs separately says more than checking their quotient.
+    THIS IS NO LONGER AN INDEPENDENT CHECK, and saying otherwise would overstate the suite.
+    The store now takes its masses FROM AME2020 (ENDF's ratio is a fallback that the shipped
+    evaluation never reaches), so comparing them against AME compares the table with itself.
+    What survives is a staging check, and a sharp one: it exercises the fixed-column parse of
+    mass_1.mas20.txt, the recombination of the whole-u and micro-u halves of the atomic mass,
+    the '#'-for-decimal-point convention, and the division by the neutron mass. A column
+    offset or a factor of 1e6 anywhere in that path moves these rows immediately. It no longer
+    says anything about whether AME2020 is right.
+
+    The independent comparison moved to staging itself, which cross-checks every nuclide's AME
+    mass against the AWR its ENDF decay tape states and names each disagreement. That is what
+    found the seven tapes whose AWR field holds a mass rather than a ratio; their staged values
+    are pinned in tests/validation/test_store_census.cpp.
+
+    This also stands in for a specific-activity sweep, which would be ln(2) N_A / (T_half M)
+    over two quantities that already have their own tables here. Published specific-activity
+    tables disagree with each other by more than the staging error being looked for -- Am-241
+    is tabulated anywhere between 3.2 and 3.5 Ci/g depending on which half-life the compiler
+    used -- so checking the two inputs separately says more than checking their quotient.
     """
     rows = []
     for reference in load_reference("molar_masses"):

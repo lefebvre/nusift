@@ -37,6 +37,7 @@ struct NuclearData::Impl {
   std::vector<double> modeBranchingUncertainty;
   std::vector<double> lambda;
   std::vector<double> molarMass;
+  std::vector<MassSource> massSource;
   std::vector<double> emEnergy;
   std::vector<double> lpEnergy;
   std::vector<double> hpEnergy;
@@ -182,6 +183,7 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
   impl.modeBranchingUncertainty = a.modeBranchingUncertainty;
   impl.lambda.assign(total, 0.0);
   impl.molarMass.assign(total, 0.0);
+  impl.massSource.assign(total, MassSource::None);
   impl.emEnergy.assign(total, 0.0);
   impl.lpEnergy.assign(total, 0.0);
   impl.hpEnergy.assign(total, 0.0);
@@ -204,6 +206,15 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
     impl.lambda[i] = units::decayConstant(a.halfLife[i]);
     if (impl.hasAwr) {
       impl.molarMass[i] = units::molarMassFromAwr(a.awr[i]);
+      // The source column is optional, and a store staged before masses could be mixed did
+      // not carry it. Every AWR such a store holds came from an ENDF head record, so that is
+      // what an absent column means -- not "unknown", which would make a perfectly good
+      // legacy store unable to say where its masses came from.
+      if (impl.molarMass[i] > 0.0) {
+        impl.massSource[i] = i < static_cast<int>(a.awrSource.size())
+                                 ? static_cast<MassSource>(a.awrSource[static_cast<std::size_t>(i)])
+                                 : MassSource::Endf;
+      }
     }
     if (!a.emEnergyEv.empty()) {
       impl.emEnergy[i] = a.emEnergyEv[i];
@@ -218,6 +229,23 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
     }
     if (!a.continuumPhotonEv.empty()) {
       impl.continuumPhoton[i] = a.continuumPhotonEv[i];
+    }
+  }
+
+  // Masses for the closure-added members, matched by key rather than by position because
+  // that is the only thing the two sides share: their chain indices depend on what closure
+  // added, which the staging tool cannot know when it writes the axis. Binary search over a
+  // table the loader has already validated as sorted and unique.
+  for (int i = staged; i < total; ++i) {
+    const auto found = std::lower_bound(a.closureMassKey.begin(), a.closureMassKey.end(),
+                                        impl.keys[static_cast<std::size_t>(i)]);
+    if (found == a.closureMassKey.end() || *found != impl.keys[static_cast<std::size_t>(i)]) {
+      continue;
+    }
+    const std::size_t at = static_cast<std::size_t>(found - a.closureMassKey.begin());
+    impl.molarMass[i] = units::molarMassFromAwr(a.closureAwr[at]);
+    if (impl.molarMass[i] > 0.0) {
+      impl.massSource[i] = static_cast<MassSource>(a.closureAwrSource[at]);
     }
   }
 
@@ -308,6 +336,10 @@ double NuclearData::decayConstant(int index) const {
 
 double NuclearData::molarMassGPerMol(int index) const {
   return impl_->molarMass[static_cast<std::size_t>(index)];
+}
+
+MassSource NuclearData::massSource(int index) const {
+  return impl_->massSource[static_cast<std::size_t>(index)];
 }
 
 LineSpectrum NuclearData::lines(int index) const {

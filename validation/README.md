@@ -48,7 +48,7 @@ report must always contain the section.
 `tests/validation/test_store_census.cpp` pins what the store contains: how many nuclides are
 staged, how many are unstable, how many emit photons with no evaluated spectrum, how many lines
 fall outside the tabulated air-coefficient range, how many carry a spontaneous-fission branch
-with no yield set. Those numbers are quoted in
+with no yield set, and where each nuclide's mass came from. Those numbers are quoted in
 [`docs/nuclear-data.md`](../docs/nuclear-data.md) and printed by `nusift data info`, so they are
 published facts rather than internal details.
 

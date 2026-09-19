@@ -33,6 +33,9 @@ data/endf/B-VIII.1/
 # citation rather than for redistribution from here.
 data/fycom/ENDF/
 data/fycom/JEFF/
+# And the AME2020 mass table, fetched by data/ame/fetch_ame.sh for the nuclides ENDF states no
+# atomic weight ratio for.
+data/ame/AME2020/
 *.h5
 !data/nusift_b8.1.h5
 !tests/data/*.h5

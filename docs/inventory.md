@@ -187,16 +187,20 @@ is [attribution.md §5a](attribution.md)'s subject.
 | --- | --- | --- |
 | atoms | identity | — |
 | mol | `× N_A` | — |
-| g, kg, mg | `× grams / M · N_A` | staged atomic weight ratio |
+| g, kg, mg | `× grams / M · N_A` | a staged atomic weight ratio (AME2020, else ENDF) |
 | Bq, kBq, MBq, GBq, TBq | `× Bq / λ` | a non-zero decay constant |
 | Ci, mCi, µCi | `× Bq/Ci / λ` | a non-zero decay constant |
 
-Molar mass comes from the staged ENDF atomic weight ratio, `M = AWR · m_n`, **not from A**. The
+Molar mass comes from the staged atomic weight ratio, `M = AWR · m_n`, **not from A**. The
 A-as-molar-mass approximation is wrong by about 0.1% for mid-A nuclides and considerably worse
 for light ones, and silently applying it would put an unattributable error into every
-mass-specified inventory. So a store without atomic weights refuses the conversion:
+mass-specified inventory. The ratio comes from AME2020, falling back to a nuclide's own ENDF
+decay evaluation where AME has no entry; see
+[nuclear-data.md](nuclear-data.md#7-what-the-shipped-store-actually-covers) for why that order
+and not the other. A nuclide no evaluation states a mass for refuses the conversion rather
+than guessing:
 
-> `cannot convert mass for Xx-99: the data store carries no atomic weight ratio (stage from ENDF, or give this nuclide in atoms, moles, or an activity unit)`
+> `cannot convert mass for Xx-99: the data store carries no atomic weight ratio (stage from ENDF and AME2020, or give this nuclide in atoms, moles, or an activity unit)`
 
 Likewise, an activity is meaningless for a stable nuclide, and the refusal says why rather than
 returning zero or infinity:
