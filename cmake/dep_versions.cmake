@@ -56,17 +56,6 @@ set(NUSIFT_CRAM_MIN_VERSION "2.1" CACHE STRING
 set(NUSIFT_CLI11_REPO   "https://github.com/CLIUtils/CLI11.git")
 set(NUSIFT_CLI11_TAG    "v2.4.0")
 
-# --- nlohmann/json: machine-readable report output --------------------------
-set(NUSIFT_JSON_REPO    "https://github.com/nlohmann/json.git")
-set(NUSIFT_JSON_TAG     "v3.11.3")
-
-# --- toml++: the run-config format ------------------------------------------
-# TOML rather than JSON for config specifically because a config file is hand-authored
-# and diffed: comments, unquoted keys, and no trailing-comma trap. JSON stays the
-# OUTPUT format, where nested numeric arrays are the shape and every consumer reads it.
-set(NUSIFT_TOMLPP_REPO  "https://github.com/marzer/tomlplusplus.git")
-set(NUSIFT_TOMLPP_TAG   "v3.4.0")
-
 # --- GoogleTest -------------------------------------------------------------
 # Newer than the v1.15.2 cram pins for its own suite. There is no conflict: NuSIFT
 # forces CRAM_ENABLE_TESTS=OFF in the sub-build, so cram never fetches GoogleTest at
