@@ -103,6 +103,20 @@ TEST(SpectrumEdges, RefusesGridsThatCannotMeanAnything) {
   EXPECT_THROW(resolveBinEdges(both, 1.0, 2.0), InputError);
 }
 
+// Every line at one energy left the default range, taken from the lines, with zero width -- and
+// the default that is meant never to drop a photon refused the inventory. It brackets the line.
+TEST(SpectrumBins, ASingleEnergyGetsARangeAroundIt) {
+  const std::vector<double> edges = resolveBinEdges(BinningSpec{}, 5.11e5, 5.11e5);
+  EXPECT_LT(edges.front(), 5.11e5);
+  EXPECT_GT(edges.back(), 5.11e5);
+
+  // A zero-width range the caller asked for is still the caller's mistake.
+  BinningSpec named;
+  named.minEv = 5.0e5;
+  named.maxEv = 5.0e5;
+  EXPECT_THROW(resolveBinEdges(named, 1.0, 2.0), InputError);
+}
+
 // --- what lands where --------------------------------------------------------
 
 TEST(Spectrum, PlacesEachLineInItsOwnBin) {
@@ -297,8 +311,10 @@ TEST(SourceDeck, OpenmcEmissionIsOneShorterThanEdges) {
 TEST(SourceDeck, WarnsInsideTheDeckWhenEmissionFallsOutsideTheBins) {
   const NuclearData data = twoEmitterChain();
   const DecayResult result = decay(data, seeded(), std::vector<double>{1000.0});
+  // The 662 keV line inside, the 50 keV one below: some of the emission is outside the bins, and
+  // the deck still has a distribution to sample. (Bins holding none of it are refused outright.)
   BinningSpec binning;
-  binning.edgesEv = {1.0e5, 3.0e5};
+  binning.edgesEv = {1.0e5, 7.0e5};
   const BinnedSpectrum spectrum = binnedSpectrum(data, result, 0, binning);
 
   EXPECT_NE(deck(spectrum, SourceFormat::McnpSdef).find("falls outside the bins"),
@@ -318,6 +334,68 @@ TEST(SourceDeck, CsvCarriesTheOutOfRangeTalliesWithTheBins) {
   EXPECT_NE(text.find("\nbelow,"), std::string::npos);
   EXPECT_NE(text.find("\nabove,"), std::string::npos);
   EXPECT_NE(text.find("\ntotal,"), std::string::npos);
+}
+
+// The store path went into the JSON unescaped, so a Windows path -- data\nusift_b8.1.h5 -- came
+// out as "data" followed by a newline and "usift_b8.1.h5": valid JSON naming the wrong file, and
+// a full C:\ path was not JSON at all.
+TEST(SourceDeck, JsonEscapesAWindowsStorePath) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  synth::addLines(arrays, 1, {6.0e5}, {1.0});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  const DecayResult result = decay(data, seeded(), std::vector<double>{1000.0});
+  BinningSpec binning;
+  binning.edgesEv = {5.0e5, 7.0e5};
+  const BinnedSpectrum spectrum = binnedSpectrum(data, result, 0, binning);
+
+  ReportContext context;
+  context.storePath = R"(C:\data\nusift_b8.1.h5)";
+  context.storeLibrary = R"(ENDF "B-VIII.1")";
+  std::ostringstream out;
+  writeSourceSpectrum(out, spectrum, context, SourceFormat::Json);
+  const std::string text = out.str();
+  // Outside the macro, because MSVC misreads a backslash in a raw string passed as an argument.
+  const std::string store = R"("store": "C:\\data\\nusift_b8.1.h5")";
+  const std::string library = R"("library": "ENDF \"B-VIII.1\"")";
+  EXPECT_NE(text.find(store), std::string::npos) << text;
+  EXPECT_NE(text.find(library), std::string::npos) << text;
+}
+
+// A deck whose bins hold nothing is a distribution MCNP and OpenMC both refuse at run time; it
+// is refused when written instead, where the reason can be named. The report formats still
+// write it, since "nothing here" is an answer a report can give.
+TEST(SourceDeck, ADeckOfNothingIsRefused) {
+  BinnedSpectrum spectrum;
+  spectrum.edgesEv = {1.0e5, 2.0e5};
+  spectrum.values = {0.0};
+  for (const SourceFormat format : {SourceFormat::McnpSdef, SourceFormat::OpenmcPython}) {
+    std::ostringstream out;
+    EXPECT_THROW(writeSourceSpectrum(out, spectrum, ReportContext{}, format), InputError);
+  }
+  std::ostringstream text;
+  EXPECT_NO_THROW(writeSourceSpectrum(text, spectrum, ReportContext{}, SourceFormat::Json));
+}
+
+// MCNP5 and MCNP6.1 read 80 columns, comment cards included.
+TEST(SourceDeck, McnpLinesFitInEightyColumns) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  synth::addLines(arrays, 1, {6.0e5}, {1.0});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  const DecayResult result = decay(data, seeded(), std::vector<double>{1000.0});
+  BinningSpec binning;
+  binning.edgesEv = {5.0e5, 5.5e5, 6.5e5, 7.0e5};
+  const BinnedSpectrum spectrum = binnedSpectrum(data, result, 0, binning);
+
+  ReportContext context;
+  context.seedProvenance = std::string(150, 's');
+  context.storePath = std::string(150, 'p');
+  std::ostringstream out;
+  writeSourceSpectrum(out, spectrum, context, SourceFormat::McnpSdef);
+  std::istringstream lines(out.str());
+  std::string line;
+  while (std::getline(lines, line)) {
+    EXPECT_LE(line.size(), 80u) << line;
+  }
 }
 
 TEST(SourceFormats, ParseTheSpellingsTheFrontEndsOffer) {

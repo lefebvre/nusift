@@ -59,7 +59,7 @@ echo "regenerating scenario data with $NUSIFT against $STORE"
 
 # --- track 0: knowing what you have ------------------------------------------
 text scenario-store-info.txt       data info "${S[@]}"
-run scenario-decay.csv             decay "${S[@]}" "${F[@]}" --times 1h:100y:log:60 --top 8
+run scenario-decay.csv             decay "${S[@]}" "${F[@]}" --times 1h:100y:log:60
 # Deliberately misspelled on the way in, to show what the canonicalizer accepts and what it
 # refuses to blur: an isomer is a different nuclide, however casually it was typed.
 text scenario-nuclide.txt          nuclide Cs-137 ba137m "TC-99M" u235 Co60 Ba-137
@@ -97,7 +97,7 @@ run scenario-plan.csv              plan "${S[@]}" "${C[@]}" --at 5y --metric exp
 run scenario-intervene.csv         intervene "${S[@]}" "${C[@]}" --at 30y --metric exposure \
                                      --units Sv/h --distance 2 --remove Cs --remove Co --remove Eu
 run scenario-sensitivity.csv       sensitivity "${S[@]}" "${C[@]}" --at 30y --metric exposure \
-                                     --units Sv/h --distance 2 --top 12
+                                     --units Sv/h --distance 2
 
 # --- track 3: waste, transport and disposal ----------------------------------
 run scenario-allowable.csv         allowable "${S[@]}" "${I[@]}" --pack data/packs/iaea-ssr6-a2.csv \

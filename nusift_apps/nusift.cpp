@@ -9,17 +9,23 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "nusift/core/error.hpp"
@@ -31,6 +37,7 @@
 #include "nusift/exposure/air_coefficients.hpp"
 #include "nusift/exposure/point_source.hpp"
 #include "nusift/io/inventory_io.hpp"
+#include "nusift/io/number_format.hpp"
 #include "nusift/io/report.hpp"
 #include "nusift/io/source_report.hpp"
 #include "nusift/io/time_spec.hpp"
@@ -231,6 +238,12 @@ Metric metricFrom(const std::string& text) {
   if (text == "heat") {
     return Metric::Heat;
   }
+  // Refused rather than defaulted. --metric is checked by its option, but a name taken from a
+  // list -- shortlist --metrics -- is not, and "exposre" used to come back as activity: two
+  // activity requirements, exit 0, and a shortlist that never asked about exposure at all.
+  if (text != "activity") {
+    throw InputError("metric: \"" + text + "\" is not a metric (activity, exposure, photon, heat)");
+  }
   return Metric::Activity;
 }
 
@@ -428,17 +441,33 @@ ReportContext contextFor(const NuclearData& data, const std::string& storePath,
   // per line, so a column-wise list reads "Rb-90 196.8 keV, Rb-90 314.5 keV, Rb-90 543.6 keV"
   // and counts one nuclide eight times. What is understated is the nuclide; which of its lines
   // you are looking at does not change that.
-  std::set<std::string> emitters;
+  //
+  // Largest first, by the share of the answer each carries summed over the grid. The report
+  // prints only the first few, and in name order those were whichever sorted first -- not the
+  // emitters whose missing photons understate the answer most.
+  std::map<std::string, double> emitters;
   for (int c = 0; c < table.contributorCount(); ++c) {
     if ((table.flags[static_cast<std::size_t>(c)] & kFlagUnmodeledContinuum) == 0) {
       continue;
     }
     const ContributorId& id = table.contributors[static_cast<std::size_t>(c)];
-    emitters.insert(table.aggregate == Aggregate::GammaLine
-                        ? formatNuclideName(Zai::fromKey(id.dominantMemberKey))
-                        : table.labels[static_cast<std::size_t>(c)]);
+    double& share = emitters[table.aggregate == Aggregate::GammaLine
+                                 ? formatNuclideName(Zai::fromKey(id.dominantMemberKey))
+                                 : table.labels[static_cast<std::size_t>(c)]];
+    for (int k = 0; k < table.timeCount(); ++k) {
+      const double total = table.totals[static_cast<std::size_t>(k)];
+      if (total > 0.0) {
+        share += table.valuesAt(k)[static_cast<std::size_t>(c)] / total;
+      }
+    }
   }
-  context.unmodeledContinuum.assign(emitters.begin(), emitters.end());
+  std::vector<std::pair<std::string, double>> ordered(emitters.begin(), emitters.end());
+  std::stable_sort(ordered.begin(), ordered.end(),
+                   [](const auto& a, const auto& b) { return a.second > b.second; });
+  context.unmodeledContinuum.clear();
+  for (const auto& [name, share] : ordered) {
+    context.unmodeledContinuum.push_back(name);
+  }
   context.pack = packs.describe();
   return context;
 }
@@ -474,19 +503,73 @@ std::pair<double, double> parseInterval(const std::string& spec) {
 }
 
 // Resolves -o, defaulting to stdout. Held by the caller for exactly as long as it writes.
+// A finite number spelled in full, read the same whatever locale the process runs in -- which
+// std::stod, used here before, does not promise.
+bool parseFinite(const std::string& text, double& out) {
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), out);
+  return !text.empty() && parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size() &&
+         std::isfinite(out);
+}
+
+// Whether two paths name one file. Only an existing file can be the same as another, and an
+// error -- a path that does not exist yet -- means they are not.
+bool sameFile(const std::string& a, const std::string& b) {
+  if (a.empty() || b.empty()) {
+    return false;
+  }
+  std::error_code ec;
+  return std::filesystem::equivalent(a, b, ec) && !ec;
+}
+
+// The first write that failed, if any. Set where an output is closed -- the only place a full
+// disk shows itself -- and read by main(), which turns it into a failing exit. A report written
+// into a full disk used to end with exit 0 and a truncated file.
+std::string& failedWrite() {
+  static std::string path;
+  return path;
+}
+
+// Whether a file name asks for JSON, by extension and whatever its case. The inventory reader
+// decides the same way, so a file written as out.JSON reads back as the JSON it is.
+bool namesJson(const std::string& path) {
+  std::string extension = std::filesystem::path(path).extension().string();
+  std::transform(extension.begin(), extension.end(), extension.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return extension == ".json";
+}
+
 class OutputStream {
 public:
-  explicit OutputStream(const std::string& path) {
+  // `input` is the inventory the command read, which an output may not replace: `-o` naming the
+  // `-i` file overwrote the inventory with the report about it.
+  explicit OutputStream(const std::string& path, const std::string& input = {}) : path_(path) {
     if (!path.empty()) {
+      if (sameFile(path, input)) {
+        throw InputError("output: \"" + path +
+                         "\" is the inventory this command read; writing there would replace it "
+                         "with the report");
+      }
       file_ = std::make_unique<std::ofstream>(path);
       if (!*file_) {
         throw InputError("output: cannot write to \"" + path + "\"");
       }
     }
   }
+  ~OutputStream() {
+    if (file_) {
+      file_->close();
+      if (file_->fail() && failedWrite().empty()) {
+        failedWrite() = path_;
+      }
+    }
+  }
+  OutputStream(const OutputStream&) = delete;
+  OutputStream& operator=(const OutputStream&) = delete;
+
   std::ostream& get() { return file_ ? static_cast<std::ostream&>(*file_) : std::cout; }
 
 private:
+  std::string path_;
   std::unique_ptr<std::ofstream> file_;
 };
 
@@ -579,7 +662,7 @@ int runAttribute(const CommonOptions& options, const char* argv0) {
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   ReportContext context;
   context.storePath = storePath;
   context.storeLibrary = data.provenance().library;
@@ -612,7 +695,7 @@ int runRank(const CommonOptions& options, const char* argv0) {
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   ReportContext context = contextFor(data, storePath, inventory, table, packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
   writeRankings(out.get(), rankings, context, format);
@@ -659,7 +742,7 @@ int runIntegrate(const CommonOptions& options, const char* argv0) {
 
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeRankings(out.get(), rankings, contexts, format);
   return 0;
 }
@@ -690,16 +773,11 @@ std::vector<double> edgesFrom(const SourceOptions& source) {
     if (text.empty()) {
       return;
     }
-    try {
-      std::size_t used = 0;
-      const double value = std::stod(text, &used);
-      if (used != text.size()) {
-        throw std::invalid_argument("trailing");
-      }
-      edges.push_back(value * 1000.0);
-    } catch (const std::exception&) {
+    double value = 0.0;
+    if (!parseFinite(text, value)) {
       throw InputError("source: \"" + text + "\" is not an energy in keV");
     }
+    edges.push_back(value * 1000.0);
   };
 
   if (!source.edgesKeV.empty()) {
@@ -804,7 +882,7 @@ int runSource(const CommonOptions& options, const SourceOptions& source, const c
   context.storeNuclideCount = data.stagedCount();
   context.seedProvenance = inventory.provenance();
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeSourceSpectrum(out.get(), spectrum, context, format);
   return 0;
 }
@@ -863,7 +941,7 @@ int runForecast(const CommonOptions& options, const ForecastOptions& forecast, c
   ReportContext context = contextFor(data, storePath, inventory, table, packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeForecast(out.get(), windows, tracks, table, context, format);
   return 0;
 }
@@ -890,7 +968,8 @@ struct DecayWriteOptions {
 // them outright. Dropping them silently would be the wrong trade for a file meant to be read
 // back and believed, so the count goes to stderr with everything else the write reports.
 void writeDecaySnapshot(const DecayResult& result, const NuclearData& data,
-                        const DecayWriteOptions& write, const std::string& inventoryDescription) {
+                        const DecayWriteOptions& write, const std::string& inventoryDescription,
+                        const std::string& inputPath) {
   if (result.timeCount() != 1) {
     throw InputError(
         "decay: --write needs exactly one time, because an inventory is a single moment; "
@@ -917,15 +996,15 @@ void writeDecaySnapshot(const DecayResult& result, const NuclearData& data,
   snapshot.setProvenance(inventoryDescription + ", decayed to " +
                          formatDuration(result.times.front()));
 
-  std::ofstream file(write.writePath);
-  if (!file) {
-    throw InputError("decay: cannot write to \"" + write.writePath + "\"");
-  }
-  if (write.writePath.size() >= 5 &&
-      write.writePath.compare(write.writePath.size() - 5, 5, ".json") == 0) {
-    writeInventoryJson(file, snapshot, data, unit);
-  } else {
-    writeInventoryCsv(file, snapshot, data, unit);
+  // Through OutputStream for what it checks: that this is not the inventory just read, and that
+  // the write reached the disk.
+  {
+    OutputStream file(write.writePath, inputPath);
+    if (namesJson(write.writePath)) {
+      writeInventoryJson(file.get(), snapshot, data, unit);
+    } else {
+      writeInventoryCsv(file.get(), snapshot, data, unit);
+    }
   }
 
   std::cerr << "  wrote " << snapshot.size() << " nuclides to " << write.writePath;
@@ -939,29 +1018,35 @@ int runDecay(const CommonOptions& options, const DecayWriteOptions& write, const
   std::string storePath;
   const NuclearData data = openStore(options, argv0, storePath);
   const Inventory inventory = loadInventory(options, data);
-  const PackHolder packs(options, data, inventory);
 
   const std::vector<double> times = timesFrom(options);
   const DecayResult result = decay(data, inventory, times, decayOptionsFrom(options));
 
   if (!write.writePath.empty()) {
-    writeDecaySnapshot(result, data, write, inventory.provenance());
+    writeDecaySnapshot(result, data, write, inventory.provenance(), options.inventoryPath);
   }
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   std::ostream& os = out.get();
   const bool json = options.format == "json";
 
+  // Every number in the shortest spelling that reads back as itself, as number_format.hpp asks
+  // of anything written to be parsed again: at the stream's default six digits a time of
+  // 1.23456789y came back as a different time, and atoms at %.6e as a different seed. A value
+  // that is not finite is JSON's null, since a bare nan is not JSON.
+  const auto number = [json](double value) {
+    return json && !std::isfinite(value) ? std::string("null") : shortestRoundTrip(value);
+  };
   if (json) {
     os << "{\n  \"times_s\": [";
     for (std::size_t k = 0; k < result.times.size(); ++k) {
-      os << (k == 0 ? "" : ", ") << result.times[k];
+      os << (k == 0 ? "" : ", ") << number(result.times[k]);
     }
     os << "],\n  \"atoms\": {\n";
   } else {
     os << "nuclide";
     for (const double t : result.times) {
-      os << ',' << t;
+      os << ',' << number(t);
     }
     os << '\n';
   }
@@ -974,9 +1059,7 @@ int runDecay(const CommonOptions& options, const DecayWriteOptions& write, const
       os << formatNuclideName(zai);
     }
     for (int k = 0; k < result.timeCount(); ++k) {
-      char buffer[32];
-      std::snprintf(buffer, sizeof(buffer), "%.6e", result.atomsAt(k)[i]);
-      os << (json ? (k == 0 ? "" : ", ") : ",") << buffer;
+      os << (json ? (k == 0 ? "" : ", ") : ",") << number(result.atomsAt(k)[i]);
     }
     os << (json ? (i + 1 < result.nuclideCount() ? "],\n" : "]\n") : "\n");
   }
@@ -1253,8 +1336,8 @@ int runInventoryConvert(const std::string& storePath, const std::string& inputPa
     throw InputError("inventory: \"" + unitText + "\" is not a unit");
   }
 
-  OutputStream out(outputPath);
-  if (outputPath.size() >= 5 && outputPath.compare(outputPath.size() - 5, 5, ".json") == 0) {
+  OutputStream out(outputPath, inputPath);
+  if (namesJson(outputPath)) {
     writeInventoryJson(out.get(), inventory, data, unit);
   } else {
     writeInventoryCsv(out.get(), inventory, data, unit);
@@ -1455,7 +1538,7 @@ int runWhen(const CommonOptions& options, const WhenOptions& when, const char* a
   ReportContext context = contextFor(data, storePath, inventory, contextTable, packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeEvents(out.get(), report, context, format);
   return 0;
 }
@@ -1508,7 +1591,7 @@ int runSensitivity(const CommonOptions& options, const SensitivityCliOptions& ex
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
   context.pack = packs.describe();
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeDecaySensitivities(out.get(), result, context, format);
   return 0;
 }
@@ -1563,7 +1646,7 @@ int runYieldUncertainty(const CommonOptions& options, const UncertaintyCliOption
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
   context.pack = packs.describe();
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeYieldUncertainty(out.get(), uncertainty, context, format);
   return 0;
 }
@@ -1645,7 +1728,7 @@ int runUncertainty(const CommonOptions& options, const UncertaintyCliOptions& ex
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
   context.pack = packs->describe();
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeUncertainty(out.get(), uncertainty, context, format);
   return 0;
 }
@@ -1706,26 +1789,14 @@ PlanLeg parseLeg(const std::string& text, const CommonOptions& options, bool isB
   leg.durationSeconds = parseDuration(fields[1]);
 
   leg.geometry = geometryFrom(options);
-  try {
-    std::size_t used = 0;
-    leg.geometry.distanceM = std::stod(fields[2], &used);
-    if (used != fields[2].size()) {
-      throw std::invalid_argument("trailing");
-    }
-  } catch (const std::exception&) {
+  if (!parseFinite(fields[2], leg.geometry.distanceM)) {
     throw InputError("plan: \"" + fields[2] + "\" is not a distance in meters");
   }
   if (!(leg.geometry.distanceM > 0.0)) {
     throw InputError("plan: leg \"" + leg.name + "\" needs a positive distance");
   }
   if (fields.size() == 4) {
-    try {
-      std::size_t used = 0;
-      leg.occupancy = std::stod(fields[3], &used);
-      if (used != fields[3].size()) {
-        throw std::invalid_argument("trailing");
-      }
-    } catch (const std::exception&) {
+    if (!parseFinite(fields[3], leg.occupancy)) {
       throw InputError("plan: \"" + fields[3] + "\" is not an occupancy fraction");
     }
   }
@@ -1790,12 +1861,12 @@ int runPlan(const CommonOptions& options, const PlanOptions& planOptions, const 
     }
   }
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeTaskPlan(out.get(), plan, context, format);
   return 0;
 }
 
-// --- the smallest list that works everywhere -----------------------------------
+// --- a short list that works everywhere ---------------------------------------
 
 struct ShortlistOptions {
   // Comma-separated, because several metrics at once is the point: a list chosen for activity
@@ -1846,11 +1917,24 @@ int runShortlist(const CommonOptions& options, const ShortlistOptions& shortlist
   const Aggregate aggregate = aggregateFrom(options.aggregate);
   tables.reserve(names.size() + 1);
 
+  // --units goes to whichever listed metric it measures, and the rest keep their default unit.
+  // It used to go nowhere -- every metric took its default -- and Sv/h and R/h weigh photon
+  // energies differently enough to change which contributors the set needs.
+  bool unitUsed = options.unit.empty();
+  std::set<Metric> listed;
   for (const std::string& name : names) {
     ResponseSpec spec;
     spec.metric = metricFrom(name);
+    if (!listed.insert(spec.metric).second) {
+      throw InputError("shortlist: " + name + " is listed twice in --metrics");
+    }
     spec.aggregate = aggregate;
-    spec.unit = requireUnit("", spec.metric, Domain::Instant);
+    Unit unit = Unit::Becquerel;
+    const bool fits = !options.unit.empty() && parseUnit(options.unit, unit) &&
+                      unitSuitsMetric(unit, spec.metric);
+    spec.unit = fits ? requireUnit(options.unit, spec.metric, Domain::Instant)
+                     : requireUnit("", spec.metric, Domain::Instant);
+    unitUsed = unitUsed || fits;
     spec.geometry = geometryFrom(options);
     tables.push_back(buildResponse(data, result, spec));
     CoverageRequirement requirement;
@@ -1874,6 +1958,10 @@ int runShortlist(const CommonOptions& options, const ShortlistOptions& shortlist
   if (requirements.empty()) {
     throw InputError("shortlist: name at least one metric with --metrics or --pack");
   }
+  if (!unitUsed) {
+    throw InputError("shortlist: --units " + options.unit +
+                     " measures none of the metrics asked about, so it would apply to nothing");
+  }
   // Filled after the vector has stopped growing: a pointer taken before a reallocation would
   // outlive the table it named.
   for (std::size_t i = 0; i < requirements.size(); ++i) {
@@ -1885,11 +1973,18 @@ int runShortlist(const CommonOptions& options, const ShortlistOptions& shortlist
   ReportFormat format = ReportFormat::Text;
   parseReportFormat(options.format, format);
   ReportContext context = contextFor(data, storePath, inventory, tables.front(), packs);
-  context.geometry = describeGeometry(
-      options, requirements.size() == 1 ? metricFrom(names.front()) : Metric::Exposure,
-      tables.front().unit);
+  // The model line describes the first requirement that actually used a geometry, and is absent
+  // when none did. It was taken from names.front() -- which is empty when the only requirement
+  // is a pack -- or from "exposure" whenever there were two metrics, so an activity-and-heat
+  // shortlist printed a point-source model it never ran.
+  for (const ResponseTable& table : tables) {
+    context.geometry = describeGeometry(options, table.metric, table.unit);
+    if (!context.geometry.empty()) {
+      break;
+    }
+  }
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeTriageSet(out.get(), set, requirements, context, format);
   return 0;
 }
@@ -1942,7 +2037,7 @@ int runReconcile(const CommonOptions& options, const ReconcileOptions& reconcile
   context.storeNuclideCount = data.stagedCount();
   context.seedProvenance = options.inventoryPath;
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeReconciliation(out.get(), reconciled, data, context, format);
 
   // The checkpoint. What comes out is an ORDINARY inventory with no dates in it, because at the
@@ -1953,19 +2048,22 @@ int runReconcile(const CommonOptions& options, const ReconcileOptions& reconcile
     if (!parseQuantity(reconcileOptions.writeUnit, unit)) {
       throw InputError("reconcile: \"" + reconcileOptions.writeUnit + "\" is not a unit");
     }
-    std::ofstream file(reconcileOptions.writePath);
-    if (!file) {
-      throw InputError("reconcile: cannot write to \"" + reconcileOptions.writePath + "\"");
+    // One file cannot be both the report and the merged inventory: opened twice, the two writes
+    // interleaved into something that is neither.
+    if (reconcileOptions.writePath == options.output ||
+        sameFile(reconcileOptions.writePath, options.output)) {
+      throw InputError("reconcile: --write and -o name the same file; give each its own");
     }
+    OutputStream file(reconcileOptions.writePath, options.inventoryPath);
     Inventory merged = reconciled.inventory;
     merged.setProvenance(options.inventoryPath + ", " +
                          std::to_string(reconciled.contributions.size()) +
                          " assays reconciled to " + formatCalendarDate(epoch));
     const std::string& path = reconcileOptions.writePath;
-    if (path.size() >= 5 && path.compare(path.size() - 5, 5, ".json") == 0) {
-      writeInventoryJson(file, merged, data, unit);
+    if (namesJson(path)) {
+      writeInventoryJson(file.get(), merged, data, unit);
     } else {
-      writeInventoryCsv(file, merged, data, unit);
+      writeInventoryCsv(file.get(), merged, data, unit);
     }
     std::cerr << "  wrote " << merged.size() << " nuclides to " << path << "\n";
   }
@@ -2037,7 +2135,7 @@ int runStay(const CommonOptions& options, const StayOptions& stayOptions, const 
       contextFor(data, storePath, inventory, buildResponse(data, result, instant), packs);
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeStayTimes(out.get(), report, context, format);
   return 0;
 }
@@ -2084,7 +2182,7 @@ int runAllowable(const CommonOptions& options, const AllowableOptions& allow, co
   ReportContext context = contextFor(data, storePath, inventory, table, packs);
   context.geometry = describeGeometry(options, criterion.spec.metric, criterion.spec.unit);
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeAllowable(out.get(), scaled, criteria, context, format);
 
   // The single number a reader of this table came for, in the format a person reads. CSV and
@@ -2122,19 +2220,21 @@ Removal parseRemoval(const std::string& text) {
   Removal removal;
   const std::size_t equals = text.rfind('=');
   // "Z=55" and "A=137" are selectors that contain their own '=', so a suffix only counts as a
-  // fraction when it actually parses as one.
+  // fraction when it parses as one AND what precedes it is a selector on its own. Checking only
+  // the first condition read "Z=55" as the selector "Z" with 55 of it removed, and refused it as
+  // a fraction above one -- the form --help offers, unusable without a redundant "=1".
   if (equals != std::string::npos) {
+    const std::string head = text.substr(0, equals);
+    const bool headIsQualifier =
+        head.size() == 1 && std::string_view("ZzAa").find(head.front()) != std::string_view::npos;
     const std::string tail = text.substr(equals + 1);
-    try {
-      std::size_t used = 0;
-      const double fraction = std::stod(tail, &used);
-      if (used == tail.size()) {
-        removal.selector = text.substr(0, equals);
-        removal.fraction = fraction;
-        return removal;
-      }
-    } catch (const std::exception&) {
-      // Not a number, so the '=' belongs to the selector.
+    double fraction = 0.0;
+    const auto parsed = std::from_chars(tail.data(), tail.data() + tail.size(), fraction);
+    if (!headIsQualifier && !tail.empty() && parsed.ec == std::errc{} &&
+        parsed.ptr == tail.data() + tail.size()) {
+      removal.selector = head;
+      removal.fraction = fraction;
+      return removal;
     }
   }
   removal.selector = text;
@@ -2202,12 +2302,27 @@ int runIntervene(const CommonOptions& options, const IntervenOptions& intervene,
   context.seedProvenance = study.seedProvenance;
   context.geometry = describeGeometry(options, spec.metric, spec.unit);
 
-  OutputStream out(options.output);
+  OutputStream out(options.output, options.inventoryPath);
   writeInterventions(out.get(), study, context, format);
   return 0;
 }
 
 }  // namespace
+
+// The commands that take the common option set and report per nuclide in their own form, without
+// a ranking: they read none of the options that shape one. Accepted and ignored, `plan --by
+// element --top 3` printed the full per-nuclide table as if it had been asked for, so a flag one
+// of them cannot honour is refused instead -- the rule the option layout above states for every
+// command, enforced where reusing the common set would otherwise break it.
+void refuseRankingOptions(const CLI::App* command, const char* name) {
+  for (const char* option : {"--by", "--top", "--pin", "--coverage", "--min-fraction"}) {
+    if (command->count(option) > 0) {
+      throw InputError(std::string(name) + ": " + option +
+                       " shapes a ranking, and this command reports its own table without one, "
+                       "so it would be ignored");
+    }
+  }
+}
 
 int main(int argc, char** argv) {
   CLI::App app{"nusift -- nuclear source-term isotope forecasting and triage"};
@@ -2365,7 +2480,7 @@ int main(int argc, char** argv) {
   CommonOptions shortlistOptions;
   ShortlistOptions shortlistExtra;
   CLI::App* shortlistCmd = app.add_subcommand(
-      "shortlist", "The smallest set of contributors holding a coverage floor at every time");
+      "shortlist", "A small set of contributors holding a coverage floor at every time");
   addCommonOptions(shortlistCmd, shortlistOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
   shortlistCmd->add_option("--metrics", shortlistExtra.metrics,
                            "Be good for all of these at once, comma separated "
@@ -2438,7 +2553,17 @@ int main(int argc, char** argv) {
   CommonOptions decayCmdOptions;
   DecayWriteOptions decayWriteOptions;
   CLI::App* decayCmd = app.add_subcommand("decay", "Raw inventory versus time, unranked");
-  addCommonOptions(decayCmd, decayCmdOptions, /*wantsTimes=*/true, /*wantsIntervals=*/false);
+  // Only what a raw solve uses, the way `source` takes only what an emission spectrum does. It
+  // took the whole common set before -- metric, units, pins, a ranking depth, a distance -- and
+  // accepted and ignored all of them, and a --pack was even opened and resolved, so a bad pack
+  // could fail a solve that never weighs anything.
+  addInventoryOptions(decayCmd, decayCmdOptions);
+  decayCmd->add_option("--at", decayCmdOptions.atTimes,
+                       "Cooling time, repeatable (e.g. 30d, 1.5y)");
+  decayCmd->add_option("--times", decayCmdOptions.gridSpec,
+                       "Time grid start:stop:log|lin:count (e.g. 1h:100y:log:60)");
+  decayCmd->add_option("-o,--output", decayCmdOptions.output, "Write here instead of stdout");
+  addSolverOptions(decayCmd, decayCmdOptions);
   decayCmd->add_option("--write", decayWriteOptions.writePath,
                        "Also write this solve as a reusable inventory file; needs exactly "
                        "one time");
@@ -2448,7 +2573,6 @@ int main(int argc, char** argv) {
   // against sixty times, and the report default of "text" was being accepted and silently
   // answered with CSV. It takes its own --format with the two machine formats instead, so a
   // format it cannot produce is refused at the parser rather than quietly substituted.
-  decayCmd->remove_option(decayCmd->get_option("--format"));
   decayCmdOptions.format = "csv";
   decayCmd->add_option("--format", decayCmdOptions.format, "csv or json")
       ->check(CLI::IsMember({"csv", "json"}));
@@ -2488,13 +2612,16 @@ int main(int argc, char** argv) {
   try {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& e) {
-    return app.exit(e);
+    // CLI11 prints the message and answers with its own code -- 0 for --help and --version,
+    // and 105 or another of its own for a bad argument. A bad argument is bad input, which the
+    // header promises exits 2, so that is what a failure becomes.
+    return app.exit(e) == 0 ? 0 : 2;
   }
 
   // The single catch site. Libraries throw; nothing below main handles an error, and nothing
   // above it needs to know how errors are reported.
-  try {
-    const char* argv0 = argc > 0 ? argv[0] : nullptr;
+  const char* argv0 = argc > 0 ? argv[0] : nullptr;
+  const auto dispatch = [&]() -> int {
     if (rankCmd->parsed()) {
       return runRank(rankOptions, argv0);
     }
@@ -2502,12 +2629,15 @@ int main(int argc, char** argv) {
       return runIntegrate(integrateOptions, argv0);
     }
     if (sensitivityCmd->parsed()) {
+      refuseRankingOptions(sensitivityCmd, "sensitivity");
       return runSensitivity(sensitivityOptions, sensitivityExtra, argv0);
     }
     if (uncertaintyCmd->parsed()) {
+      refuseRankingOptions(uncertaintyCmd, "uncertainty");
       return runUncertainty(uncertaintyOptions, uncertaintyExtra, argv0);
     }
     if (planCmd->parsed()) {
+      refuseRankingOptions(planCmd, "plan");
       return runPlan(planOptions, planExtra, argv0);
     }
     if (shortlistCmd->parsed()) {
@@ -2517,6 +2647,7 @@ int main(int argc, char** argv) {
       return runReconcile(reconcileOptions, reconcileExtra, argv0);
     }
     if (stayCmd->parsed()) {
+      refuseRankingOptions(stayCmd, "stay");
       return runStay(stayOptions, stayExtra, argv0);
     }
     if (sourceCmd->parsed()) {
@@ -2564,6 +2695,20 @@ int main(int argc, char** argv) {
     // A parent subcommand given with no leaf, e.g. `nusift data`.
     std::fprintf(stderr, "nusift: incomplete command; try --help\n");
     return 2;
+  };
+
+  try {
+    const int status = dispatch();
+    // A command that succeeded has still failed if what it wrote did not reach the disk or the
+    // pipe. Checked here, once every output has been closed, because a write error surfaces only
+    // at the flush -- and a truncated report with exit 0 is the worst way to learn of it.
+    std::cout.flush();
+    if (status == 0 && (!std::cout || !failedWrite().empty())) {
+      std::fprintf(stderr, "nusift: could not finish writing %s; the disk may be full\n",
+                   failedWrite().empty() ? "standard output" : failedWrite().c_str());
+      return 1;
+    }
+    return status;
   } catch (const nusift::InputError& e) {
     std::fprintf(stderr, "nusift: %s\n", e.what());
     return 2;

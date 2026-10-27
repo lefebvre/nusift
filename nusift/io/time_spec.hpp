@@ -13,8 +13,8 @@
 //   0:1d:lin:25
 //
 // A YEAR IS 365.25 DAYS, the Julian year. The choice is arbitrary but its consequences are
-// not -- over a 100 y decay, a 365 d year differs by more than a year of elapsed time -- so
-// it is stated here, in --help, and in the report header.
+// not -- over a 100 y decay, a 365 d year falls 25 days short of it -- so it is stated here and
+// in --help.
 //
 #include <string>
 #include <string_view>

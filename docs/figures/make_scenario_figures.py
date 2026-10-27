@@ -486,7 +486,9 @@ def figure_spectrum(path):
 
 def figure_forecast(path):
     """Who leads, and over which stretch of time."""
-    windows = read_csv("scenario-forecast.csv")
+    # A forecast CSV carries its tracks below its windows, told apart by `kind`; a file written
+    # before the tracks were added has no such column and holds windows only.
+    windows = [r for r in read_csv("scenario-forecast.csv") if r.get("kind", "window") == "window"]
     w = 900
     left, top = 74, 100
     span_lo = min(float(win["start_s"]) for win in windows)

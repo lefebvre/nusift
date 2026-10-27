@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "nusift/core/error.hpp"
 #include "nusift/io/number_format.hpp"
 #include "nusift/io/time_spec.hpp"
 #include "nusift/version.hpp"
@@ -133,9 +134,13 @@ void writeProvenance(std::ostream& out, const BinnedSpectrum& spectrum,
     }
     writeWrapped(out, prefix, store, 72);
   }
-  out << prefix << "emission " << whenText(spectrum) << ": " << strengthNote(spectrum) << " over "
-      << spectrum.binCount() << " bins, " << keV(spectrum.edgesEv.front()) << " keV to "
-      << keV(spectrum.edgesEv.back()) << " keV\n";
+  // Wrapped like the lines above it. Written as one line it ran to 85 columns, past the 80 that
+  // MCNP5 and MCNP6.1 read -- a comment card is still a card.
+  writeWrapped(out, prefix,
+               "emission " + whenText(spectrum) + ": " + strengthNote(spectrum) + " over " +
+                   std::to_string(spectrum.binCount()) + " bins, " + keV(spectrum.edgesEv.front()) +
+                   " keV to " + keV(spectrum.edgesEv.back()) + " keV",
+               72);
   out << prefix << spectrum.lineCount << " evaluated lines from " << spectrum.emitterCount
       << " emitters\n";
 }
@@ -213,15 +218,15 @@ void writeCsv(std::ostream& out, const BinnedSpectrum& spectrum) {
 void writeJson(std::ostream& out, const BinnedSpectrum& spectrum, const ReportContext& context) {
   out << "{\n";
   out << "  \"quantity\": \"photon emission\",\n";
-  out << "  \"unit\": \"" << unitText(spectrum) << "\",\n";
+  out << "  \"unit\": \"" << escapeJson(unitText(spectrum)) << "\",\n";
   out << "  \"domain\": \"" << (spectrum.domain == Domain::Interval ? "interval" : "instant")
       << "\",\n";
   out << "  \"time_seconds\": " << jsonNumber(spectrum.timeSeconds) << ",\n";
   if (spectrum.domain == Domain::Interval) {
     out << "  \"time_end_seconds\": " << jsonNumber(spectrum.timeEndSeconds) << ",\n";
   }
-  out << "  \"store\": \"" << context.storePath << "\",\n";
-  out << "  \"library\": \"" << context.storeLibrary << "\",\n";
+  out << "  \"store\": \"" << escapeJson(context.storePath) << "\",\n";
+  out << "  \"library\": \"" << escapeJson(context.storeLibrary) << "\",\n";
 
   out << "  \"edges_ev\": [";
   for (std::size_t i = 0; i < spectrum.edgesEv.size(); ++i) {
@@ -243,7 +248,7 @@ void writeJson(std::ostream& out, const BinnedSpectrum& spectrum, const ReportCo
       << ",\n";
   out << "  \"unmodeled_continuum\": [";
   for (std::size_t i = 0; i < spectrum.unmodeledContinuum.size(); ++i) {
-    out << (i == 0 ? "" : ", ") << "\"" << spectrum.unmodeledContinuum[i] << "\"";
+    out << (i == 0 ? "" : ", ") << "\"" << escapeJson(spectrum.unmodeledContinuum[i]) << "\"";
   }
   out << "]\n";
   out << "}\n";
@@ -414,6 +419,21 @@ bool parseSourceFormat(std::string_view text, SourceFormat& out) {
 
 void writeSourceSpectrum(std::ostream& out, const BinnedSpectrum& spectrum,
                          const ReportContext& context, SourceFormat format) {
+  // A transport deck is a distribution to sample from, and one that sums to nothing is not one:
+  // MCNP stops on a zero SP card, and OpenMC on a zero Tabular. Refused here, where the reason
+  // can be named, rather than in the transport run.
+  if (format == SourceFormat::McnpSdef || format == SourceFormat::OpenmcPython) {
+    double binned = 0.0;
+    for (const double value : spectrum.values) {
+      binned += value;
+    }
+    if (!(binned > 0.0)) {
+      throw InputError(
+          "source: no photon emission falls in the bins, so there is no distribution to "
+          "sample -- the inventory emits no discrete photons there. Widen the bins, or use the "
+          "text or JSON format to see what it does emit");
+    }
+  }
   switch (format) {
     case SourceFormat::Text:
       writeText(out, spectrum, context);

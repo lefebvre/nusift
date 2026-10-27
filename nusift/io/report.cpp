@@ -117,53 +117,20 @@ std::string percent(double fraction) {
   return buffer;
 }
 
-// Quotes and backslashes are the obvious cases; control characters are the ones that actually
-// occur. A provenance string is a file path or a command line the user supplied, and a newline
-// or a tab in one produces a report no JSON parser will read -- a failure that surfaces in
-// whatever consumes the report rather than here, where it was caused.
-std::string escapeJson(const std::string& text) {
-  std::string out;
-  out.reserve(text.size());
-  for (const char c : text) {
-    switch (c) {
-      case '"':
-        out += "\\\"";
-        break;
-      case '\\':
-        out += "\\\\";
-        break;
-      case '\b':
-        out += "\\b";
-        break;
-      case '\f':
-        out += "\\f";
-        break;
-      case '\n':
-        out += "\\n";
-        break;
-      case '\r':
-        out += "\\r";
-        break;
-      case '\t':
-        out += "\\t";
-        break;
-      default: {
-        const auto byte = static_cast<unsigned char>(c);
-        if (byte < 0x20) {
-          char buffer[8];
-          std::snprintf(buffer, sizeof(buffer), "\\u%04x", static_cast<unsigned>(byte));
-          out += buffer;
-        } else {
-          // Everything at 0x20 and above passes through unchanged, including the bytes of a
-          // multi-byte UTF-8 sequence: JSON strings are UTF-8, so escaping them would corrupt
-          // a nuclide name or a path that is already correct.
-          out += c;
-        }
-        break;
-      }
+// Two fractions to be compared, each to the fewest decimals (one to six) at which a reader can see
+// which is larger. At one decimal a set clearing its 95% floor by a thousandth printed "holds
+// 95.0% against 95.0%" -- the margin the line exists to show, rounded away.
+std::pair<std::string, std::string> percentsApart(double a, double b) {
+  for (int decimals = 1; decimals <= 6; ++decimals) {
+    char left[32];
+    char right[32];
+    std::snprintf(left, sizeof(left), "%.*f%%", decimals, a * 100.0);
+    std::snprintf(right, sizeof(right), "%.*f%%", decimals, b * 100.0);
+    if (a == b || std::string(left) != std::string(right)) {
+      return {left, right};
     }
   }
-  return out;
+  return {percent(a), percent(b)};
 }
 
 // The time a ranking describes: a point, or a window.
@@ -498,7 +465,8 @@ void writeForecastJson(std::ostream& out, const std::vector<DominanceWindow>& wi
   out << "{\n";
   out << "  \"metric\": \"" << metricName(table.metric) << "\",\n";
   out << "  \"aggregate\": \"" << aggregateName(table.aggregate) << "\",\n";
-  out << "  \"unit\": \"" << unitName(table.unit) << "\",\n";
+  out << "  \"unit\": \""
+      << escapeJson(table.unitLabel.empty() ? unitName(table.unit) : table.unitLabel) << "\",\n";
   out << "  \"windows\": [\n";
   for (std::size_t i = 0; i < windows.size(); ++i) {
     const DominanceWindow& window = windows[i];
@@ -521,12 +489,25 @@ void writeForecastJson(std::ostream& out, const std::vector<DominanceWindow>& wi
   out << "  ]\n}\n";
 }
 
-void writeForecastCsv(std::ostream& out, const std::vector<DominanceWindow>& windows) {
-  out << "label,key,start_s,end_s,peak_fraction\n";
+// One table carrying both halves of a forecast, as the JSON does: the windows, then the tracks,
+// told apart by `kind`. It carried the windows alone, so a CSV forecast lost every track -- the
+// pinned ones included, which were asked for by name -- and never said what unit the shares were
+// of. The first five columns are where they were, so a reader taking windows by position still
+// does; the rest are appended, and a column a row has no value for is left empty.
+void writeForecastCsv(std::ostream& out, const std::vector<DominanceWindow>& windows,
+                      const std::vector<RankTrack>& tracks, const ResponseTable& table) {
+  out << "label,key,start_s,end_s,peak_fraction,unit,kind,peak_time_s,best_rank,pinned\n";
+  const std::string unit = table.unitLabel.empty() ? unitName(table.unit) : table.unitLabel;
   for (const DominanceWindow& window : windows) {
     out << csvField(window.label) << ',' << window.id.key << ','
         << shortestRoundTrip(window.startSeconds) << ',' << shortestRoundTrip(window.endSeconds)
-        << ',' << shortestRoundTrip(window.peakFraction) << '\n';
+        << ',' << shortestRoundTrip(window.peakFraction) << ',' << unit << ",window,,,\n";
+  }
+  for (const RankTrack& track : tracks) {
+    out << csvField(track.label) << ',' << track.id.key << ",,,"
+        << shortestRoundTrip(track.peakFraction) << ',' << unit << ",track,"
+        << shortestRoundTrip(table.times[static_cast<std::size_t>(track.peakTimeIndex)]) << ','
+        << bestRankOf(track) << ',' << (track.pinned ? "true" : "false") << '\n';
   }
 }
 
@@ -985,7 +966,7 @@ void writeInterventionsCsv(std::ostream& out, const InterventionStudy& study) {
 void writeInterventionsJson(std::ostream& out, const InterventionStudy& study) {
   out << "{\n";
   out << "  \"metric\": \"" << metricName(study.metric) << "\",\n";
-  out << "  \"unit\": \"" << unitOf(study) << "\",\n";
+  out << "  \"unit\": \"" << escapeJson(unitOf(study)) << "\",\n";
   out << "  \"intervention_time_s\": " << jsonNumber(study.interventionTimeSeconds) << ",\n";
   out << "  \"response_time_s\": " << jsonNumber(study.responseTimeSeconds) << ",\n";
   out << "  \"baseline\": " << jsonNumber(study.baseline) << ",\n";
@@ -1046,7 +1027,7 @@ void writeForecast(std::ostream& out, const std::vector<DominanceWindow>& window
       break;
     }
     case ReportFormat::Csv:
-      writeForecastCsv(out, windows);
+      writeForecastCsv(out, windows, tracks, table);
       break;
     case ReportFormat::Json:
       writeForecastJson(out, windows, tracks, table);
@@ -1382,7 +1363,7 @@ void writeDecaySensitivitiesJson(std::ostream& out, const DecaySensitivities& s)
   out << "  \"nuclides\": [\n";
   for (std::size_t i = 0; i < s.nuclides.size(); ++i) {
     const DecaySensitivity& one = s.nuclides[i];
-    out << "    {\"nuclide\": \"" << one.label
+    out << "    {\"nuclide\": \"" << escapeJson(one.label)
         << "\", \"half_life_s\": " << jsonNumber(one.halfLifeSeconds)
         << ", \"implicit\": " << jsonNumber(one.implicit)
         << ", \"explicit\": " << jsonNumber(one.explicitWeight)
@@ -1514,8 +1495,8 @@ void writeUncertaintyJson(std::ostream& out, const ResponseUncertainty& u) {
   out << "  \"seeds\": [\n";
   for (std::size_t i = 0; i < u.seeds.size(); ++i) {
     const SeedUncertainty& seed = u.seeds[i];
-    out << "    {\"seed\": \"" << seed.label << "\", \"assay\": \"" << seed.assay
-        << "\", \"carried_s\": " << jsonNumber(seed.carriedSeconds)
+    out << "    {\"seed\": \"" << escapeJson(seed.label) << "\", \"assay\": \""
+        << escapeJson(seed.assay) << "\", \"carried_s\": " << jsonNumber(seed.carriedSeconds)
         << ", \"seed_atoms\": " << jsonNumber(seed.seedAtoms) << ", \"sigma_atoms\": "
         << (seed.sigmaAtoms > 0.0 ? jsonNumber(seed.sigmaAtoms) : std::string("null"))
         << ", \"importance\": " << jsonNumber(seed.importance)
@@ -1796,6 +1777,11 @@ void writeTaskPlanText(std::ostream& out, const TaskPlan& plan, const ReportCont
           << formatDuration(plan.spentAtSeconds - leg.startSeconds) << " into it\n";
       out << "    the plan as written accrues " << sci(plan.total) << ", which is "
           << percent(plan.total / plan.budget) << " of it\n";
+    } else {
+      // Spent, but not inside any leg the plan can name. Every branch ends its line; this one
+      // did not, and the note below ran on from the budget figure.
+      out << "  -- SPENT; the plan as written accrues " << sci(plan.total) << ", which is "
+          << percent(plan.total / plan.budget) << " of it\n";
     }
   }
 
@@ -1852,7 +1838,8 @@ void writeTaskPlanJson(std::ostream& out, const TaskPlan& plan) {
   out << "  \"legs\": [\n";
   for (std::size_t i = 0; i < plan.legs.size(); ++i) {
     const LegResult& leg = plan.legs[i];
-    out << "    {\"name\": \"" << leg.name << "\", \"start_s\": " << jsonNumber(leg.startSeconds)
+    out << "    {\"name\": \"" << escapeJson(leg.name)
+        << "\", \"start_s\": " << jsonNumber(leg.startSeconds)
         << ", \"end_s\": " << jsonNumber(leg.endSeconds)
         << ", \"distance_m\": " << (leg.isBreak ? std::string("null") : jsonNumber(leg.distanceM))
         << ", \"occupancy\": " << jsonNumber(leg.occupancy)
@@ -1908,9 +1895,10 @@ void writeTriageSetText(std::ostream& out, const TriageSet& set,
   // First, because it is the number that says whether the answer is comfortable. A reader who
   // saw only the list would have no way to tell a set with room to spare from one that clears
   // its floor by a thousandth at a single instant.
+  const auto [held, floor] = percentsApart(set.binding.achieved, set.binding.required);
   out << "  closest to failing: " << set.binding.requirement << " at "
-      << formatDuration(set.binding.timeSeconds) << " -- holds " << percent(set.binding.achieved)
-      << " against " << percent(set.binding.required) << '\n';
+      << formatDuration(set.binding.timeSeconds) << " -- holds " << held << " against " << floor
+      << '\n';
   out << '\n';
 
   out << "   #  contributor        peak share   closed\n";
@@ -1981,20 +1969,20 @@ void writeTriageSetJson(std::ostream& out, const TriageSet& set) {
   out << "  \"members\": [\n";
   for (std::size_t i = 0; i < set.members.size(); ++i) {
     const SetMember& member = set.members[i];
-    out << "    {\"order\": " << member.order << ", \"contributor\": \"" << member.label
+    out << "    {\"order\": " << member.order << ", \"contributor\": \"" << escapeJson(member.label)
         << "\", \"peak_fraction\": " << jsonNumber(member.peakFraction)
         << ", \"closed_shortfall\": " << jsonNumber(member.closedShortfall) << "}"
         << (i + 1 == set.members.size() ? "\n" : ",\n");
   }
   out << "  ],\n";
-  out << "  \"binding\": {\"requirement\": \"" << set.binding.requirement
+  out << "  \"binding\": {\"requirement\": \"" << escapeJson(set.binding.requirement)
       << "\", \"time_s\": " << jsonNumber(set.binding.timeSeconds)
       << ", \"achieved\": " << jsonNumber(set.binding.achieved)
       << ", \"required\": " << jsonNumber(set.binding.required) << "},\n";
   out << "  \"shortfalls\": [\n";
   for (std::size_t i = 0; i < set.shortfalls.size(); ++i) {
     const CoveragePoint& point = set.shortfalls[i];
-    out << "    {\"requirement\": \"" << point.requirement
+    out << "    {\"requirement\": \"" << escapeJson(point.requirement)
         << "\", \"time_s\": " << jsonNumber(point.timeSeconds)
         << ", \"achieved\": " << jsonNumber(point.achieved)
         << ", \"required\": " << jsonNumber(point.required) << "}"
@@ -2110,11 +2098,11 @@ void writeReconciliationJson(std::ostream& out, const Reconciliation& reconciled
   out << "  \"epoch\": \"" << formatCalendarDate(reconciled.epochSeconds) << "\",\n";
   out << "  \"epoch_s\": " << jsonNumber(reconciled.epochSeconds) << ",\n";
   out << "  \"span_s\": " << jsonNumber(reconciled.spanSeconds) << ",\n";
-  out << "  \"note\": \"" << kCarryNote << "\",\n";
+  out << "  \"note\": \"" << escapeJson(kCarryNote) << "\",\n";
   out << "  \"assays\": [\n";
   for (std::size_t i = 0; i < reconciled.contributions.size(); ++i) {
     const AssayContribution& one = reconciled.contributions[i];
-    out << "    {\"label\": \"" << one.label << "\", \"assayed\": \""
+    out << "    {\"label\": \"" << escapeJson(one.label) << "\", \"assayed\": \""
         << formatCalendarDate(one.dateSeconds)
         << "\", \"carried_s\": " << jsonNumber(one.carriedSeconds)
         << ", \"nuclides\": " << one.nuclides
@@ -2226,8 +2214,8 @@ void writeStayCsv(std::ostream& out, const StayReport& report) {
 
 void writeStayJson(std::ostream& out, const StayReport& report) {
   out << "{\n";
-  out << "  \"metric\": \"" << report.metric << "\",\n";
-  out << "  \"unit\": \"" << report.unit << "\",\n";
+  out << "  \"metric\": \"" << escapeJson(report.metric) << "\",\n";
+  out << "  \"unit\": \"" << escapeJson(report.unit) << "\",\n";
   out << "  \"budget\": " << jsonNumber(report.budget) << ",\n";
   out << "  \"max_duration_s\": " << jsonNumber(report.maxDurationSeconds) << ",\n";
   out << "  \"stays\": [\n";

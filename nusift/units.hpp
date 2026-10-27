@@ -24,8 +24,8 @@ inline constexpr double kLn2 = std::numbers::ln2;
 
 // --- time -------------------------------------------------------------------
 // A year is the Julian year, 365.25 d. Stated here and in `--help` because the choice is
-// arbitrary but its consequences are not: over a 100 y decay the difference against a
-// 365 d year is about three months of Cs-137 decay.
+// arbitrary but its consequences are not: over a 100 y decay a 365 d year falls 25 days short
+// of it, which for a 30 y half-life is a 0.16% difference in what remains.
 inline constexpr double kSecondsPerMinute = 60.0;
 inline constexpr double kSecondsPerHour = 3600.0;
 inline constexpr double kSecondsPerDay = 86400.0;

@@ -156,6 +156,21 @@ TEST(Report, JsonEscapesEveryCharacterThatWouldBreakAString) {
 // Control characters with no short escape still have to leave as \u00XX. A vertical tab is
 // not something anyone types, but it is something a file path copied out of a terminal can
 // carry, and one of them is enough to make the document invalid.
+// A plan leg is named by the user, so its name can hold anything a shell lets through. It went
+// into the JSON unescaped, and `--leg 'say "hi",1h,1'` produced a document no parser would read.
+TEST(Report, TaskPlanJsonEscapesALegName) {
+  TaskPlan plan;
+  plan.unit = Unit::Sievert;
+  LegResult leg;
+  leg.name = R"(say "hi" \ there)";
+  plan.legs.push_back(leg);
+  std::ostringstream out;
+  writeTaskPlan(out, plan, ReportContext{}, ReportFormat::Json);
+  // Outside the macro, because MSVC misreads a backslash in a raw string passed as an argument.
+  const std::string escaped = R"("name": "say \"hi\" \\ there")";
+  EXPECT_NE(out.str().find(escaped), std::string::npos) << out.str();
+}
+
 TEST(Report, JsonEscapesControlCharactersWithNoShorterForm) {
   ReportContext context;
   context.seedProvenance = std::string("bell\x07vtab\x0b");
