@@ -57,9 +57,15 @@ Ranking rank(const ResponseTable& table, int timeIndex, const RankRequest& reque
     if (va != vb) {
       return va > vb;
     }
-    // Deterministic tiebreak; see the header.
-    return table.contributors[static_cast<std::size_t>(a)].key <
-           table.contributors[static_cast<std::size_t>(b)].key;
+    // Deterministic tiebreak; see the header. The key alone does not settle it in a gamma-line
+    // table, whose columns share their emitter's key and tie exactly whenever two lines carry
+    // one yield -- so the energy does, rather than whatever order the sort happened to leave.
+    const ContributorId& ia = table.contributors[static_cast<std::size_t>(a)];
+    const ContributorId& ib = table.contributors[static_cast<std::size_t>(b)];
+    if (ia.key != ib.key) {
+      return ia.key < ib.key;
+    }
+    return ia.lineEnergyEv < ib.lineEnergyEv;
   });
 
   // A zero or negative total makes every fraction meaningless. That happens legitimately --

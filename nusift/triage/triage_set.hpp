@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file
- * @brief The smallest set of contributors that stays above a coverage floor everywhere at once.
+ * @brief A small set of contributors that stays above a coverage floor everywhere at once.
  * @ingroup triage
  */
 //
@@ -23,9 +23,12 @@
 //
 // Set cover is NP-hard and this is a deterministic greedy, which is the honest thing to run at
 // this size and the honest thing to say about it: the result is a SMALL set that meets the
-// floor, not a proof that none smaller exists. Greedy is within a ln(n) factor of optimal and in
-// practice much closer, and the alternative -- an exact solver over ten thousand gamma lines --
-// would buy a nuclide or two at a cost nobody asked for.
+// floor, not a proof that none smaller exists. Its guarantee is weaker than the ln(n) of plain
+// set cover, because gains here are real-valued and capped at the floor: Wolsey's bound for
+// that problem is 1 + ln of the first step's gain over the last step's, which depends on the data
+// and can be loose, so no factor is promised. In practice the result is close, and the
+// alternative -- an exact solver over ten thousand gamma lines -- would buy a nuclide or two at a
+// cost nobody asked for.
 //
 // What the result is NOT is a truncation. Every other knob in ranking.hpp cuts a list down; this
 // one builds a list up until a stated property holds, and the property is checked against the
@@ -111,7 +114,7 @@ struct TriageSet {
   int constraintCount = 0;
 };
 
-// The smallest set greedy finds. Members come back in the order chosen.
+// The set greedy builds: small, and not proven minimal. Members come back in the order chosen.
 //
 // Every requirement's table must share one aggregate: a nuclide column and a gamma-line column
 // are not the same kind of thing, and a set mixing them would satisfy neither question. Throws

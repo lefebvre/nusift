@@ -282,12 +282,16 @@ double refineExtremum(const std::function<double(double)>& evaluate, double lo, 
   return best;
 }
 
-TrajectoryEvent locateExtremum(const EventSeries& series, int k, bool maximum,
+// The turn on the plateau of samples [first, last], all of one value, bracketed by the samples
+// either side of it. A plateau of one sample is the ordinary case; a longer one is a turn the
+// grid sampled more than once at the same height, which is still one turn.
+TrajectoryEvent locateExtremum(const EventSeries& series, int first, int last, bool maximum,
                                const EventTolerance& tolerance) {
-  const std::size_t i = static_cast<std::size_t>(k);
+  const std::size_t i = static_cast<std::size_t>(first);
+  const std::size_t j = static_cast<std::size_t>(last);
   const double t0 = series.times[i - 1];
-  const double t1 = series.times[i];
-  const double t2 = series.times[i + 1];
+  const double t1 = first == last ? series.times[i] : 0.5 * (series.times[i] + series.times[j]);
+  const double t2 = series.times[j + 1];
 
   TrajectoryEvent event;
   event.kind = maximum ? EventKind::Maximum : EventKind::Minimum;
@@ -304,11 +308,19 @@ TrajectoryEvent locateExtremum(const EventSeries& series, int k, bool maximum,
     // real evaluation, and a section search that lands beside it is not an improvement on it.
     const double sampled = series.values[i];
     const bool sampleWins = maximum ? sampled > value : sampled < value;
-    event.timeSeconds = sampleWins ? t1 : best;
+    event.timeSeconds = sampleWins ? series.times[i] : best;
     event.value = sampleWins ? sampled : value;
     event.locatedToSeconds = located;
     event.refined = true;
     event.converged = converged;
+  } else if (first != last) {
+    // No parabola through a flat top: the turn is somewhere on the plateau, and its middle is
+    // the honest point estimate with the whole bracket as its uncertainty.
+    event.timeSeconds = t1;
+    event.value = series.values[i];
+    event.locatedToSeconds = t2 - t0;
+    event.refined = false;
+    event.converged = true;
   } else {
     double value = series.values[i];
     event.timeSeconds = interpolateExtremum(t0, t1, t2, series.values[i - 1], series.values[i],
@@ -440,20 +452,30 @@ std::vector<TrajectoryEvent> extrema(const EventSeries& series, const EventToler
     return events;
   }
 
-  for (int k = 1; k + 1 < nT; ++k) {
-    const double before = series.values[static_cast<std::size_t>(k) - 1];
-    const double here = series.values[static_cast<std::size_t>(k)];
-    const double after = series.values[static_cast<std::size_t>(k) + 1];
-
-    // A turn has to be strict on at least one side. Requiring it on both would miss a peak
-    // the grid happened to sample twice at the same height; requiring it on neither would
-    // report every flat stretch as an extremum.
-    const bool maximum = here >= before && here >= after && (here > before || here > after);
-    const bool minimum = here <= before && here <= after && (here < before || here < after);
-    if (!maximum && !minimum) {
-      continue;
+  // Runs of equal samples are taken as one plateau, and a plateau is a turn when the samples on
+  // BOTH sides of it lie on the same side of its value. Judging each sample by its two
+  // neighbours instead, strict on either side, read 1, 2, 2, 3 -- a monotone curve with a step --
+  // as a maximum and a minimum, a peak sampled twice at one height as two maxima, and an
+  // activity that underflowed to exactly zero as a minimum. A plateau touching either end of the
+  // grid is not a turn: what the curve does past the grid is not known.
+  int first = 1;
+  while (first + 1 < nT) {
+    const double here = series.values[static_cast<std::size_t>(first)];
+    int last = first;
+    while (last + 1 < nT && series.values[static_cast<std::size_t>(last) + 1] == here) {
+      ++last;
     }
-    events.push_back(locateExtremum(series, k, maximum, tolerance));
+    if (last + 1 >= nT) {
+      break;
+    }
+    const double before = series.values[static_cast<std::size_t>(first) - 1];
+    const double after = series.values[static_cast<std::size_t>(last) + 1];
+    const bool maximum = here > before && here > after;
+    const bool minimum = here < before && here < after;
+    if (maximum || minimum) {
+      events.push_back(locateExtremum(series, first, last, maximum, tolerance));
+    }
+    first = last + 1;
   }
   return events;
 }
@@ -657,14 +679,17 @@ EventSeries taskSeries(const NuclearData& data, const Inventory& inventory,
 
   // Copies rather than captured references: this callable outlives the call when `refine` puts
   // it in the series, and a spec or a set of solver options that died with the argument list
-  // would be read during the search. The data and the inventory are the caller's to keep alive,
-  // which the header says.
+  // would be read during the search. The inventory is copied for the reason the evaluator copies
+  // it -- a caller that goes on changing it would otherwise refine one curve with another's
+  // values. The data is the caller's to keep alive, which the header says.
   const ResponseSpec heldSpec = spec;
   const DecayOptions heldOptions = options;
-  const auto accrued = [&data, &inventory, heldSpec, heldOptions, durationSeconds](double start) {
+  const Inventory heldInventory = inventory;
+  const auto accrued = [&data, heldInventory, heldSpec, heldOptions,
+                        durationSeconds](double start) {
     std::vector<std::int64_t> keys;
     const std::vector<double> integral =
-        intervalIntegral(data, inventory, start, start + durationSeconds, &keys, heldOptions);
+        intervalIntegral(data, heldInventory, start, start + durationSeconds, &keys, heldOptions);
     return buildIntervalResponse(data, keys, integral, start, start + durationSeconds, heldSpec)
         .totals.front();
   };

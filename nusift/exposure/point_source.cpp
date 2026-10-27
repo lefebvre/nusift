@@ -20,20 +20,6 @@ double kermaToExposurePerDecayEnergy(double energyEv) {
          units::kGyPerR;
 }
 
-void requireUsableGeometry(const PointSourceGeometry& geometry) {
-  if (!(geometry.distanceM > 0.0)) {
-    throw InputError(tagged(kModule,
-                            "distance must be positive; a point source has no "
-                            "exposure rate defined at zero distance"));
-  }
-  if (!(geometry.airDensityKgM3 >= 0.0)) {
-    throw InputError(tagged(kModule, "air density cannot be negative"));
-  }
-  if (!(geometry.buildup > 0.0)) {
-    throw InputError(tagged(kModule, "buildup factor must be positive"));
-  }
-}
-
 // The part of the point kernel that is geometry and path only: spreading over 4*pi*d^2,
 // attenuation along the path, and the explicit buildup factor. Shared by the exposure and the
 // fluence coefficients so the two can never disagree about where a photon gets to.
@@ -51,6 +37,20 @@ double spreadingAndAttenuation(double energyEv, const PointSourceGeometry& geome
 }
 
 }  // namespace
+
+void requireUsableGeometry(const PointSourceGeometry& geometry) {
+  if (!(geometry.distanceM > 0.0)) {
+    throw InputError(tagged(kModule,
+                            "distance must be positive; a point source has no "
+                            "exposure rate defined at zero distance"));
+  }
+  if (!(geometry.airDensityKgM3 >= 0.0)) {
+    throw InputError(tagged(kModule, "air density cannot be negative"));
+  }
+  if (!(geometry.buildup > 0.0)) {
+    throw InputError(tagged(kModule, "buildup factor must be positive"));
+  }
+}
 
 double pointExposureCoeff(double energyEv, const PointSourceGeometry& geometry) {
   requireUsableGeometry(geometry);

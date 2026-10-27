@@ -25,7 +25,7 @@
 // -- 1 for atoms, N_A for moles, N_A*g/M for a mass, 1/lambda for an activity -- so it is
 // strictly linear with no offset, and the same call converts a sigma as correctly as it converts
 // a quantity. The measurement basis therefore does NOT have to be retained for this question.
-// It does have to be retained for the OTHER half of the uncertainty item, dR/dlambda, where
+// It does have to be retained for the OTHER half of the uncertainty question, dR/dlambda, where
 // n0 = A0/lambda moves with the parameter being differentiated -- see attribution.md section 6.
 // Those are different questions and only one of them needs the basis.
 //
@@ -91,9 +91,10 @@ struct ResponseUncertainty {
   double sigma = 0.0;     // sqrt(sum of (g_i sigma_i)^2)
   double relative = 0.0;  // sigma / response, when response > 0
 
-  // How much of the answer rests on rows that stated no uncertainty at all. The figure that
-  // decides whether the error bar means anything: a 3% error bar over rows carrying 40% of the
-  // response is not a 3% error bar on the response.
+  // How much of the answer rests on rows that DID state an uncertainty -- the share of the
+  // response the error bar speaks for. The figure that decides whether the error bar means
+  // anything: a 3% error bar over rows carrying 60% of the response is not a 3% error bar on the
+  // response.
   double coveredFraction = 0.0;
   int rowsWithSigma = 0;
   int rowsWithoutSigma = 0;

@@ -5,6 +5,7 @@
 #include <iterator>
 #include <limits>
 #include <map>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -22,10 +23,15 @@ int leaderAt(const ResponseTable& table, int timeIndex) {
     if (value <= 0.0) {
       continue;
     }
-    if (best < 0 || value > values[static_cast<std::size_t>(best)] ||
-        (value == values[static_cast<std::size_t>(best)] &&
-         table.contributors[static_cast<std::size_t>(c)].key <
-             table.contributors[static_cast<std::size_t>(best)].key)) {
+    if (best < 0 || value > values[static_cast<std::size_t>(best)]) {
+      best = c;
+      continue;
+    }
+    // Key then energy, so two lines of one emitter tying exactly resolve the way a ranking does.
+    const ContributorId& mine = table.contributors[static_cast<std::size_t>(c)];
+    const ContributorId& held = table.contributors[static_cast<std::size_t>(best)];
+    if (value == values[static_cast<std::size_t>(best)] &&
+        (mine.key < held.key || (mine.key == held.key && mine.lineEnergyEv < held.lineEnergyEv))) {
       best = c;
     }
   }
@@ -41,11 +47,11 @@ int leaderAt(const ResponseTable& table, int timeIndex) {
 // the closed form this function used to carry -- both contenders are close to exponential over
 // one interval -- so the merge does not move an unrefined boundary.
 //
-// With an evaluator the same bracket is narrowed by real solves instead. Falls back to the
-// interval midpoint when the ratio does not actually change sign, which happens only if the
-// caller asked about the wrong interval.
-double crossingTime(const ResponseTable& table, int leaving, int arriving, int k,
-                    const ResponseEvaluator* evaluator, const EventTolerance& tolerance) {
+// With an evaluator the same bracket is narrowed by real solves instead. Empty when the ratio
+// does not cross one inside [t_k, t_k+1], or cannot be formed there.
+std::optional<double> crossingIn(const ResponseTable& table, int leaving, int arriving, int k,
+                                 const ResponseEvaluator* evaluator,
+                                 const EventTolerance& tolerance) {
   const double t0 = table.times[static_cast<std::size_t>(k)];
   const double t1 = table.times[static_cast<std::size_t>(k) + 1];
 
@@ -56,7 +62,7 @@ double crossingTime(const ResponseTable& table, int leaving, int arriving, int k
   const double a1 = after[static_cast<std::size_t>(leaving)];
   const double b1 = after[static_cast<std::size_t>(arriving)];
   if (!(a0 > 0.0 && b0 > 0.0 && a1 > 0.0 && b1 > 0.0)) {
-    return 0.5 * (t0 + t1);
+    return std::nullopt;
   }
 
   EventSeries pair;
@@ -80,9 +86,31 @@ double crossingTime(const ResponseTable& table, int leaving, int arriving, int k
 
   const std::vector<TrajectoryEvent> found = crossings(pair, 1.0, tolerance);
   if (found.empty()) {
-    return 0.5 * (t0 + t1);
+    return std::nullopt;
   }
   return found.front().timeSeconds;
+}
+
+// The boundary between two windows, searched over every interval from the last sample the
+// outgoing contributor actually led to the first the incoming one leads. The outgoing one leads
+// at one end and the incoming one at the other, so their ratio crosses one somewhere inside.
+//
+// Searching only the interval after the outgoing WINDOW ended -- which is what this did -- is
+// wrong whenever a short run in between was absorbed: for a leader sequence A, B, C with B
+// lasting one sample, the A/C crossing lies before B's sample and the interval after it holds
+// none, so the boundary fell back to a midpoint in the wrong interval, refined or not.
+double boundaryTime(const ResponseTable& table, int leaving, int arriving, int lastLed,
+                    int firstLed, const ResponseEvaluator* evaluator,
+                    const EventTolerance& tolerance) {
+  for (int k = lastLed; k < firstLed; ++k) {
+    if (const std::optional<double> at =
+            crossingIn(table, leaving, arriving, k, evaluator, tolerance)) {
+      return *at;
+    }
+  }
+  // Reached only when one of the two is zero across the span, so no ratio exists to cross.
+  return 0.5 * (table.times[static_cast<std::size_t>(lastLed)] +
+                table.times[static_cast<std::size_t>(firstLed)]);
 }
 
 RankTrack trackOf(const ResponseTable& table, int contributor) {
@@ -132,10 +160,13 @@ std::vector<DominanceWindow> dominanceWindowsImpl(const ResponseTable& table, in
   }
 
   // Coalesce consecutive samples with the same leader into runs.
+  // `lastLed` is the last sample this contributor actually led. It equals lastIndex until a
+  // short run after it is absorbed, which extends the window but not the samples it leads.
   struct Run {
     int contributor;
     int firstIndex;
     int lastIndex;
+    int lastLed;
   };
   std::vector<Run> runs;
   for (int k = 0; k < nT; ++k) {
@@ -145,8 +176,9 @@ std::vector<DominanceWindow> dominanceWindowsImpl(const ResponseTable& table, in
     }
     if (!runs.empty() && runs.back().contributor == leader) {
       runs.back().lastIndex = k;
+      runs.back().lastLed = k;
     } else {
-      runs.push_back(Run{leader, k, k});
+      runs.push_back(Run{leader, k, k, k});
     }
   }
   if (runs.empty()) {
@@ -171,10 +203,19 @@ std::vector<DominanceWindow> dominanceWindowsImpl(const ResponseTable& table, in
     for (const Run& run : kept) {
       if (!runs.empty() && runs.back().contributor == run.contributor) {
         runs.back().lastIndex = run.lastIndex;
+        runs.back().lastLed = run.lastLed;
       } else {
         runs.push_back(run);
       }
     }
+  }
+
+  // Each interior boundary once, so a window's end and the next one's start are the same number.
+  std::vector<double> boundaries;
+  for (std::size_t r = 0; r + 1 < runs.size(); ++r) {
+    boundaries.push_back(boundaryTime(table, runs[r].contributor, runs[r + 1].contributor,
+                                      runs[r].lastLed, runs[r + 1].firstIndex, evaluator,
+                                      tolerance));
   }
 
   std::vector<DominanceWindow> windows;
@@ -187,13 +228,8 @@ std::vector<DominanceWindow> dominanceWindowsImpl(const ResponseTable& table, in
 
     // The first window starts at the grid's start and the last ends at its end; interior
     // boundaries are the interpolated crossings.
-    window.startSeconds = r == 0 ? table.times.front()
-                                 : crossingTime(table, runs[r - 1].contributor, run.contributor,
-                                                runs[r - 1].lastIndex, evaluator, tolerance);
-    window.endSeconds = r + 1 == runs.size()
-                            ? table.times.back()
-                            : crossingTime(table, run.contributor, runs[r + 1].contributor,
-                                           run.lastIndex, evaluator, tolerance);
+    window.startSeconds = r == 0 ? table.times.front() : boundaries[r - 1];
+    window.endSeconds = r + 1 == runs.size() ? table.times.back() : boundaries[r];
 
     for (int k = run.firstIndex; k <= run.lastIndex; ++k) {
       const double total = table.totals[static_cast<std::size_t>(k)];
@@ -239,8 +275,13 @@ std::vector<RankTrack> unionTopN(const ResponseTable& table, int n) {
       if (va != vb) {
         return va > vb;
       }
-      return table.contributors[static_cast<std::size_t>(a)].key <
-             table.contributors[static_cast<std::size_t>(b)].key;
+      // Key then energy, as the ranking breaks ties, so the same line enters the top n here.
+      const ContributorId& ia = table.contributors[static_cast<std::size_t>(a)];
+      const ContributorId& ib = table.contributors[static_cast<std::size_t>(b)];
+      if (ia.key != ib.key) {
+        return ia.key < ib.key;
+      }
+      return ia.lineEnergyEv < ib.lineEnergyEv;
     });
     for (int i = 0; i < depth; ++i) {
       if (values[static_cast<std::size_t>(order[static_cast<std::size_t>(i)])] > 0.0) {
@@ -261,7 +302,10 @@ std::vector<RankTrack> unionTopN(const ResponseTable& table, int n) {
     if (a.peakFraction != b.peakFraction) {
       return a.peakFraction > b.peakFraction;
     }
-    return a.id.key < b.id.key;
+    if (a.id.key != b.id.key) {
+      return a.id.key < b.id.key;
+    }
+    return a.id.lineEnergyEv < b.id.lineEnergyEv;
   });
   return tracks;
 }

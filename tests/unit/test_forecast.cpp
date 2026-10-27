@@ -51,6 +51,45 @@ ResponseTable tableOver(const NuclearData& data, const Inventory& inventory,
   return buildResponse(data, result, ResponseSpec{});
 }
 
+// A table written out by hand: one row of values per time, one column per contributor.
+ResponseTable handTable(const std::vector<double>& times,
+                        const std::vector<std::vector<double>>& rows) {
+  ResponseTable table;
+  table.times = times;
+  const std::size_t columns = rows.front().size();
+  for (std::size_t c = 0; c < columns; ++c) {
+    table.contributors.push_back(ContributorId{static_cast<std::int64_t>(c + 1), 0});
+    table.labels.push_back(std::string(1, static_cast<char>('A' + c)));
+    table.flags.push_back(kFlagNone);
+  }
+  for (const std::vector<double>& row : rows) {
+    double total = 0.0;
+    for (const double value : row) {
+      table.values.push_back(value);
+      total += value;
+    }
+    table.totals.push_back(total);
+  }
+  return table;
+}
+
+// The leader goes A, B for one sample, then C. B is absorbed, so the windows are A then C -- and
+// the A/C crossing lies BEFORE B's sample, between t=2 and t=3, where A/C goes from 5 to 6/7.
+// Searching only the interval after the extended A window ([3, 4], where A/C is 6/7 then 1/3)
+// found no crossing and fell back to its midpoint, 3.5: a boundary in the wrong interval.
+TEST(Forecast, ABoundaryAcrossAnAbsorbedRunIsFoundWhereItIs) {
+  const ResponseTable table = handTable(
+      {1.0, 2.0, 3.0, 4.0, 5.0},
+      {{12.0, 4.0, 1.0}, {10.0, 5.0, 2.0}, {6.0, 8.0, 7.0}, {3.0, 4.0, 9.0}, {2.0, 3.0, 10.0}});
+  const std::vector<DominanceWindow> windows = dominanceWindows(table, 2);
+  ASSERT_EQ(windows.size(), 2u);
+  EXPECT_EQ(windows[0].label, "A");
+  EXPECT_EQ(windows[1].label, "C");
+  EXPECT_GT(windows[0].endSeconds, 2.0);
+  EXPECT_LT(windows[0].endSeconds, 3.0);
+  EXPECT_DOUBLE_EQ(windows[0].endSeconds, windows[1].startSeconds);
+}
+
 // The crossing has a closed form, so the interpolated boundary can be checked against it
 // rather than against a grid point. That is the whole reason boundaries are interpolated: on a
 // log grid at late times, consecutive samples can be years apart.

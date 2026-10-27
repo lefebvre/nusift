@@ -81,6 +81,11 @@ struct PointSourceGeometry {
   Irradiation irradiation = Irradiation::AP;
 };
 
+// Throws InputError for a geometry no point kernel is defined in: a non-positive distance, a
+// negative air density, or a non-positive buildup. Every coefficient below checks this itself;
+// it is public so a caller that may evaluate no line at all can still refuse the geometry.
+void requireUsableGeometry(const PointSourceGeometry& geometry);
+
 // Exposure-rate coefficient for a single photon energy, in R/h per photon/s emitted.
 double pointExposureCoeff(double energyEv, const PointSourceGeometry& geometry);
 

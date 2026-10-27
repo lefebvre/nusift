@@ -79,6 +79,44 @@ TEST(Ranking, TiesBreakDeterministicallyByAscendingKey) {
   EXPECT_EQ(ranking.contributors[2].id.key, 30);
 }
 
+// The lines of one emitter share its key, and two lines of one yield tie exactly under photon
+// strength. The energy settles their order, rather than whatever the sort left.
+TEST(Ranking, TiedLinesOfOneEmitterOrderByEnergy) {
+  ResponseTable table = tableOf({5.0, 5.0, 5.0}, {10, 10, 10});
+  table.aggregate = Aggregate::GammaLine;
+  table.contributors[0].lineEnergyEv = 3.0e5;
+  table.contributors[1].lineEnergyEv = 1.0e5;
+  table.contributors[2].lineEnergyEv = 2.0e5;
+  const Ranking ranking = rank(table, 0, RankRequest{});
+  ASSERT_EQ(ranking.contributors.size(), 3u);
+  EXPECT_DOUBLE_EQ(ranking.contributors[0].id.lineEnergyEv, 1.0e5);
+  EXPECT_DOUBLE_EQ(ranking.contributors[1].id.lineEnergyEv, 2.0e5);
+  EXPECT_DOUBLE_EQ(ranking.contributors[2].id.lineEnergyEv, 3.0e5);
+}
+
+// One energy listed twice by an emitter -- 511 keV under two spectrum types -- is one column, so
+// nothing that finds a column by (emitter, energy) can find a different one each time.
+TEST(ResponseLines, OneEnergyListedTwiceIsOneColumn) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  synth::addLines(arrays, 1, {511000.0, 511000.0, 1.0e6}, {0.6, 0.4, 0.5});
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+  Inventory inv;
+  inv.add(Zai{50, 100, 0}, 1.0e20);
+  const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
+
+  ResponseSpec spec;
+  spec.metric = Metric::Photon;
+  spec.unit = Unit::PhotonsPerSecond;
+  spec.aggregate = Aggregate::GammaLine;
+  const ResponseTable table = buildResponse(data, result, spec);
+  ASSERT_EQ(table.contributorCount(), 2);
+  int annihilation = 0;
+  for (const ContributorId& id : table.contributors) {
+    annihilation += id.lineEnergyEv == 511000.0 ? 1 : 0;
+  }
+  EXPECT_EQ(annihilation, 1);
+}
+
 // The literal question "which contributors are 95% of the total" wants the SMALLEST prefix
 // reaching 95%, not the largest one below it.
 TEST(Ranking, CoverageReturnsTheMinimalPrefixReachingTheTarget) {
@@ -984,16 +1022,21 @@ TEST(ResponseLines, LineTotalMatchesTheNuclideTotal) {
   inv.add(Zai{50, 100, 0}, 1.0e20);
   const DecayResult result = decay(data, inv, std::vector<double>{2000.0});
 
-  ResponseSpec byNuclide;
-  byNuclide.metric = Metric::Exposure;
-  byNuclide.unit = Unit::RoentgenPerHour;
+  // Every unit, not just the roentgen: each selects its own kernel, and a line path that
+  // missed one printed the R/h number under a Sv/h label, 114 times too high, with this test
+  // passing because it only ever asked in R/h.
+  for (const Unit unit : {Unit::RoentgenPerHour, Unit::GrayPerHour, Unit::SievertPerHour}) {
+    ResponseSpec byNuclide;
+    byNuclide.metric = Metric::Exposure;
+    byNuclide.unit = unit;
 
-  ResponseSpec byLine = byNuclide;
-  byLine.aggregate = Aggregate::GammaLine;
+    ResponseSpec byLine = byNuclide;
+    byLine.aggregate = Aggregate::GammaLine;
 
-  const double nuclideTotal = buildResponse(data, result, byNuclide).totals[0];
-  const double lineTotal = buildResponse(data, result, byLine).totals[0];
-  EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12);
+    const double nuclideTotal = buildResponse(data, result, byNuclide).totals[0];
+    const double lineTotal = buildResponse(data, result, byLine).totals[0];
+    EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12) << unitName(unit);
+  }
 }
 
 // The strongest line by emitted exposure leads, and every column names its emitter and energy.
@@ -1073,17 +1116,19 @@ TEST(ResponseLines, IntervalLineTotalMatchesTheNuclideTotal) {
   std::vector<std::int64_t> keys;
   const std::vector<double> integral = intervalIntegral(data, inv, 0.0, 2000.0, &keys);
 
-  ResponseSpec byNuclide;
-  byNuclide.metric = Metric::Exposure;
-  byNuclide.unit = Unit::Roentgen;
-  ResponseSpec byLine = byNuclide;
-  byLine.aggregate = Aggregate::GammaLine;
+  for (const Unit unit : {Unit::Roentgen, Unit::Gray, Unit::Sievert}) {
+    ResponseSpec byNuclide;
+    byNuclide.metric = Metric::Exposure;
+    byNuclide.unit = unit;
+    ResponseSpec byLine = byNuclide;
+    byLine.aggregate = Aggregate::GammaLine;
 
-  const double nuclideTotal =
-      buildIntervalResponse(data, keys, integral, 0.0, 2000.0, byNuclide).totals[0];
-  const double lineTotal =
-      buildIntervalResponse(data, keys, integral, 0.0, 2000.0, byLine).totals[0];
-  EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12);
+    const double nuclideTotal =
+        buildIntervalResponse(data, keys, integral, 0.0, 2000.0, byNuclide).totals[0];
+    const double lineTotal =
+        buildIntervalResponse(data, keys, integral, 0.0, 2000.0, byLine).totals[0];
+    EXPECT_NEAR(lineTotal, nuclideTotal, nuclideTotal * 1e-12) << unitName(unit);
+  }
 }
 
 // Matching totals is not enough to say an interval was aggregated by line: per-nuclide columns

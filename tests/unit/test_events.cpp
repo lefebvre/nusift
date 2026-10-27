@@ -238,6 +238,38 @@ TEST(TrajectoryEvents, AMonotoneCurveAndAFlatOneHaveNoExtrema) {
   EXPECT_TRUE(extrema(flat).empty()) << "a flat stretch is not turning";
 }
 
+// Equal neighbouring samples are one plateau, and a plateau turns only when both sides of it lie
+// on the same side of its value. Judged sample by sample, a step read as a maximum AND a
+// minimum, a peak sampled twice as two maxima, and an underflow to zero as a minimum.
+TEST(TrajectoryEvents, APlateauIsOneTurnOrNone) {
+  EventSeries step;
+  step.times = {0.0, 1.0, 2.0, 3.0};
+  step.values = {1.0, 2.0, 2.0, 3.0};
+  EXPECT_TRUE(extrema(step).empty()) << "a monotone curve with a step is not turning";
+
+  EventSeries twice;
+  twice.times = {0.0, 1.0, 2.0, 3.0};
+  twice.values = {1.0, 3.0, 3.0, 1.0};
+  const std::vector<TrajectoryEvent> peak = extrema(twice);
+  ASSERT_EQ(peak.size(), 1u) << "a peak sampled twice at one height is one peak";
+  EXPECT_EQ(peak[0].kind, EventKind::Maximum);
+  EXPECT_DOUBLE_EQ(peak[0].timeSeconds, 1.5);
+  EXPECT_DOUBLE_EQ(peak[0].bracketStartSeconds, 0.0);
+  EXPECT_DOUBLE_EQ(peak[0].bracketEndSeconds, 3.0);
+
+  EventSeries underflow;
+  underflow.times = {0.0, 1.0, 2.0, 3.0};
+  underflow.values = {1.0, 1.0e-300, 0.0, 0.0};
+  EXPECT_TRUE(extrema(underflow).empty()) << "decaying to nothing is not a minimum";
+
+  EventSeries dip;
+  dip.times = {0.0, 1.0, 2.0, 3.0, 4.0};
+  dip.values = {5.0, 0.0, 0.0, 0.0, 3.0};
+  const std::vector<TrajectoryEvent> trough = extrema(dip);
+  ASSERT_EQ(trough.size(), 1u);
+  EXPECT_EQ(trough[0].kind, EventKind::Minimum);
+}
+
 TEST(TrajectoryEvents, ExtremaNeedThreeSamples) {
   EventSeries two;
   two.times = {0.0, 1.0};
