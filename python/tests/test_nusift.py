@@ -1368,6 +1368,31 @@ def test_a_stay_budget_must_be_an_accrued_total(data):
         )
 
 
+@needs_store
+def test_a_time_that_is_not_a_time_raises_rather_than_crashing(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+
+    # stay_time read its two times after releasing the GIL, and a cast that failed there took the
+    # interpreter down. Each of these segfaulted; now each is an ordinary TypeError.
+    with pytest.raises(TypeError):
+        nusift.stay_time(data, inv, at=[1.0], budget=1.0e10)
+    with pytest.raises(TypeError):
+        nusift.stay_time(data, inv, at="30d", budget=1.0e10, max_stay=10**400)
+    with pytest.raises(TypeError):
+        nusift.integrate(data, inv, [1.0], "1d")
+
+
+@needs_store
+def test_a_cram_order_that_does_not_exist_is_refused(data):
+    inv = nusift.Inventory()
+    inv.add("Cs-137", 1.0e18)
+    # Read as "16, or else 48", a 32 ran order 48 and said nothing.
+    with pytest.raises(ValueError):
+        nusift.decay(data, inv, [3600.0], cram_order=32)
+    nusift.decay(data, inv, [3600.0], cram_order=16)
+
+
 # --- assays on different dates -----------------------------------------------
 
 

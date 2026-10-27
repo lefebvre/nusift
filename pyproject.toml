@@ -22,11 +22,17 @@ Source = "https://github.com/lefebvre/nusift"
 [tool.scikit-build]
 cmake.version = ">=3.28"
 wheel.packages = ["python/nusift"]
-sdist.exclude = ["external", "build*", "data/endf", ".venv"]
+# The stable ABI where nanobind can build one (CPython 3.12 and later): one wheel per platform
+# for every later Python too. Older interpreters still get a wheel of their own.
+wheel.py-api = "cp312"
+# The root-level CSVs are scratch output from running the CLI in the tree, not sources.
+sdist.exclude = ["external", "build*", "data/endf", ".venv", "/*.csv"]
 
 [tool.scikit-build.cmake.define]
 NUSIFT_BUILD_PYTHON = "ON"
-NUSIFT_BUILD_CLI = "ON"
+# The wheel ships the extension and no executable, so building the CLI -- and fetching CLI11 for
+# it -- was work thrown away on every wheel build.
+NUSIFT_BUILD_CLI = "OFF"
 NUSIFT_ENABLE_TESTS = "OFF"
 # A wheel build has no system Eigen, so cram is fetched and nothing can be exported -- and
 # nothing needs to be, since cram links statically into the extension.
