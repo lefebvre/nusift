@@ -1,7 +1,8 @@
 #pragma once
 /**
  * @file
- * @brief The shortest decimal spelling of a double that reads back as the same value.
+ * @brief What every writer shares: a double's shortest round-tripping spelling, and a
+ *        string escaped for JSON.
  * @ingroup io
  */
 #include <cstdio>
@@ -29,6 +30,55 @@ inline std::string shortestRoundTrip(double value) {
     }
   }
   return buffer;
+}
+
+// Quotes and backslashes are the obvious cases; control characters are the ones that actually
+// occur. A provenance string is a file path or a command line the user supplied, and a newline
+// or a tab in one produces a report no JSON parser will read -- a failure that surfaces in
+// whatever consumes the report rather than here, where it was caused.
+inline std::string escapeJson(const std::string& text) {
+  std::string out;
+  out.reserve(text.size());
+  for (const char c : text) {
+    switch (c) {
+      case '"':
+        out += "\\\"";
+        break;
+      case '\\':
+        out += "\\\\";
+        break;
+      case '\b':
+        out += "\\b";
+        break;
+      case '\f':
+        out += "\\f";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      default: {
+        const auto byte = static_cast<unsigned char>(c);
+        if (byte < 0x20) {
+          char buffer[8];
+          std::snprintf(buffer, sizeof(buffer), "\\u%04x", static_cast<unsigned>(byte));
+          out += buffer;
+        } else {
+          // Everything at 0x20 and above passes through unchanged, including the bytes of a
+          // multi-byte UTF-8 sequence: JSON strings are UTF-8, so escaping them would corrupt
+          // a nuclide name or a path that is already correct.
+          out += c;
+        }
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 }  // namespace nusift

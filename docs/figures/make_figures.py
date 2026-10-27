@@ -316,7 +316,9 @@ def figure_air_attenuation(path):
 
 def figure_dominance(path):
     rows = read_csv("fission-exposure-timeline.csv")
-    windows = read_csv("fission-dominance-windows.csv")
+    # A forecast CSV carries its tracks below its windows, told apart by `kind`; a file written
+    # before the tracks were added has no such column and holds windows only.
+    windows = [r for r in read_csv("fission-dominance-windows.csv") if r.get("kind", "window") == "window"]
 
     times = sorted({float(r["time_s"]) for r in rows})
     series = {}
