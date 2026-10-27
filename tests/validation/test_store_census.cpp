@@ -165,7 +165,9 @@ TEST(StoreCensus, TheKnownCoverageGapsAreUnchanged) {
   EXPECT_EQ(c.noSpectrumAtAll, 1546) << "unstable nuclides emitting photons with no spectrum";
   EXPECT_EQ(c.withClampedLines, 1471) << "nuclides carrying at least one clamped line";
   EXPECT_EQ(c.clampedLines, 5705) << "lines outside the tabulated air-coefficient range";
-  EXPECT_EQ(c.sfWithoutYields, 103) << "spontaneous-fission branches with no yield set";
+  // 102 since the staging tool stopped dropping the yields of a fissile ISOMER: Am-242m's
+  // spontaneous-fission branch now finds the thermal set its NFY tape provides.
+  EXPECT_EQ(c.sfWithoutYields, 102) << "spontaneous-fission branches with no yield set";
 }
 
 // The uncertainty census. How MUCH of an evaluation carries a sigma is what decides whether an
@@ -262,6 +264,19 @@ TEST(StoreCensus, TheDocumentedFissileParentsAreAvailable) {
     EXPECT_NE(std::find(names.begin(), names.end(), expected), names.end())
         << expected << " should be seedable from fission";
   }
+}
+
+// Am-242m is the one isomer ENDF evaluates fission yields for, and cram files every tape under
+// its ground state -- so a staging tool that asked for the isomer found nothing and dropped the
+// tape without a word. Pinned by name, with the one set its tape carries, so a restage that
+// loses it again fails here rather than at the first user who seeds from it.
+TEST(StoreCensus, AFissileIsomerKeepsItsYields) {
+  const Zai isomer = requireNuclideName("Am-242m");
+  const std::vector<Zai> parents = committedStore().fissionYields().parents();
+  ASSERT_NE(std::find(parents.begin(), parents.end(), isomer), parents.end())
+      << "Am-242m should be seedable from fission";
+  EXPECT_EQ(std::find(parents.begin(), parents.end(), Zai{95, 242, 0}), parents.end())
+      << "and its yields filed under the isomer, not under ground-state Am-242";
 }
 
 }  // namespace

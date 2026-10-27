@@ -124,7 +124,7 @@ Spontaneous fission draws on the same table at energy 0, snapping to whatever se
 if no spontaneous one was staged. A nuclide with a spontaneous-fission branch and **no yield set
 of any energy** is the one gap the matrix cannot report for itself: the branch removes atoms from
 the parent — its whole decay constant sits on the diagonal — and produces nothing in their place.
-The shipped store has 103 such nuclides, every one heavier than A = 180, and decay only ever
+The shipped store has 102 such nuclides, every one heavier than A = 180, and decay only ever
 lowers A, so nothing a fission-product source produces can reach one; an actinide inventory can.
 `nusift data info` counts them, staging warns, and the SFY sublibrary (`--sfy-dir`) closes it.
 
@@ -162,7 +162,7 @@ the values come from:
 | --- | --- | --- |
 | half-life | MT457, the `[T, DT]` pair | 3270 of 3562 unstable nuclides |
 | mode branching | MT457, `DecayMode`'s `[BR, DBR]` | 5212 of 5212 modes |
-| independent yield | MT454, the `DFY` column | 63126 of 73264 entries |
+| independent yield | MT454, the `DFY` column | 64193 of 74501 entries |
 
 The three average decay energies are read from the same MT457 record and are staged as values
 rather than with uncertainties, because the record carries a σ for each and nothing yet consumes
@@ -254,7 +254,7 @@ $ nusift data info
 store:            data/nusift_b8.1.h5
 schema version:   1
 library:          ENDF/B-VIII.1
-staged:           2026-09-19T18:41:22Z
+staged:           2026-10-27T11:23:49Z
 staged by:        0.1.0
 tapes staged:     3821
 nuclides staged:  3828
@@ -269,11 +269,11 @@ unstable nuclides:              3562
     of those, >5% continuum:    34
     of those, clamped lines:    1471
   emit photons, no spectrum:    1546
-  SF branch, no yields staged:  103
+  SF branch, no yields staged:  102
 nuclides with atomic weights:   3947
-  from ENDF decay tapes:        0
   from AME2020:                 3947
     of those, extrapolated:     725
+  from ENDF decay tapes:        0
   with no mass, unweighable:    65
 ```
 
@@ -290,7 +290,7 @@ coefficients are clamped to the end value rather than interpolated. Their contri
 order-of-magnitude figure. Nearly all are soft X-rays, which any real source encapsulation
 absorbs before they reach air — but the count is reported rather than assumed harmless.
 
-**103 nuclides have a spontaneous-fission branch but no fission-yield set of any energy.** The
+**102 nuclides have a spontaneous-fission branch but no fission-yield set of any energy.** The
 branch removes their atoms and produces nothing in their place, so a chain passing through one
 does not conserve atoms (§4). All lie above A = 180, out of reach of any fission-product source;
 an actinide inventory is where the count matters, and `data info` names the nuclides so it can
