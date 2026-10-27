@@ -128,8 +128,10 @@ struct LevelWindow {
 //
 // A crossing is recorded where consecutive samples fall on opposite sides of `level`, which
 // makes "the series is below the level" a boolean that flips exactly once per reported event.
-// A sample sitting exactly on the level counts as not-below, so a curve that touches and
-// retreats reports the touch once rather than twice or not at all.
+// A sample sitting exactly on the level counts as not-below. A curve that touches the level
+// from below and falls back therefore reports two crossings at the touch -- up to it and down
+// from it -- and one that touches from above and rises again reports none, since it never
+// leaves not-below. That is the same partition windowsAbove() and windowsBelow() draw.
 std::vector<TrajectoryEvent> crossings(const EventSeries& series, double level,
                                        const EventTolerance& tolerance = {});
 
@@ -208,9 +210,11 @@ EventSeries ratioSeries(const ResponseTable& table, int numerator, int denominat
 // can be checked -- metric, aggregate, unit, geometry -- and refuse a mismatch rather than
 // silently mixing two curves.
 //
-// LIFETIME. A series built with an evaluator holds a reference to it, and the evaluator holds
-// references to the data and the inventory. All three have to outlive every search that uses
-// the series.
+// LIFETIME. A series built with an evaluator holds a reference to it, and the evaluator holds a
+// reference to the data. Both have to outlive every search that uses the series. The inventory
+// is COPIED: held by reference, a caller that went on adding to it -- which Python makes one
+// line -- had the evaluator refine one curve with the values of another, and no check here can
+// see an inventory change.
 class ResponseEvaluator {
 public:
   ResponseEvaluator(const NuclearData& data, const Inventory& inventory, const ResponseSpec& spec,
@@ -234,7 +238,7 @@ private:
   const ResponseTable& tableAt(double timeSeconds) const;
 
   const NuclearData& data_;
-  const Inventory& inventory_;
+  Inventory inventory_;
   ResponseSpec spec_;
   DecayOptions options_;
 

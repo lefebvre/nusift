@@ -176,6 +176,29 @@ KernelWeight kernelWeightFor(const ResponseSpec& spec, const NuclearData& data, 
   return weight;
 }
 
+// What one photon emitted at `energyEv` is worth under a photon metric, per photon/s: the
+// exposure kernel for R/h and Gy/h, the effective-dose kernel for Sv/h, the fluence coefficient
+// for a fluence unit, and one for a photon count. The per-nuclide weight and the per-line columns
+// both read it, so the two cannot come to disagree about which kernel a unit selects -- they did
+// once, and a line ranking in Sv/h printed the roentgen number under a sievert label.
+double photonKernel(const ResponseSpec& spec, double energyEv) {
+  if (spec.metric == Metric::Exposure) {
+    return isEffectiveDoseUnit(spec.unit)
+               ? exposure::pointEffectiveDoseCoeff(energyEv, spec.geometry)
+               : exposure::pointExposureCoeff(energyEv, spec.geometry);
+  }
+  return isFluenceUnit(spec.unit) ? exposure::pointFluenceCoeff(energyEv, spec.geometry) : 1.0;
+}
+
+// Per becquerel: the kernel summed over the nuclide's lines with each line's yield.
+double photonPerBecquerel(const ResponseSpec& spec, LineSpectrum lines) {
+  double total = 0.0;
+  for (const GammaLine& line : lines) {
+    total += line.intensity * photonKernel(spec, line.energyEv);
+  }
+  return total;
+}
+
 double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
   const double lambda = data.decayConstant(index);
   switch (spec.metric) {
@@ -204,22 +227,17 @@ double weightFor(const ResponseSpec& spec, const NuclearData& data, int index) {
       // accrued total, once domainScale() has taken the hour back out. Either per-becquerel
       // factor sums over the nuclide's photon lines WITH the geometry inside the sum, which is
       // why no single per-nuclide constant could stand in for it.
-      if (isEffectiveDoseUnit(spec.unit)) {
-        return lambda * exposure::effectiveDoseRatePerBecquerel(data.lines(index), spec.geometry);
-      }
-      return lambda * exposure::exposureRatePerBecquerel(data.lines(index), spec.geometry);
+      return lambda * photonPerBecquerel(spec, data.lines(index));
     case Metric::Photon:
       // lambda * (photons per decay): the source strength, in photons/s per atom, independent
       // of any geometry -- a property of the inventory alone. Against atom-seconds the same
       // weight is the photons emitted over the window, and there is no hour to take back out,
       // because the weight was never quoted per hour.
-      if (isFluenceUnit(spec.unit)) {
-        // The fluence rate at the point, in photons/(m^2*s) per atom. As for exposure the
-        // attenuation sits inside the sum over lines, so the geometry is part of the weight
-        // and part of what the answer means.
-        return lambda * exposure::fluenceRatePerBecquerel(data.lines(index), spec.geometry);
-      }
-      return lambda * totalPhotonYield(data.lines(index));
+      //
+      // A fluence unit instead gives the fluence rate at the point, in photons/(m^2*s) per
+      // atom. As for exposure the attenuation sits inside the sum over lines, so the geometry
+      // is part of the weight and part of what the answer means.
+      return lambda * photonPerBecquerel(spec, data.lines(index));
     case Metric::Heat:
       // lambda * (recoverable energy per decay), in watts per atom. The three MT457 averages
       // summed: a decay's whole energy budget less the neutrinos the evaluation excludes.
@@ -453,30 +471,29 @@ ResponseTable assembleLines(const NuclearData& data, std::span<const std::int64_
 
     // The emitter's total and the per-line coefficient in the SAME weight, so the relative
     // floor below drops a line by its share of its emitter whatever the metric.
-    const bool fluence = isFluenceUnit(spec.unit);
-    const double emitterTotal = spec.metric == Metric::Exposure
-                                    ? exposure::exposureRatePerBecquerel(lines, spec.geometry)
-                                : fluence ? exposure::fluenceRatePerBecquerel(lines, spec.geometry)
-                                          : totalPhotonYield(lines);
-    const double floor = emitterTotal * kLineFloor;
+    const double floor = photonPerBecquerel(spec, lines) * kLineFloor;
     const int flags = data.unmodeledPhotonFraction(dataIndex) > kUnmodeledContinuumFlag
                           ? kFlagUnmodeledContinuum
                           : kFlagNone;
 
+    // One column per (emitter, energy), which is the identity everything downstream finds a
+    // column by. An evaluation can list one energy twice -- the 511 keV annihilation photon
+    // under both STYP 0 and STYP 9 -- and two columns under one identity let a triage set count
+    // a member's gain from both but its progress from the first, and an evaluator refine a curve
+    // against the wrong one. The two are one photon energy, and are merged before the floor.
+    std::map<double, double> byEnergy;
     for (const GammaLine& line : lines) {
-      const double perBecquerel =
-          spec.metric == Metric::Exposure
-              ? line.intensity * exposure::pointExposureCoeff(line.energyEv, spec.geometry)
-          : fluence ? line.intensity * exposure::pointFluenceCoeff(line.energyEv, spec.geometry)
-                    : line.intensity;
-      if (perBecquerel <= 0.0) {
-        continue;
+      const double perBecquerel = line.intensity * photonKernel(spec, line.energyEv);
+      if (perBecquerel > 0.0) {
+        byEnergy[line.energyEv] += perBecquerel;
       }
+    }
+    for (const auto& [energyEv, perBecquerel] : byEnergy) {
       if (perBecquerel < floor) {
         droppedWeight[i] += lambda * perBecquerel;
         continue;
       }
-      columns.push_back(Column{zai.key(), line.energyEv, lambda * perBecquerel, i, flags});
+      columns.push_back(Column{zai.key(), energyEv, lambda * perBecquerel, i, flags});
     }
   }
 
@@ -850,6 +867,12 @@ void requireUsableSpec(const NuclearData& data, const ResponseSpec& spec, Domain
                             "ranking by gamma line only makes sense for exposure or photon "
                             "output -- a photon line has no activity of its own, it is a way "
                             "its emitter's decays get out"));
+  }
+  // Refused here as well as per line, because a table whose nuclides carry no lines evaluates no
+  // kernel at all and would otherwise answer zeros for a geometry that has no meaning.
+  if (spec.metric == Metric::Exposure ||
+      (spec.metric == Metric::Photon && isFluenceUnit(spec.unit))) {
+    exposure::requireUsableGeometry(spec.geometry);
   }
   if (isPhotonMetric && !data.hasPhotonLines()) {
     throw InputError(tagged(kModule, "this data store carries no photon lines, so " +

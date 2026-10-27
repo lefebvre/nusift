@@ -18,15 +18,15 @@
 //
 // Exact, on the same terms as everything else built on that integral: the atom-seconds over each
 // leg's window are closed form, and the geometry is a fixed weight post-multiplied on top -- so a
-// leg at 0.8 m and a leg at 3 m cost one solve each rather than one model each. Since item 1 the
-// weight can be an effective-dose kernel, so this is a worker-DOSE plan rather than an exposure
-// plan the day it is built.
+// leg at 0.8 m and a leg at 3 m cost one solve each rather than one model each. The weight can be
+// an effective-dose kernel, so in sieverts this is a worker-DOSE plan rather than an exposure
+// plan.
 //
 // WHAT IT DOES NOT MODEL, and both matter more here than in a screening answer:
 //
 //   * No shielding. Every leg is an unshielded point source in air. A plan whose middle leg is
 //     behind a wall cannot say so, and the number for that leg is an overestimate of unknown
-//     size. This is the shielding item and not this one.
+//     size. Shielding is not modeled anywhere in NuSIFT yet.
 //   * Occupancy is a fraction, and multiplying by it assumes the presence is spread EVENLY over
 //     the leg. Over a leg short against the decay time constant that is exact to floating point;
 //     over a long one it is not, and the truth lies between "all of it at the start" and "all of

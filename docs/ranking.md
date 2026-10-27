@@ -179,7 +179,7 @@ One loss is inherent and is stated rather than mitigated: bin totals are exact, 
 lines inside a bin cannot be recovered from the bin. A detector-resolution question wants the line
 list of §3, not this.
 
-## 3b. The smallest list that works everywhere
+## 3b. A short list that works everywhere
 
 `--coverage 0.95` on a ranking answers *which nuclides are 95% of this, **here***: one metric, one
 instant. A monitoring list poses a different question — which nuclides are 95% of it
@@ -244,9 +244,11 @@ particular instant; dropping it is exactly what the floor forbids.
 
 Set cover is NP-hard and greedy is not exact. What comes back is a small set that meets the floor,
 **not a proof that none smaller exists** — stated in the report rather than left to be assumed,
-because "the smallest set" is what a reader will otherwise hear. Greedy is within a `ln n` factor
-and in practice much closer, and an exact solver over ten thousand gamma lines would buy a nuclide
-or two at a cost nobody asked for.
+because "the smallest set" is what a reader will otherwise hear. Nor is there a fixed factor to
+quote: the `ln n` of plain set cover does not apply, because gains here are real-valued and capped
+at the floor, and Wolsey's bound for that problem — `1 + ln` of the first step's gain over the
+last step's — depends on the data and can be loose. In practice the result is close, and an exact
+solver over ten thousand gamma lines would buy a nuclide or two at a cost nobody asked for.
 
 Two boundary cases are answered rather than thrown. A time where the metric is identically zero —
 exposure from a fresh inventory of pure beta emitters — constrains nothing, and *nothing to cover

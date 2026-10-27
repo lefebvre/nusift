@@ -207,8 +207,16 @@ std::vector<double> resolveBinEdges(const BinningSpec& binning, double lowestEv,
     fail("bin count must be at least 1, got " + std::to_string(binning.count));
   }
 
-  const double low = binning.minEv > 0.0 ? binning.minEv : lowestEv;
-  const double high = binning.maxEv > 0.0 ? binning.maxEv : highestEv;
+  double low = binning.minEv > 0.0 ? binning.minEv : lowestEv;
+  double high = binning.maxEv > 0.0 ? binning.maxEv : highestEv;
+  // Every line present at one energy -- a pure positron emitter's 511 keV, a single-line
+  // nuclide -- leaves the range taken from the lines with zero width, and the default that is
+  // meant never to drop a photon refused the inventory outright. A range a percent either side
+  // holds the line; one the CALLER gave with zero width is still refused below.
+  if (binning.minEv <= 0.0 && binning.maxEv <= 0.0 && lowestEv == highestEv && lowestEv > 0.0) {
+    low = lowestEv * 0.99;
+    high = highestEv * 1.01;
+  }
   if (!(high > low)) {
     fail("the energy range must end above where it starts, got " + std::to_string(low) + " to " +
          std::to_string(high) + " eV");
