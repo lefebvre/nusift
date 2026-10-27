@@ -1,9 +1,12 @@
 #include "nusift/nucdata/store_arrays.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "nusift/core/error.hpp"
+#include "nusift/core/nuclide.hpp"
+#include "nusift/nucdata/photon_lines.hpp"
 
 namespace nusift {
 namespace {
@@ -51,6 +54,30 @@ void requireCsr(const std::vector<int>& offset, int n, std::size_t valueCount, c
   if (static_cast<std::size_t>(offset.back()) != valueCount) {
     fail(std::string(name) + " ends at " + std::to_string(offset.back()) + " but indexes " +
          std::to_string(valueCount) + " values");
+  }
+}
+
+// Every value finite and non-negative: a half-life, a mass, an energy, an intensity, a yield
+// and every sigma on one. Shapes alone were checked before, and a NaN passed them -- a NaN
+// half-life read as not-stable to the stable test while cram zeroed its decay constant, so the
+// matrix treated the nuclide as stable and the activity weight carried the NaN into every total.
+void requireFiniteNonNegative(const std::vector<double>& v, const char* name) {
+  for (std::size_t i = 0; i < v.size(); ++i) {
+    if (!std::isfinite(v[i]) || v[i] < 0.0) {
+      fail(std::string(name) + "[" + std::to_string(i) + "] is " + std::to_string(v[i]) +
+           "; it must be finite and non-negative");
+    }
+  }
+}
+
+// An integer code inside the range its enum or encoding defines. A cast of anything else names
+// no enumerator, and a final isomeric state past 9 makes a key that aliases another nuclide.
+void requireInRange(const std::vector<int>& v, int low, int high, const char* name) {
+  for (std::size_t i = 0; i < v.size(); ++i) {
+    if (v[i] < low || v[i] > high) {
+      fail(std::string(name) + "[" + std::to_string(i) + "] is " + std::to_string(v[i]) +
+           "; expected " + std::to_string(low) + ".." + std::to_string(high));
+    }
   }
 }
 
@@ -194,9 +221,46 @@ void validateStoreArrays(const StoreArrays& a) {
   const int parents = static_cast<int>(a.xsParentKey.size());
   if (parents > 0 || !a.xsOffset.empty()) {
     requireCsr(a.xsOffset, parents, a.xsReactionType.size(), "xs_offset");
-    if (a.xsProductKey.size() != a.xsReactionType.size() ||
-        a.xsSigmaBarn.size() != a.xsReactionType.size()) {
+    const std::size_t channels = a.xsReactionType.size();
+    // The Q, energy and spectrum columns are per channel too. Nothing reads them yet, which is
+    // exactly when a length nobody checks would go unnoticed until something did.
+    const auto perChannel = [channels](std::size_t size, bool optional) {
+      return size == channels || (optional && size == 0);
+    };
+    if (!perChannel(a.xsProductKey.size(), false) || !perChannel(a.xsSigmaBarn.size(), false) ||
+        !perChannel(a.xsQEv.size(), true) || !perChannel(a.xsEnergyEv.size(), true) ||
+        !perChannel(a.xsSpectrumId.size(), true)) {
       fail("xs_* arrays disagree in length");
+    }
+  }
+
+  // Contents, once the shapes are known to be right.
+  requireFiniteNonNegative(a.halfLife, "nuclide_half_life");
+  requireFiniteNonNegative(a.halfLifeUncertainty, "nuclide_half_life_uncertainty");
+  requireFiniteNonNegative(a.awr, "nuclide_awr");
+  requireFiniteNonNegative(a.closureAwr, "closure_awr");
+  requireFiniteNonNegative(a.emEnergyEv, "nuclide_em_energy_ev");
+  requireFiniteNonNegative(a.lpEnergyEv, "nuclide_lp_energy_ev");
+  requireFiniteNonNegative(a.hpEnergyEv, "nuclide_hp_energy_ev");
+  requireFiniteNonNegative(a.continuumPhotonEv, "nuclide_continuum_photon_ev");
+  requireFiniteNonNegative(a.modeBranching, "mode_branching");
+  requireFiniteNonNegative(a.modeBranchingUncertainty, "mode_branching_uncertainty");
+  requireFiniteNonNegative(a.lineEnergyEv, "line_energy_ev");
+  requireFiniteNonNegative(a.lineIntensity, "line_intensity");
+  requireFiniteNonNegative(a.nfyProductYield, "nfy_product_yield");
+  requireFiniteNonNegative(a.nfyProductYieldUncertainty, "nfy_product_yield_uncertainty");
+
+  constexpr int kLastMassSource = static_cast<int>(MassSource::AmeEstimated);
+  requireInRange(a.awrSource, 0, kLastMassSource, "nuclide_awr_source");
+  requireInRange(a.closureAwrSource, 0, kLastMassSource, "closure_awr_source");
+  requireInRange(a.modeFinalState, 0, kMaxIsomericState, "mode_final_state");
+  requireInRange(a.modeIsFission, 0, 1, "mode_is_fission");
+  for (std::size_t i = 0; i < a.lineStyp.size(); ++i) {
+    const int styp = a.lineStyp[i];
+    if (styp != static_cast<int>(SpectrumType::Gamma) &&
+        styp != static_cast<int>(SpectrumType::XrayOrAnnih)) {
+      fail("line_styp[" + std::to_string(i) + "] is " + std::to_string(styp) +
+           "; expected 0 (gamma) or 9 (x-ray or annihilation)");
     }
   }
 }

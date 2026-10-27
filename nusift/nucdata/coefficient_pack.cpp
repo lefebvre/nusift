@@ -2,12 +2,17 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <fstream>
 #include <istream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <vector>
 
 #include "nusift/core/error.hpp"
 #include "nusift/core/nuclide.hpp"
@@ -33,6 +38,45 @@ std::string lowered(std::string text) {
   std::transform(text.begin(), text.end(), text.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return text;
+}
+
+// One row's cells, split on commas outside double quotes. A field in quotes may hold a comma, and
+// a doubled quote inside one is a quote -- what a spreadsheet writes for a note that cites a
+// table. Split on every comma, a citation like "Table 3, p. 12" lost everything after its comma
+// and the rest of the row moved one column over.
+std::vector<std::string> splitCells(std::string_view text) {
+  std::vector<std::string> cells;
+  std::string cell;
+  bool quoted = false;
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    const char c = text[i];
+    if (quoted) {
+      if (c == '"' && i + 1 < text.size() && text[i + 1] == '"') {
+        cell += '"';
+        ++i;
+      } else if (c == '"') {
+        quoted = false;
+      } else {
+        cell += c;
+      }
+    } else if (c == '"') {
+      quoted = true;
+    } else if (c == ',') {
+      cells.push_back(trimmed(cell));
+      cell.clear();
+    } else {
+      cell += c;
+    }
+  }
+  cells.push_back(trimmed(cell));
+  return cells;
+}
+
+// A finite number spelled in full, independent of locale. std::stod read "inf" as a coefficient
+// the >= 0 check then passed, and follows whatever locale the host process set.
+bool finiteNumber(const std::string& text, double& out) {
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), out);
+  return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size() && std::isfinite(out);
 }
 
 PackBasis basisFrom(const std::string& text, const std::string& where) {
@@ -162,45 +206,33 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
 
     if (!sawColumns) {
       // The column line, checked rather than skipped: a pack whose columns are in another order
-      // would load silently and weight everything by the wrong number.
-      const std::string columns = lowered(text);
-      if (kernel) {
-        if (columns.rfind("energy_ev,coefficient", 0) != 0) {
-          throw InputError(tagged(kModule, where +
-                                               ": a kernel pack's columns are "
-                                               "`energy_ev,coefficient[,note]`, got \"" +
-                                               text + "\""));
+      // would load silently and weight everything by the wrong number. Each optional column is
+      // found by its exact name. Found by substring, `nuclide,coefficient,note,folded` put the
+      // folded parents in the note's place and the notes in the parents'.
+      const std::vector<std::string> names = splitCells(lowered(text));
+      const std::string first = kernel ? "energy_ev" : "nuclide";
+      const char* const expected =
+          kernel ? "`energy_ev,coefficient[,note]`" : "`nuclide,coefficient[,folded][,note]`";
+      if (names.size() < 2 || names[0] != first || names[1] != "coefficient") {
+        throw InputError(tagged(
+            kModule, where + ": expected the column line " + expected + ", got \"" + text + "\""));
+      }
+      for (std::size_t i = 2; i < names.size(); ++i) {
+        int* slot = names[i] == "note"                ? &noteColumn
+                    : names[i] == "folded" && !kernel ? &foldedColumn
+                                                      : nullptr;
+        if (slot == nullptr || *slot >= 0) {
+          throw InputError(tagged(kModule, where + ": column \"" + names[i] +
+                                               "\" is unknown or repeated; the columns are " +
+                                               expected));
         }
-        noteColumn = columns.find(",note") != std::string::npos ? 2 : -1;
-        sawColumns = true;
-        continue;
+        *slot = static_cast<int>(i);
       }
-      if (columns.rfind("nuclide,coefficient", 0) != 0) {
-        throw InputError(tagged(kModule, where +
-                                             ": expected the column line "
-                                             "`nuclide,coefficient[,folded][,note]`, got \"" +
-                                             text + "\""));
-      }
-      // Which optional columns are present, in order, so a row is read against the header it
-      // declared rather than by counting commas and hoping.
-      foldedColumn = columns.find(",folded") != std::string::npos ? 2 : -1;
-      noteColumn = columns.find(",note") != std::string::npos ? (foldedColumn > 0 ? 3 : 2) : -1;
       sawColumns = true;
       continue;
     }
 
-    std::vector<std::string> cells;
-    std::size_t at = 0;
-    while (at <= text.size()) {
-      const std::size_t comma = text.find(',', at);
-      cells.push_back(trimmed(comma == std::string::npos
-                                  ? std::string_view(text).substr(at)
-                                  : std::string_view(text).substr(at, comma - at)));
-      if (comma == std::string::npos) {
-        break;
-      }
-      at = comma + 1;
-    }
+    const std::vector<std::string> cells = splitCells(text);
     if (cells.size() < 2) {
       throw InputError(tagged(kModule, where + ": a row is `nuclide,coefficient[,folded][,note]`"));
     }
@@ -215,14 +247,8 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
                                  : std::string();
 
     double value = 0.0;
-    try {
-      std::size_t consumed = 0;
-      value = std::stod(number, &consumed);
-      if (consumed != number.size()) {
-        throw std::invalid_argument("trailing");
-      }
-    } catch (const std::exception&) {
-      throw InputError(tagged(kModule, where + ": \"" + number + "\" is not a number"));
+    if (!finiteNumber(number, value)) {
+      throw InputError(tagged(kModule, where + ": \"" + number + "\" is not a finite number"));
     }
     if (!(value >= 0.0)) {
       throw InputError(tagged(kModule, where + ": a coefficient cannot be negative"));
@@ -233,13 +259,7 @@ CoefficientPack CoefficientPack::read(std::istream& in, const std::string& sourc
       // interpolation walks them in order and a table out of order would interpolate between
       // whichever neighbours it happened to find.
       double energyEv = 0.0;
-      try {
-        std::size_t consumed = 0;
-        energyEv = std::stod(name, &consumed);
-        if (consumed != name.size()) {
-          throw std::invalid_argument("trailing");
-        }
-      } catch (const std::exception&) {
+      if (!finiteNumber(name, energyEv)) {
         throw InputError(tagged(kModule, where + ": \"" + name + "\" is not an energy in eV"));
       }
       if (!(energyEv > 0.0)) {

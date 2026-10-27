@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 #include <hdf5.h>
 
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <string>
 
 #include "nusift/core/error.hpp"
@@ -272,6 +274,100 @@ TEST(DataStore, RejectsAnHdf5FileThatIsNotANusiftStore) {
   }
 }
 
+// h5py writes variable-length strings by default, so a store whose attributes were set from
+// Python carries them. Read as fixed-length, the pointer HDF5 hands back was decoded as the text,
+// and the sources decoded as None -- so a good store refused every exposure question.
+TEST(DataStore, ReadsAVariableLengthStringAttribute) {
+  const TempStore path("vlen");
+  writeStore(path.str(), sampleStore());
+  {
+    const hid_t file = H5Fopen(path.str().c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    ASSERT_GE(file, 0);
+    for (const auto& [name, value] :
+         {std::pair<const char*, const char*>{"endf_library", "ENDF/B-VIII.1 (edited)"},
+          {"lines_source", "endf"}}) {
+      H5Adelete(file, name);
+      const hid_t type = H5Tcopy(H5T_C_S1);
+      H5Tset_size(type, H5T_VARIABLE);
+      const hid_t space = H5Screate(H5S_SCALAR);
+      const hid_t attr = H5Acreate2(file, name, type, space, H5P_DEFAULT, H5P_DEFAULT);
+      const char* text = value;
+      H5Awrite(attr, type, &text);
+      H5Aclose(attr);
+      H5Sclose(space);
+      H5Tclose(type);
+    }
+    H5Fclose(file);
+  }
+  const StoreArrays read = readStore(path.str());
+  EXPECT_EQ(read.provenance.library, "ENDF/B-VIII.1 (edited)");
+  EXPECT_EQ(read.provenance.linesSource, DataSource::Endf);
+}
+
+// A store holding half-lives and no mode_offset has lost its decay modes, not been staged from
+// stable nuclides. Zero-filling the offsets loaded it with every radionuclide decaying into
+// nothing; it is refused instead.
+TEST(DataStore, RefusesRadionuclidesWithNoDecayModes) {
+  const TempStore path("nomodes");
+  writeStore(path.str(), sampleStore());
+  {
+    const hid_t file = H5Fopen(path.str().c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    ASSERT_GE(file, 0);
+    H5Ldelete(file, "mode_offset", H5P_DEFAULT);
+    H5Fclose(file);
+  }
+  try {
+    readStore(path.str());
+    FAIL() << "expected a store without decay modes to be refused";
+  } catch (const NusiftError& e) {
+    EXPECT_NE(std::string(e.what()).find("no decay modes"), std::string::npos) << e.what();
+  }
+}
+
+// The store is written beside its target and renamed over it, so an existing store is replaced
+// whole and a write that fails leaves the old one standing and no partial file behind.
+TEST(DataStore, AWriteReplacesTheStoreWholeOrNotAtAll) {
+  const TempStore path("replace");
+  StoreArrays first = sampleStore();
+  first.provenance.library = "first";
+  writeStore(path.str(), first);
+  StoreArrays second = sampleStore();
+  second.provenance.library = "second";
+  writeStore(path.str(), second);
+  EXPECT_EQ(readStore(path.str()).provenance.library, "second");
+  EXPECT_FALSE(fs::exists(path.str() + ".partial"));
+
+  const std::string unreachable =
+      (fs::temp_directory_path() / "nusift_no_such_dir" / "s.h5").string();
+  EXPECT_THROW(writeStore(unreachable, sampleStore()), NusiftError);
+  EXPECT_FALSE(fs::exists(unreachable + ".partial"));
+}
+
+// Shapes were all the validator checked, and a NaN half-life passed: the stable test read it as
+// unstable, cram zeroed its decay constant, and the activity weight carried the NaN into every
+// total. Contents are held to what each field means, and an out-of-range code that would cast to
+// no enumerator -- or a final state that aliases another nuclide's key -- is refused too.
+TEST(StoreArraysValidation, RejectsContentsNoFieldCanHold) {
+  const auto refuses = [](const auto& mutate) {
+    StoreArrays a = sampleStore();
+    mutate(a);
+    EXPECT_THROW(validateStoreArrays(a), NusiftError);
+  };
+  ASSERT_NO_THROW(validateStoreArrays(sampleStore()));
+  refuses([](StoreArrays& a) { a.halfLife[0] = std::nan(""); });
+  refuses([](StoreArrays& a) { a.halfLife[0] = -1.0; });
+  refuses([](StoreArrays& a) { a.halfLife[0] = std::numeric_limits<double>::infinity(); });
+  refuses([](StoreArrays& a) { a.lineIntensity[0] = -0.5; });
+  refuses([](StoreArrays& a) { a.lineEnergyEv[0] = std::nan(""); });
+  refuses([](StoreArrays& a) { a.lineStyp[0] = 3; });
+  refuses([](StoreArrays& a) { a.modeFinalState[0] = 10; });
+  refuses([](StoreArrays& a) { a.modeBranching[0] = std::nan(""); });
+  refuses([](StoreArrays& a) {
+    a.awrSource.assign(a.nuclideKey.size(), 7);
+    a.awr.assign(a.nuclideKey.size(), 1.0);
+  });
+}
+
 // validateStoreArrays is the single contract both a file and a hand-built test chain are
 // held to, so these malformed cases must fail identically whichever way they arrive.
 TEST(StoreArraysValidation, RejectsUnsortedNuclideAxis) {
@@ -341,6 +437,34 @@ TEST(NuclearDataPhotons, ReportsTheUnmodeledContinuumFraction) {
 
   // Third has neither, and must read as 0 rather than as a division by zero.
   EXPECT_DOUBLE_EQ(data.unmodeledPhotonFraction(2), 0.0);
+}
+
+// A daughter the tapes never staged is added by chain closure and carries no modes of its own.
+// Its mode offsets used to be left at zero, so the first one reported -M modes for M staged
+// modes in all; and an absent nuclide's -1 wrapped the bound check and read past the array.
+TEST(NuclearDataModes, AClosureAddedOrAbsentNuclideHasNoModes) {
+  StoreArrays arrays = synth::linearChain({1.0e-3, 5.0e-4});
+  // Drop the stable terminator, so closure has to add it back.
+  arrays.nuclideKey.pop_back();
+  arrays.halfLife.pop_back();
+  arrays.modeOffset.pop_back();
+  arrays.modeBranchingUncertainty = {0.01, 0.02};
+  const NuclearData data = NuclearData::fromArrays(std::move(arrays));
+
+  ASSERT_EQ(data.stagedCount(), 2);
+  ASSERT_EQ(data.size(), 3);
+  EXPECT_EQ(data.modeCount(0), 1);
+  EXPECT_EQ(data.modeCount(1), 1);
+  EXPECT_DOUBLE_EQ(data.modeBranchingUncertainty(1, 0), 0.02);
+
+  const int added = data.indexOf(Zai{52, 100, 0});
+  ASSERT_GE(added, data.stagedCount());
+  EXPECT_EQ(data.modeCount(added), 0);
+  EXPECT_DOUBLE_EQ(data.modeBranchingUncertainty(added, 0), 0.0);
+
+  EXPECT_EQ(data.modeCount(-1), 0);
+  EXPECT_EQ(data.modeCount(data.size()), 0);
+  EXPECT_DOUBLE_EQ(data.modeBranchingUncertainty(-1, 0), 0.0);
 }
 
 }  // namespace

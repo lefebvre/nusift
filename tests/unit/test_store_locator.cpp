@@ -75,6 +75,18 @@ TEST(StoreLocator, SaysWhichStoreItChoseWhenADirectoryHoldsSeveral) {
   EXPECT_NE(said.find("--store"), std::string::npos) << "and the way to choose: " << said;
 }
 
+// A store named as NuSIFT's comes ahead of any other .h5 beside it, whatever their names. By name
+// alone a source tree answered from am242m.h5, a three-nuclide fixture, because it sorts before
+// the committed nusift_b8.1.h5.
+TEST(StoreLocator, PrefersAStoreNamedAsOneOverAFixtureBesideIt) {
+  requireNoEnvironmentStore();
+  const ScratchPrefix scratch;
+  scratch.store("am242m.h5");
+  const std::string committed = scratch.store("nusift_b8.1.h5");
+  scratch.store("test_store.h5");
+  EXPECT_EQ(locateStore(scratch.search()), committed);
+}
+
 TEST(StoreLocator, IsSilentWhenTheChoiceIsUnambiguous) {
   requireNoEnvironmentStore();
   const ScratchPrefix scratch;

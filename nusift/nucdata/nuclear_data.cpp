@@ -231,6 +231,13 @@ NuclearData NuclearData::fromArrays(StoreArrays a) {
       impl.continuumPhoton[i] = a.continuumPhotonEv[i];
     }
   }
+  // Past the staged axis the mode offsets repeat the last one, exactly as the line offsets do
+  // below, so a closure-added daughter has zero modes. Left at the zeros they were assigned,
+  // the first closure-added index reported modeOffset[staged+1] - modeOffset[staged] = -M modes.
+  for (int i = staged + 1; i <= total; ++i) {
+    impl.modeOffset[static_cast<std::size_t>(i)] =
+        impl.modeOffset[static_cast<std::size_t>(staged)];
+  }
 
   // Masses for the closure-added members, matched by key rather than by position because
   // that is the only thing the two sides share: their chain indices depend on what closure
@@ -304,18 +311,20 @@ std::span<const std::int64_t> NuclearData::nuclideKeys() const {
 }
 
 int NuclearData::modeCount(int index) const {
-  const std::size_t i = static_cast<std::size_t>(index);
-  if (i + 1 >= impl_->modeOffset.size()) {
+  // Checked as a signed index: indexOf() answers -1 for an absent nuclide, and cast to size_t
+  // first that wrapped the bound check and read modeOffset[SIZE_MAX].
+  if (index < 0 || index >= size()) {
     return 0;
   }
+  const std::size_t i = static_cast<std::size_t>(index);
   return impl_->modeOffset[i + 1] - impl_->modeOffset[i];
 }
 
 double NuclearData::modeBranchingUncertainty(int index, int mode) const {
-  const std::size_t i = static_cast<std::size_t>(index);
-  if (i + 1 >= impl_->modeOffset.size() || mode < 0 || mode >= modeCount(index)) {
+  if (mode < 0 || mode >= modeCount(index)) {
     return 0.0;
   }
+  const std::size_t i = static_cast<std::size_t>(index);
   const std::size_t at = static_cast<std::size_t>(impl_->modeOffset[i] + mode);
   // Guarded because the column is optional: a store staged before it existed carries an empty
   // vector rather than a short one.

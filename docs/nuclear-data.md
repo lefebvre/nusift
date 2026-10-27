@@ -332,11 +332,13 @@ and reporting different answers to the same question:
 When nothing is found the error names **every** place it looked and gives the command that would
 produce a store, because "no data store found" on its own leaves a new user with nowhere to go.
 
-A directory in step 4 or 5 holding more than one store is ambiguous by nature. The first by name
-is used — which, in a source tree with locally staged fixtures beside the committed evaluation,
-need not be the one meant — so the choice is echoed in every report header, and the CLI warns on
-stderr (the Python binding through the `warnings` module) naming the store used and the ones
-passed over. `--store` or `$NUSIFT_DATA_STORE` settles it.
+A directory in step 4 or 5 holding more than one store is ambiguous by nature. Stores named
+`nusift_*.h5` — what staging and the install write — come first, then every other `.h5`, each
+group by name, and the first is used. A source tree's locally staged fixtures (`am242m.h5`,
+`test_store.h5`) therefore no longer win over the committed evaluation on spelling alone. The
+choice is echoed in every report header, and the CLI warns on stderr (the Python binding through
+the `warnings` module) naming the store used and the ones passed over. `--store` (or a path to
+`NuclearData.open`) or `$NUSIFT_DATA_STORE` settles it.
 
 ## 9. Source map
 

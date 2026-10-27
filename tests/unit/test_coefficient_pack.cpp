@@ -91,6 +91,24 @@ TEST(CoefficientPack, RefusesRowsItCannotReadAsStated) {
   EXPECT_THROW(packFrom(headerWith() + columns), InputError) << "a pack with no coefficients";
 }
 
+// A note is free text, and one that cites a table has a comma in it. Quoted, it stays one cell;
+// split on every comma, it lost everything after the first.
+TEST(CoefficientPack, AQuotedNoteKeepsItsComma) {
+  const CoefficientPack pack = packFrom(headerWith() + "nuclide,coefficient,note\n" +
+                                        "Sn-100,1,\"Table 3, p. 12, \"\"as revised\"\"\"\n");
+  EXPECT_EQ(pack.note(requireNuclideName("Sn-100").key()), "Table 3, p. 12, \"as revised\"");
+}
+
+// The optional columns are found by name, not by a substring of the line, and nothing else is
+// one. Found by substring, `note,folded` read each column as the other.
+TEST(CoefficientPack, RefusesAColumnItDoesNotKnowOrAnInfiniteCoefficient) {
+  EXPECT_THROW(packFrom(headerWith() + "nuclide,coefficient,notes\nSn-100,1,x\n"), InputError);
+  EXPECT_THROW(packFrom(headerWith() + "nuclide,coefficient,note,note\nSn-100,1,x,y\n"),
+               InputError);
+  EXPECT_THROW(packFrom(headerWith() + "nuclide,coefficient\nSn-100,inf\n"), InputError);
+  EXPECT_THROW(packFrom(headerWith() + "nuclide,coefficient\nSn-100,nan\n"), InputError);
+}
+
 TEST(CoefficientPack, RefusesABasisOrDomainItDoesNotKnow) {
   EXPECT_THROW(packFrom(headerWith("# basis: per curie\n") + "nuclide,coefficient\nSn-100,1\n"),
                InputError);
