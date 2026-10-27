@@ -198,6 +198,10 @@ is [attribution.md §5a](attribution.md)'s subject.
 | Bq, kBq, MBq, GBq, TBq | `× Bq / λ` | a non-zero decay constant |
 | Ci, mCi, µCi | `× Bq/Ci / λ` | a non-zero decay constant |
 
+Spellings are case-insensitive except for an `m`/`M` prefix, which is read as written: milli and
+mega differ only in that case, so `mCi` is a millicurie, `MBq` a megabecquerel, and `mBq`, `MCi`
+and `Mg` -- units the table does not carry -- are refused rather than read as their neighbour.
+
 Molar mass comes from the staged atomic weight ratio, `M = AWR · m_n`, **not from A**. The
 A-as-molar-mass approximation is wrong by about 0.1% for mid-A nuclides and considerably worse
 for light ones, and silently applying it would put an unattributable error into every

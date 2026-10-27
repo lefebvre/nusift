@@ -63,6 +63,30 @@ double becquerelPer(Quantity q) {
 }  // namespace
 
 bool parseQuantity(std::string_view text, Quantity& out) {
+  // The one place case carries meaning. Milli and mega differ only in the case of their prefix,
+  // and folding it made mBq a megabecquerel and MCi a millicurie -- a factor of 1e9 either way,
+  // with no error. So an m or M in front of a becquerel, a curie or a gram is read as written,
+  // and a spelling that then names a unit this list does not carry (a millibecquerel, a
+  // megacurie, a megagram) is refused rather than read as its neighbour.
+  if (text.size() >= 2 && (text.front() == 'm' || text.front() == 'M')) {
+    const std::string base = lower(text.substr(1));
+    if (base == "bq" || base == "ci" || base == "g") {
+      if (text.front() == 'M' && base == "bq") {
+        out = Quantity::Megabecquerel;
+        return true;
+      }
+      if (text.front() == 'm' && base == "ci") {
+        out = Quantity::Millicurie;
+        return true;
+      }
+      if (text.front() == 'm' && base == "g") {
+        out = Quantity::Milligrams;
+        return true;
+      }
+      return false;
+    }
+  }
+
   const std::string key = lower(text);
   struct Entry {
     const char* name;
@@ -73,12 +97,11 @@ bool parseQuantity(std::string_view text, Quantity& out) {
       {"mol", Quantity::Moles},         {"mole", Quantity::Moles},
       {"moles", Quantity::Moles},       {"g", Quantity::Grams},
       {"gram", Quantity::Grams},        {"grams", Quantity::Grams},
-      {"kg", Quantity::Kilograms},      {"mg", Quantity::Milligrams},
-      {"bq", Quantity::Becquerel},      {"kbq", Quantity::Kilobecquerel},
-      {"mbq", Quantity::Megabecquerel}, {"gbq", Quantity::Gigabecquerel},
+      {"kg", Quantity::Kilograms},      {"bq", Quantity::Becquerel},
+      {"kbq", Quantity::Kilobecquerel}, {"gbq", Quantity::Gigabecquerel},
       {"tbq", Quantity::Terabecquerel}, {"ci", Quantity::Curie},
-      {"mci", Quantity::Millicurie},    {"uci", Quantity::Microcurie},
-      {"µci", Quantity::Microcurie},
+      {"uci", Quantity::Microcurie},    {"µci", Quantity::Microcurie},
+      {"μci", Quantity::Microcurie},
   };
   for (const Entry& entry : kTable) {
     if (key == entry.name) {
@@ -140,6 +163,14 @@ void Inventory::addKey(std::int64_t zaiKey, double atoms, double sigmaAtoms,
     throw InputError(
         tagged(kModule, "the uncertainty on " + formatNuclideName(Zai::fromKey(zaiKey)) +
                             " must be non-negative and finite; got " + std::to_string(sigmaAtoms)));
+  }
+  // The part of the count given as an activity is a part of the count: between zero and all of
+  // it. Anything else would move a decay-constant derivative by a seed that does not exist.
+  if (!std::isfinite(atomsFromActivity) || atomsFromActivity < 0.0 || atomsFromActivity > atoms) {
+    throw InputError(tagged(kModule, "the activity-given part of " +
+                                         formatNuclideName(Zai::fromKey(zaiKey)) +
+                                         " must lie between zero and its atom count; got " +
+                                         std::to_string(atomsFromActivity)));
   }
   const auto it = std::lower_bound(
       entries_.begin(), entries_.end(), zaiKey,

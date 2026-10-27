@@ -50,9 +50,13 @@ bool parseInt(std::string_view s, int& out) {
 // digits the mass number carries into the Z field, so "U-1000" would be accepted and then
 // persisted and looked up under the key of a nuclide that is not it. A validator that lets an
 // identity be silently rewritten is worse than no validator.
+// Within the range the key can encode, and within reach of a real nucleus: no known nuclide has
+// A above 3Z + 30 (H-7, the most neutron-rich relative to its charge, needs 33). The second
+// bound is what refuses an MCNP-style ZZAAA such as 55137, which the ZAI-key reading otherwise
+// turns into B-513m7 -- a name that then fails far from the input it came from.
 bool isPlausible(const Zai& zai) {
   return zai.z >= 1 && zai.z <= kMaxAtomicNumber && zai.a >= zai.z && zai.a <= kMaxMassNumber &&
-         zai.i >= 0 && zai.i <= kMaxIsomericState;
+         zai.a <= 3 * zai.z + 30 && zai.i >= 0 && zai.i <= kMaxIsomericState;
 }
 
 // Trailing metastable marker: "m", "M", "m1".."m9". Consumes it from `s` and writes the

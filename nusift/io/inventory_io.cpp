@@ -81,16 +81,6 @@ std::string toLower(std::string_view s) {
   return out;
 }
 
-// A first row whose second field is not a number is a header naming the columns. Detecting
-// it beats requiring one, since half the spreadsheets in the world have one and half do not.
-bool looksLikeHeader(const std::vector<std::string_view>& fields) {
-  if (fields.size() < 2) {
-    return false;
-  }
-  double ignored = 0.0;
-  return !parseNumber(fields[1], ignored);
-}
-
 // Which column holds what. Positional by default -- nuclide, quantity, unit, assayed,
 // uncertainty -- and taken from the header row when one names the columns.
 //
@@ -106,28 +96,104 @@ struct ColumnMap {
   int uncertainty = 4;
 };
 
-// Recognised spellings, with the obvious synonyms a spreadsheet is likely to carry. A header
-// that names neither `nuclide` nor `quantity` is not describing these columns at all, and the
-// reader falls back to positional rather than erroring -- that is what it did before this
-// existed, and a file that worked yesterday must not stop working today.
-bool mapColumns(const std::vector<std::string_view>& header, ColumnMap& out) {
+enum class Column { Nuclide, Quantity, Unit, Assayed, Uncertainty, Unknown };
+
+// What a column name means, with the obvious synonyms a spreadsheet is likely to carry. Shared by
+// the CSV header and the JSON keys, so the two formats accept exactly the same names.
+Column columnNamed(std::string_view text) {
+  const std::string name = toLower(trim(text));
+  if (name == "nuclide" || name == "isotope" || name == "radionuclide") {
+    return Column::Nuclide;
+  }
+  if (name == "quantity" || name == "amount" || name == "value") {
+    return Column::Quantity;
+  }
+  if (name == "unit" || name == "units") {
+    return Column::Unit;
+  }
+  if (name == "assayed" || name == "date" || name == "assay_date") {
+    return Column::Assayed;
+  }
+  if (name == "uncertainty" || name == "sigma" || name == "error") {
+    return Column::Uncertainty;
+  }
+  return Column::Unknown;
+}
+
+constexpr const char* kColumnNames =
+    "nuclide, quantity, unit, assayed, uncertainty (or isotope, amount, units, date, sigma)";
+
+// Classify a first row whose quantity field is not a number, and map the columns if it is a
+// header. Returns false when the row is data after all -- one whose quantity is simply bad, which
+// the caller then refuses on its own line.
+//
+// Each refusal here closes a way a file was read wrongly with no error. A header that names the
+// nuclide and the quantity but spells the unit column some other way used to leave the unit
+// unmapped, and every row then defaulted to ATOMS: 1e14 Bq of Cs-137 became 1e14 atoms, seven
+// decades low. A misnamed date column did the same to the dates, so dated assays were summed
+// without being reconciled. And a first data row with a malformed quantity used to pass for a
+// header and vanish.
+//
+// What is still accepted is a header naming none of the columns at all, which is read
+// positionally as it always was: such a header is not describing the columns, so ignoring it
+// cannot misread one.
+bool takeHeader(const std::vector<std::string_view>& fields, const std::string& source, int line,
+                ColumnMap& out) {
+  if (parseNuclideName(fields.front()).has_value()) {
+    return false;
+  }
   ColumnMap mapped{-1, -1, -1, -1, -1};
-  for (int i = 0; i < static_cast<int>(header.size()); ++i) {
-    const std::string name = toLower(header[static_cast<std::size_t>(i)]);
-    if (name == "nuclide" || name == "isotope" || name == "radionuclide") {
-      mapped.nuclide = i;
-    } else if (name == "quantity" || name == "amount" || name == "value") {
-      mapped.quantity = i;
-    } else if (name == "unit" || name == "units") {
-      mapped.unit = i;
-    } else if (name == "assayed" || name == "date" || name == "assay_date") {
-      mapped.assayed = i;
-    } else if (name == "uncertainty" || name == "sigma" || name == "error") {
-      mapped.uncertainty = i;
+  std::vector<std::string> unknown;
+  int recognised = 0;
+  for (int i = 0; i < static_cast<int>(fields.size()); ++i) {
+    const std::string_view name = trim(fields[static_cast<std::size_t>(i)]);
+    // A blank name is an unnamed trailing column, which spreadsheets export freely. Nothing reads
+    // it, and nothing could be misread through it.
+    if (name.empty()) {
+      continue;
     }
+    int* slot = nullptr;
+    switch (columnNamed(name)) {
+      case Column::Nuclide:
+        slot = &mapped.nuclide;
+        break;
+      case Column::Quantity:
+        slot = &mapped.quantity;
+        break;
+      case Column::Unit:
+        slot = &mapped.unit;
+        break;
+      case Column::Assayed:
+        slot = &mapped.assayed;
+        break;
+      case Column::Uncertainty:
+        slot = &mapped.uncertainty;
+        break;
+      case Column::Unknown:
+        unknown.emplace_back(name);
+        continue;
+    }
+    if (*slot >= 0) {
+      failAt(source, line, "the header names the column \"" + std::string(name) + "\" twice");
+    }
+    *slot = i;
+    ++recognised;
+  }
+  if (recognised == 0) {
+    return true;
+  }
+  if (!unknown.empty()) {
+    failAt(source, line,
+           "the header names a column \"" + unknown.front() +
+               "\" this reader does not know, so it cannot say what the column holds -- and a "
+               "unit, date or uncertainty it missed would be read as absent. The columns are " +
+               kColumnNames);
   }
   if (mapped.nuclide < 0 || mapped.quantity < 0) {
-    return false;
+    failAt(source, line,
+           std::string("the header names some columns but not ") +
+               (mapped.nuclide < 0 ? "the nuclide" : "the quantity") + "; the columns are " +
+               kColumnNames);
   }
   out = mapped;
   return true;
@@ -306,9 +372,10 @@ DatedInventory readInventoryDatedCsv(std::istream& in, const NuclearData& data,
     }
 
     const std::vector<std::string_view> fields = splitFields(content);
-    if (beforeFirstRow && looksLikeHeader(fields)) {
+    double ignored = 0.0;
+    if (beforeFirstRow && fields.size() >= 2 && !parseNumber(fields[1], ignored) &&
+        takeHeader(fields, sourceName, lineNumber, columns)) {
       beforeFirstRow = false;
-      mapColumns(fields, columns);
       continue;
     }
     beforeFirstRow = false;
@@ -377,7 +444,7 @@ DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
                                       const std::string& sourceName,
                                       const InventoryReadOptions& options) {
   // Deliberately a small hand-rolled reader rather than a JSON dependency: the accepted
-  // shape is one flat array of objects with four known keys, and the error messages a
+  // shape is one flat array of flat objects with five known keys, and the error messages a
   // purpose-built parser can give ("line 12: ...") are better than a generic one's.
   std::ostringstream buffer;
   buffer << in.rdbuf();
@@ -438,52 +505,112 @@ DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
       failAt(sourceName, lineOf(pos), "expected an object");
     }
     const std::size_t objectStart = pos;
-    const std::size_t objectEnd = text.find('}', pos);
-    if (objectEnd == std::string::npos) {
-      failAt(sourceName, lineOf(pos), "unterminated object");
-    }
-    const std::string object = text.substr(objectStart, objectEnd - objectStart + 1);
-    pos = objectEnd + 1;
+    ++pos;
 
-    const auto field = [&](const char* name, std::string& out) {
-      const std::string needle = std::string("\"") + name + "\"";
-      const std::size_t at = object.find(needle);
-      if (at == std::string::npos) {
-        return false;
+    // One object, read key by key rather than searched for substrings. Searching matched a key
+    // inside another key or inside a value, ended the object at a '}' that sat in a string, and
+    // ignored a key it was not looking for -- so {"units": "Bq"} read as atoms, seven decades low
+    // for 1e14 Bq of Cs-137. Every key now has to name a column, by the same names the CSV
+    // header accepts, and none may appear twice.
+    const auto readString = [&]() {
+      // At the opening quote. Escapes are honoured as far as an inventory can need them: a
+      // backslash takes the next character literally, which covers \" and \\ and \/.
+      ++pos;
+      std::string value;
+      while (pos < text.size() && text[pos] != '"') {
+        if (text[pos] == '\\') {
+          ++pos;
+          if (pos < text.size() && text[pos] == 'u') {
+            failAt(sourceName, lineOf(pos), "\\u escapes are not supported in an inventory");
+          }
+          if (pos >= text.size()) {
+            break;
+          }
+        }
+        value += text[pos];
+        ++pos;
       }
-      std::size_t colon = object.find(':', at + needle.size());
-      if (colon == std::string::npos) {
-        return false;
+      if (pos >= text.size()) {
+        failAt(sourceName, lineOf(objectStart), "unterminated string");
       }
-      ++colon;
-      while (colon < object.size() &&
-             std::isspace(static_cast<unsigned char>(object[colon])) != 0) {
-        ++colon;
-      }
-      const bool quoted = colon < object.size() && object[colon] == '"';
-      if (quoted) {
-        ++colon;
-      }
-      const std::size_t end = quoted ? object.find('"', colon) : object.find_first_of(",}", colon);
-      if (end == std::string::npos) {
-        return false;
-      }
-      out = object.substr(colon, end - colon);
-      out = std::string(trim(out));
-      return true;
+      ++pos;  // the closing quote
+      return value;
     };
 
-    std::string nuclideText;
-    std::string quantityText;
-    std::string unitText;
-    std::string assayedText;
-    std::string uncertaintyText;
-    if (!field("nuclide", nuclideText) || !field("quantity", quantityText)) {
+    std::string values[5];
+    bool seen[5] = {false, false, false, false, false};
+    bool afterPair = false;
+    while (true) {
+      skipSpace();
+      if (pos >= text.size()) {
+        failAt(sourceName, lineOf(objectStart), "unterminated object");
+      }
+      if (text[pos] == '}') {
+        ++pos;
+        break;
+      }
+      if (afterPair) {
+        if (text[pos] != ',') {
+          failAt(sourceName, lineOf(pos), "expected a comma between keys");
+        }
+        ++pos;
+        skipSpace();
+      }
+      if (pos >= text.size() || text[pos] != '"') {
+        failAt(sourceName, lineOf(pos), "expected a quoted key");
+      }
+      const std::string key = readString();
+      skipSpace();
+      if (pos >= text.size() || text[pos] != ':') {
+        failAt(sourceName, lineOf(pos), "expected ':' after \"" + key + "\"");
+      }
+      ++pos;
+      skipSpace();
+      if (pos >= text.size()) {
+        failAt(sourceName, lineOf(objectStart), "unterminated object");
+      }
+      std::string value;
+      if (text[pos] == '"') {
+        value = readString();
+      } else if (text[pos] == '{' || text[pos] == '[') {
+        failAt(sourceName, lineOf(pos),
+               "\"" + key + "\" holds a nested value; give a number or a string");
+      } else {
+        const std::size_t end = text.find_first_of(",}", pos);
+        if (end == std::string::npos) {
+          failAt(sourceName, lineOf(objectStart), "unterminated object");
+        }
+        value = std::string(trim(std::string_view(text).substr(pos, end - pos)));
+        pos = end;
+      }
+
+      const Column column = columnNamed(key);
+      if (column == Column::Unknown) {
+        failAt(sourceName, lineOf(objectStart),
+               "\"" + key +
+                   "\" is not a key this reader knows, so it cannot say what it holds. "
+                   "The keys are " +
+                   kColumnNames);
+      }
+      const std::size_t slot = static_cast<std::size_t>(column);
+      if (seen[slot]) {
+        failAt(sourceName, lineOf(objectStart), "\"" + key + "\" names a column given twice");
+      }
+      seen[slot] = true;
+      // JSON's null says nothing, which is what an absent key says too.
+      values[slot] = value == "null" ? std::string() : std::string(trim(value));
+      afterPair = true;
+    }
+
+    if (!seen[static_cast<std::size_t>(Column::Nuclide)] ||
+        !seen[static_cast<std::size_t>(Column::Quantity)]) {
       failAt(sourceName, lineOf(objectStart), "an entry needs \"nuclide\" and \"quantity\"");
     }
-    field("unit", unitText);
-    field("assayed", assayedText);
-    field("uncertainty", uncertaintyText);
+    const std::string& nuclideText = values[static_cast<std::size_t>(Column::Nuclide)];
+    const std::string& quantityText = values[static_cast<std::size_t>(Column::Quantity)];
+    const std::string& unitText = values[static_cast<std::size_t>(Column::Unit)];
+    const std::string& assayedText = values[static_cast<std::size_t>(Column::Assayed)];
+    const std::string& uncertaintyText = values[static_cast<std::size_t>(Column::Uncertainty)];
 
     const Zai zai = requireNuclideName(nuclideText,
                                        sourceName + " line " + std::to_string(lineOf(objectStart)));
@@ -622,7 +749,9 @@ void writeInventoryCsv(std::ostream& out, const Inventory& inventory, const Nucl
   for (const InventoryEntry& entry : inventory.entries()) {
     const Zai zai = Zai::fromKey(entry.zaiKey);
     const int index = data.indexOf(zai);
-    Quantity used = unit;
+    // A nuclide the store does not carry is written in atoms, the one unit that needs no data
+    // about it -- and labelled atoms, rather than with the unit its number is not in.
+    Quantity used = index >= 0 ? unit : Quantity::Atoms;
     const double value = index >= 0 ? emitValue(entry.atoms, unit, index, data, used) : entry.atoms;
     // Every digit the value has, and no more: an inventory written here is read back as the
     // seed of a later run, and a count rounded on the way out is a different inventory.
@@ -638,7 +767,9 @@ void writeInventoryJson(std::ostream& out, const Inventory& inventory, const Nuc
   for (const InventoryEntry& entry : inventory.entries()) {
     const Zai zai = Zai::fromKey(entry.zaiKey);
     const int index = data.indexOf(zai);
-    Quantity used = unit;
+    // A nuclide the store does not carry is written in atoms, the one unit that needs no data
+    // about it -- and labelled atoms, rather than with the unit its number is not in.
+    Quantity used = index >= 0 ? unit : Quantity::Atoms;
     const double value = index >= 0 ? emitValue(entry.atoms, unit, index, data, used) : entry.atoms;
     if (!firstEntry) {
       out << ",\n";

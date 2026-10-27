@@ -130,16 +130,26 @@ TEST(NuclideName, RequireIncludesContextWhenGiven) {
 TEST(NuclideName, RejectsAMassNumberTheKeyCannotHold) {
   EXPECT_FALSE(parseNuclideName("U-1000").has_value());
   EXPECT_FALSE(parseNuclideName("H-99999").has_value());
-  // The boundary itself still parses, and still round-trips through the key.
-  const auto widest = parseNuclideName("U-999");
-  ASSERT_TRUE(widest.has_value());
-  EXPECT_EQ(Zai::fromKey(widest->key()), *widest);
+}
+
+// Past the key's range there is the nucleus's: no known nuclide has A above 3Z + 30. That bound
+// is what refuses an MCNP-style ZZAAA, which the ZAI-key reading of a bare number would otherwise
+// turn into a nuclide nobody named -- 55137 into B-513m7, 92235 into F-223m5.
+TEST(NuclideName, RejectsAMassNumberNoNucleusReaches) {
+  const auto heaviest = parseNuclideName("U-306");
+  ASSERT_TRUE(heaviest.has_value());
+  EXPECT_EQ(Zai::fromKey(heaviest->key()), *heaviest);
+  EXPECT_FALSE(parseNuclideName("U-307").has_value());
+  EXPECT_TRUE(parseNuclideName("H-7").has_value());
+  EXPECT_FALSE(parseNuclideName("55137").has_value());
+  EXPECT_FALSE(parseNuclideName("92235").has_value());
+  EXPECT_TRUE(parseNuclideName("551370").has_value()) << "the ZAI key itself still parses";
 }
 
 // The invariant the bound exists to protect: whatever the parser accepts has to survive the
 // packed key it will then be persisted and looked up under.
 TEST(NuclideName, EverythingAcceptedSurvivesThePackedKey) {
-  const char* names[] = {"Cs-137", "am242m", "U-235", "H-1", "U-999", "551370", "092-U-235"};
+  const char* names[] = {"Cs-137", "am242m", "U-235", "H-1", "U-306", "551370", "092-U-235"};
   for (const char* name : names) {
     const auto zai = parseNuclideName(name);
     ASSERT_TRUE(zai.has_value()) << name;
