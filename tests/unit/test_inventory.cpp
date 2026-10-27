@@ -190,8 +190,8 @@ TEST(InventoryUnits, ParsesUnitSpellingsCaseInsensitively) {
 }
 
 // mCi and MBq differ only in case, and getting them confused is a factor of 27 error in
-// the inventory. The parser is case-insensitive by design, so this pins that the two
-// spellings remain distinguishable anyway.
+// the inventory. The parser folds case everywhere but the m/M prefix, so this pins that the
+// two spellings remain distinguishable.
 TEST(InventoryUnits, MilliCurieAndMegaBecquerelDoNotCollide) {
   Quantity a{};
   Quantity b{};
@@ -200,6 +200,28 @@ TEST(InventoryUnits, MilliCurieAndMegaBecquerelDoNotCollide) {
   EXPECT_EQ(a, Quantity::Millicurie);
   EXPECT_EQ(b, Quantity::Megabecquerel);
   EXPECT_NE(a, b);
+}
+
+// The prefix case is the one part of a spelling that is read as written. Folding it made "mBq" a
+// megabecquerel and "MCi" a millicurie -- 1e9 off in each direction, with no error -- so a
+// spelling naming a unit the list does not carry is refused rather than read as its neighbour.
+TEST(InventoryUnits, MilliAndMegaAreReadAsWrittenNotFolded) {
+  Quantity q{};
+  EXPECT_TRUE(parseQuantity("MBQ", q));
+  EXPECT_EQ(q, Quantity::Megabecquerel);
+  EXPECT_TRUE(parseQuantity("mCI", q));
+  EXPECT_EQ(q, Quantity::Millicurie);
+  EXPECT_TRUE(parseQuantity("mG", q));
+  EXPECT_EQ(q, Quantity::Milligrams);
+  EXPECT_TRUE(parseQuantity("μCi", q));
+  EXPECT_EQ(q, Quantity::Microcurie);
+
+  const Quantity untouched = Quantity::Atoms;
+  for (const char* spelling : {"mBq", "mbq", "MCi", "MCI", "Mg", "MG"}) {
+    q = untouched;
+    EXPECT_FALSE(parseQuantity(spelling, q)) << spelling;
+    EXPECT_EQ(q, untouched) << spelling;
+  }
 }
 
 TEST(InventoryUnits, RejectsUnknownSpellings) {

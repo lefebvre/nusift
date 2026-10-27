@@ -41,9 +41,11 @@ enum class Quantity {
   Microcurie,
 };
 
-// Parse a unit spelling from an inventory file or CLI argument, case-insensitively:
-// "atoms", "g", "kg", "mg", "mol", "bq", "kbq", "mbq", "gbq", "tbq", "ci", "mci", "uci".
-// Returns false if unrecognised, leaving `out` untouched.
+// Parse a unit spelling from an inventory file or CLI argument: "atoms", "g", "kg", "mg", "mol",
+// "Bq", "kBq", "MBq", "GBq", "TBq", "Ci", "mCi", "uCi". Case-insensitive except for an m/M
+// prefix, which is read as written because milli and mega differ only in that case: "mCi" is a
+// millicurie and "MBq" a megabecquerel, while "mBq" and "MCi" name units this list does not carry
+// and are refused. Returns false if unrecognised, leaving `out` untouched.
 bool parseQuantity(std::string_view text, Quantity& out);
 
 // Canonical spelling, for round-tripping an inventory back out.

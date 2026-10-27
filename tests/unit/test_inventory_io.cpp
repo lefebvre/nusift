@@ -76,6 +76,57 @@ TEST(InventoryIo, FirstRowIsKeptWhenThereIsNoHeader) {
   EXPECT_DOUBLE_EQ(inventory.atomsOf(kUnstable), 1.0e20);
 }
 
+// A header that names the nuclide and the quantity but spells another column some way the
+// reader does not know used to leave that column unmapped. For the unit, every row then
+// defaulted to atoms -- 1e6 Bq read as 1e6 atoms -- and for the date, dated assays were summed
+// without being reconciled. Both are refused now, naming the column.
+TEST(InventoryIo, AHeaderColumnTheReaderDoesNotKnowIsRefused) {
+  const NuclearData data = chain();
+  for (const char* header : {"nuclide,quantity,unit_of_measure", "nuclide,quantity,unit,assay date",
+                             "nuclide,quantity,unit,notes"}) {
+    try {
+      parse(std::string(header) + "\nSn-100,1.0e6,Bq,2024-01-01\n", data);
+      FAIL() << "expected InputError for " << header;
+    } catch (const InputError& e) {
+      EXPECT_NE(std::string(e.what()).find("line 1"), std::string::npos) << e.what();
+      EXPECT_NE(std::string(e.what()).find("does not know"), std::string::npos) << e.what();
+    }
+  }
+  EXPECT_THROW(parse("nuclide,unit\nSn-100,Bq\n", data), InputError);  // no quantity named
+  EXPECT_THROW(parse("nuclide,quantity,unit,units\nSn-100,1,Bq,Bq\n", data), InputError);
+}
+
+// The synonyms the reader documents still map, in any order, and a blank trailing column that a
+// spreadsheet exported is not a column anyone named.
+TEST(InventoryIo, AHeaderMapsColumnsByNameInAnyOrder) {
+  const NuclearData data = chain();
+  const Inventory inventory = parse("Units,Isotope,Amount,\nBq,Sn-100,1.0e6,\n", data);
+  EXPECT_NEAR(inventory.atomsOf(kUnstable), 1.0e6 / data.decayConstant(data.indexOf(kUnstable)),
+              1.0);
+}
+
+// A first data row whose quantity is malformed used to pass for a header -- its second field was
+// not a number -- and was dropped without a word. A row that opens with a nuclide is data.
+TEST(InventoryIo, AMalformedFirstRowIsRefusedRatherThanTakenForAHeader) {
+  const NuclearData data = chain();
+  for (const char* row : {"Sn-100,1.0e6Bq\n", "Sn-100,,Bq\n", "Sn-100,nan,Bq\n"}) {
+    try {
+      parse(std::string(row) + "Sb-100,1.0e20,atoms\n", data);
+      FAIL() << "expected InputError for " << row;
+    } catch (const InputError& e) {
+      EXPECT_NE(std::string(e.what()).find("line 1"), std::string::npos) << e.what();
+    }
+  }
+}
+
+// A header naming none of the columns is not describing them, so it is skipped and the columns
+// read positionally, as they always were. Nothing in it could be misread.
+TEST(InventoryIo, AHeaderNamingNoKnownColumnIsReadPositionally) {
+  const NuclearData data = chain();
+  const Inventory inventory = parse("name,qty,uom\nSn-100,1.0e20,atoms\n", data);
+  EXPECT_DOUBLE_EQ(inventory.atomsOf(kUnstable), 1.0e20);
+}
+
 // Mixed units in one file is the normal case, not an edge case: an inventory is assembled
 // from sources that each report in their own units.
 TEST(InventoryIo, EachRowCarriesItsOwnUnit) {
@@ -284,6 +335,40 @@ TEST(InventoryIo, JsonRejectsMalformedInput) {
   // from_chars reads "inf" and "nan" as numbers. An inventory quantity is a physical amount.
   EXPECT_THROW(readIt(R"([{"nuclide": "Sn-100", "quantity": inf}])"), InputError);
   EXPECT_THROW(readIt(R"([{"nuclide": "Sn-100", "quantity": nan}])"), InputError);
+}
+
+// Keys are read one by one, by the names the CSV header accepts. A substring search ignored
+// "units" -- so 1e6 Bq read as 1e6 atoms -- found keys inside values, and ended an object at a
+// brace inside a string.
+TEST(InventoryIo, JsonReadsKeysByNameAndRefusesOnesItDoesNotKnow) {
+  const NuclearData data = chain();
+  const auto readIt = [&](const std::string& text) {
+    std::istringstream in(text);
+    return readInventoryJson(in, data, "test.json");
+  };
+  const double perBq = 1.0 / data.decayConstant(data.indexOf(kUnstable));
+
+  EXPECT_NEAR(
+      readIt(R"([{"isotope": "Sn-100", "amount": 1.0e6, "units": "Bq"}])").atomsOf(kUnstable),
+      1.0e6 * perBq, 1.0);
+  EXPECT_NEAR(
+      readIt(R"([{"unit": "Bq", "quantity": 1.0e6, "nuclide": "Sn-100"}])").atomsOf(kUnstable),
+      1.0e6 * perBq, 1.0);
+  // A key that only CONTAINS a known name, a brace inside a string, and an escaped quote.
+  EXPECT_THROW(readIt(R"([{"nuclide": "Sn-100", "quantity": 1, "unit_of_measure": "Bq"}])"),
+               InputError);
+  EXPECT_THROW(readIt(R"([{"nuclide": "Sn-100", "quantity": 1, "note": "a } b"}])"), InputError);
+  // Outside the macro, because MSVC misreads a backslash in a raw string passed as an argument.
+  const std::string escapedQuote = R"([{"nuclide": "Sn-100", "quantity": 1, "unit": "B\"q"}])";
+  EXPECT_THROW(readIt(escapedQuote), InputError);
+  // Twice, under two spellings of one column.
+  EXPECT_THROW(readIt(R"([{"nuclide": "Sn-100", "quantity": 1, "unit": "Bq", "units": "Ci"}])"),
+               InputError);
+  EXPECT_THROW(readIt(R"([{"nuclide": "Sn-100", "quantity": {"v": 1}}])"), InputError);
+  // null says nothing, as an absent key does.
+  EXPECT_DOUBLE_EQ(
+      readIt(R"([{"nuclide": "Sn-100", "quantity": 1e20, "unit": null}])").atomsOf(kUnstable),
+      1.0e20);
 }
 
 // Being liberal about the punctuation is not kindness. A reader that skips any run of commas
