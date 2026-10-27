@@ -180,29 +180,32 @@ void readExtras(const std::string& path, std::map<std::int64_t, ExtraData>& extr
     // exposure sum downstream is a plain sum over every line staged -- so an evaluation that
     // lists it twice would double the strongest line of every positron emitter.
     //
-    // Reported rather than silently resolved: which of the two entries is the duplicate is a
-    // judgement about that evaluation, and dropping the wrong one loses real data. ENDF/B-VIII.1
-    // makes the choice in neither direction, so this is quiet on the shipped tapes -- which is
-    // the point of checking rather than assuming.
+    // Reported rather than silently resolved: which of the two entries is the duplicate -- if
+    // either is -- is a judgement about that evaluation, and dropping the wrong one loses real
+    // data. So the report gives both intensities and what the gamma entry would add if it were
+    // the annihilation photon again, and both entries are staged as evaluated.
+    //
+    // ENDF/B-VIII.1 trips this for Rb-77 and Tb-153, and in both the entries are not copies of
+    // one another: Rb-77's gamma entry is 0.008 per decay beside an annihilation line of 1.93,
+    // so even read as a duplicate it adds 0.4% to that line. An earlier wording called every
+    // such case "counted twice", which is the one reading the intensities rule out.
     constexpr double kAnnihilationEv = 511.0e3;
     constexpr double kAnnihilationWindowEv = 100.0;  // a line NAMED 511 keV, not one near it
-    bool annihilationAsGamma = false;
-    bool annihilationAsXray = false;
+    double annihilationAsGamma = 0.0;
+    double annihilationAsXray = 0.0;
     for (std::size_t k = 0; k < extra.lineEnergyEv.size(); ++k) {
       if (std::abs(extra.lineEnergyEv[k] - kAnnihilationEv) > kAnnihilationWindowEv) {
         continue;
       }
-      if (extra.lineStyp[k] == 9) {
-        annihilationAsXray = true;
-      } else {
-        annihilationAsGamma = true;
-      }
+      (extra.lineStyp[k] == 9 ? annihilationAsXray : annihilationAsGamma) += extra.lineIntensity[k];
     }
-    if (annihilationAsGamma && annihilationAsXray) {
+    if (annihilationAsGamma > 0.0 && annihilationAsXray > 0.0) {
       std::fprintf(stderr,
-                   "  warning: %s lists 511 keV under both STYP 0 and STYP 9; both are staged "
-                   "and summed, so annihilation is counted twice for this nuclide\n",
-                   formatNuclideName(Zai::fromKey(key)).c_str());
+                   "  note: %s lists 511 keV under both STYP 0 (%.4g per decay) and STYP 9 "
+                   "(%.4g per decay); both are staged as evaluated. Were the STYP 0 entry the "
+                   "annihilation photon again, it would add %.2g%% to that line\n",
+                   formatNuclideName(Zai::fromKey(key)).c_str(), annihilationAsGamma,
+                   annihilationAsXray, 100.0 * annihilationAsGamma / annihilationAsXray);
     }
 
     // Photon energy the discrete lines do not account for -- a continuous spectrum, most
@@ -419,10 +422,50 @@ YieldUncertainties readYieldUncertainties(const std::string& path) {
   return out;
 }
 
+// The fissile parent the tape itself names: Z and A from MF1/MT451's ZA, the isomeric state
+// from its LISO. Empty when the tape carries no MT451 to read.
+std::optional<cram::Zai> tapeParent(const std::string& path) {
+  using namespace njoy::ENDFtk;
+
+  auto tape = tree::fromFile(path);
+  for (const auto& material : tape.materials()) {
+    if (!material.hasSection(1, 451)) {
+      continue;
+    }
+    const auto info = material.section(1, 451).parse<1, 451>();
+    const int za = static_cast<int>(std::lround(info.ZA()));
+    return cram::Zai{za / 1000, za % 1000, info.LISO()};
+  }
+  return std::nullopt;
+}
+
 // Load one fission-yield tape and append its distinct energy sets. Returns the number kept,
 // or -1 if the tape could not be read.
-int appendYields(std::vector<YieldSet>& sets, const std::string& path, const cram::Zai& parent,
+//
+// The sets are staged under the parent the TAPE names, isomer included. cram's reader files
+// every set under the ground state of the tape's ZA, so a parent asked for as an isomer --
+// Am-242m, the one isomer ENDF evaluates fission yields for -- found nothing in the chain cram
+// built, and the tape was dropped with no word: zero sets, counted as nothing, while Am-242m
+// went on being listed as a parent with no yields.
+int appendYields(std::vector<YieldSet>& sets, const std::string& path, cram::Zai parent,
                  int& withSigma, int& withoutSigma) {
+  try {
+    if (const std::optional<cram::Zai> named = tapeParent(path); named.has_value()) {
+      if (named->z != parent.z || named->a != parent.a) {
+        std::fprintf(stderr, "  skip %s: the tape is for Z=%d A=%d, not Z=%d A=%d\n", path.c_str(),
+                     named->z, named->a, parent.z, parent.a);
+        return -1;
+      }
+      parent = *named;
+    }
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "  warning: cannot read the parent from %s (%s); using Z=%d A=%d I=%d\n",
+                 path.c_str(), e.what(), parent.z, parent.a, parent.i);
+  }
+  // Where cram filed the sets. The scratch chain holds this one tape and nothing else, so the
+  // ground-state lookup cannot find another parent's yields.
+  const cram::Zai filedUnder{parent.z, parent.a, 0};
+
   cram::DepletionChain scratch;
   YieldUncertainties uncertainties;
   try {
@@ -445,7 +488,7 @@ int appendYields(std::vector<YieldSet>& sets, const std::string& path, const cra
   std::set<double> seen;
   int kept = 0;
   for (const double probe : kProbeEnergiesEv) {
-    const cram::FissionYields* yields = scratch.nearestYields(parent, probe);
+    const cram::FissionYields* yields = scratch.nearestYields(filedUnder, probe);
     if (yields == nullptr || seen.count(yields->energy) != 0) {
       continue;
     }
@@ -490,6 +533,12 @@ int appendYields(std::vector<YieldSet>& sets, const std::string& path, const cra
     }
     sets.push_back(std::move(set));
     ++kept;
+  }
+  // A tape cram read without complaint that still produced no set is a tape this tool has
+  // failed to stage, and it says so -- the silent zero is how Am-242m went missing.
+  if (kept == 0) {
+    std::fprintf(stderr, "  warning: %s read, but no yield set was found for Z=%d A=%d I=%d\n",
+                 path.c_str(), parent.z, parent.a, parent.i);
   }
   return kept;
 }
@@ -564,10 +613,19 @@ int main(int argc, char** argv) {
     int tapesRead = 0;
     int tapesFailed = 0;
 
+    // The extras are read FIRST, into a map of their own, and merged only once cram has taken
+    // the tape too. In the other order a tape whose lines or energies could not be read was
+    // reported as skipped while cram had already put it on the axis -- staged with a half-life
+    // and no photons, no decay energy and no continuum, so its exposure and heat were silent
+    // zeros of exactly the kind the continuum field exists to tell apart from "emits nothing".
     const auto stageDecayTape = [&](const std::string& path) {
       try {
+        std::map<std::int64_t, ExtraData> fromTape;
+        readExtras(path, fromTape);
         cram::loadDecayData(chain, path);
-        readExtras(path, extras);
+        for (auto& [key, extra] : fromTape) {
+          extras[key] = std::move(extra);
+        }
         ++tapesRead;
       } catch (const std::exception& e) {
         std::fprintf(stderr, "  skip %s: %s\n", path.c_str(), e.what());
@@ -795,10 +853,6 @@ int main(int argc, char** argv) {
       arrays.nfySetOffset.push_back(static_cast<int>(arrays.nfyProductKey.size()));
     }
 
-    // Average light- and heavy-particle decay energies are left unstaged. The store reserves
-    // them for decay heat, which is not implemented, and an empty field is honestly "never
-    // staged" whereas a column of zeros would read as "no energy".
-
     // Masses for the nuclides the LOADER will add but the axis does not carry. Which ones
     // those are is not something this tool can work out from its own chain: closure happens
     // when the store is read, from the fission-yield products and decay daughters the arrays
@@ -906,7 +960,7 @@ int main(int argc, char** argv) {
     if (massMismatches > 0) {
       std::fprintf(stderr,
                    "  warning: %d nuclide(s) have ENDF and AME2020 atomic weights that "
-                   "disagree by more than rounding; the ENDF value is staged for each\n",
+                   "disagree by more than rounding; the AME2020 value is staged for each\n",
                    massMismatches);
     }
   } catch (const std::exception& e) {

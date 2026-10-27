@@ -20,10 +20,11 @@
 // that would produce a store, because "no data store found" on its own leaves a new user
 // with nowhere to go.
 //
-// A directory in step 4 or 5 that holds more than one store is ambiguous by nature. The first
-// by name is used, and the choice is echoed in every report header -- but a source tree with
-// locally staged fixtures beside the committed store makes that the wrong one, silently, so
-// the search also says what it passed over when given somewhere to say it.
+// A directory in step 4 or 5 that holds more than one store is ambiguous by nature. Stores named
+// nusift_*.h5 come first and then every other .h5, each group by name, and the first is used: a
+// source tree's locally staged fixtures (am242m.h5, test_store.h5) no longer win over the
+// committed store on spelling alone. The choice is echoed in every report header, and the
+// search also says what it passed over when given somewhere to say it.
 //
 #include <iosfwd>
 #include <string>
