@@ -224,10 +224,16 @@ jobs:
       - name: The validation report must match what is committed
         env:
           PYTHONPATH: python
+        # `git status --porcelain` for the reason the scenario step below gives: `git diff` sees
+        # only tracked files, and a figure the generator newly writes is untracked.
         run: |
           python validation/make_report.py
-          git diff --exit-code -- docs/validation.md docs/figures/ \
-            || (echo "::error::validation report is stale; run validation/make_report.py and commit the result" && exit 1)
+          drift="$(git status --porcelain -- docs/validation.md docs/figures/)"
+          if [ -n "$drift" ]; then
+            echo "$drift"
+            echo "::error::validation report is stale; run validation/make_report.py and commit the result"
+            exit 1
+          fi
 
       # The capability figures in docs/scenarios.md get the same treatment, and can: they are
       # drawn from CLI output committed under docs/figures/data/, so this step needs neither a
@@ -238,15 +244,73 @@ jobs:
       # diff sees only tracked files that changed. It is blind to a figure the generator writes
       # that nobody committed, and blind to a committed figure the generator has stopped writing.
       # Both are real drift between the script and the tree, and both would have passed silently.
-      - name: The scenario figures must match what is committed
+      #
+      # make_figures.py -- the methodology figures, drawn from the compiled-in coefficient tables
+      # and committed data -- is held to the same rule. Its docstring says its figures cannot
+      # drift; this is the step that makes that true rather than intended. It reproduces the
+      # committed figures byte for byte on Linux; on Windows one point of cancellation-error.svg
+      # lands a hair away, which is why the gate runs here.
+      - name: The scenario and methodology figures must match what is committed
         run: |
           python docs/figures/make_scenario_figures.py
+          python docs/figures/make_figures.py
           drift="$(git status --porcelain -- docs/figures/)"
           if [ -n "$drift" ]; then
             echo "$drift"
-            echo "::error::scenario figures drifted from the committed tree (changed, added, or no longer generated); run docs/figures/make_scenario_figures.py and commit the result"
+            echo "::error::figures drifted from the committed tree (changed, added, or no longer generated); run docs/figures/make_scenario_figures.py and docs/figures/make_figures.py and commit the result"
             exit 1
           fi
+
+  # The wheel as a user gets it. python-bindings above imports the extension from the source tree,
+  # which never exercises what the README promises of an installed package: that the store ships
+  # inside it and NuclearData.open() finds it with no argument. The SKBUILD install rules and
+  # _data.default_store_path() are reached only here, and the one test that named them replaced
+  # the function it was testing.
+  #
+  # Linux only, and deliberately a check rather than a release build. The wheel links the system
+  # HDF5, which is present on this runner; making it portable (auditwheel, delocate, and bundling
+  # HDF5 on Windows) is the cibuildwheel job a release will need, not this one.
+  wheel-smoke:
+    needs: format-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake g++ ninja-build libhdf5-dev
+          python -m pip install --upgrade pip
+
+      - name: Build the wheel
+        run: python -m pip wheel . --no-deps -w wheelhouse
+
+      # From a directory with no ./data, in a venv that has never seen the source tree, and with
+      # no $NUSIFT_DATA_STORE: every other way of finding a store is closed, so a pass means the
+      # packaged one was found.
+      - name: Install it away from the source tree and use it
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-env"
+          "$RUNNER_TEMP/wheel-env/bin/pip" install wheelhouse/nusift-*.whl
+          cd "$RUNNER_TEMP"
+          unset NUSIFT_DATA_STORE
+          "$RUNNER_TEMP/wheel-env/bin/python" - <<'EOF'
+          import os
+          import nusift
+
+          assert "site-packages" in nusift.__file__, nusift.__file__
+          assert "NUSIFT_DATA_STORE" not in os.environ
+          nd = nusift.NuclearData.open()
+          print("store:", nd.library, nd.size, "nuclides")
+          assert nd.library == "ENDF/B-VIII.1", nd.library
+          assert nd.size > 3000, nd.size
+          inv = nusift.seed_fission(nd, "U-235", energy="thermal", yield_kt=20)
+          res = nusift.decay(nd, inv, nusift.logspace("1h", "30d", 4))
+          top = nusift.response(nd, res, metric="activity").rank(at="1d", top=3).contributors
+          print("1 d leaders:", [c.label for c in top])
+          assert len(top) == 3 and top[0].value > 0
+          EOF
 
   # The STAGING configuration -- the second of the two build configurations, and the only one
   # that touches ENDFtk. Slow, because it compiles ENDFtk, spdlog, and range-v3 from source,

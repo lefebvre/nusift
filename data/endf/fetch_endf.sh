@@ -49,18 +49,34 @@ fetch_one() {
 export -f fetch_one
 export BASE DEST
 
+short=0
 for sublibrary in "${SUBLIBRARIES[@]}"; do
   mkdir -p "$DEST/$sublibrary"
   echo "listing $sublibrary ..."
   listing="$(mktemp)"
+  # Archive names come from a web page, so only plain file names are kept: anything else is not
+  # a tape this script knows how to fetch, and it never reaches a shell.
   curl -sf --max-time 120 "$BASE/$sublibrary/" \
-    | grep -oE 'href="[^"]*\.zip"' | sed 's/href="//;s/"//' | sort -u > "$listing"
-  echo "  $(wc -l < "$listing") tapes"
+    | grep -oE 'href="[^"]*\.zip"' | sed 's/href="//;s/"//' \
+    | grep -E '^[A-Za-z0-9._+-]+\.zip$' | sort -u > "$listing"
+  listed="$(wc -l < "$listing" | tr -d ' ')"
+  echo "  $listed tapes"
 
+  # The name is handed to bash -c as an ARGUMENT, never spliced into its source: substituted in
+  # with -I{}, a name holding $(...) or a backtick would have run. Read on stdin rather than with
+  # -a, which is GNU-only and stopped the script on macOS.
   export sublibrary
-  xargs -a "$listing" -P "$PARALLEL" -I{} bash -c 'fetch_one "$sublibrary" "{}"'
+  xargs -P "$PARALLEL" -n 1 bash -c 'fetch_one "$sublibrary" "$1"' _ < "$listing"
   rm -f "$listing"
-  echo "  $sublibrary: $(find "$DEST/$sublibrary" -type f | wc -l) files"
+
+  # One missing tape costs that nuclide rather than the run, but it is not silent: a store
+  # staged from a short directory is missing nuclides nothing else would report.
+  have="$(find "$DEST/$sublibrary" -name '*.dat' -type f | wc -l | tr -d ' ')"
+  echo "  $sublibrary: $have of $listed tapes"
+  if [ "$have" -lt "$listed" ]; then
+    echo "  error: $((listed - have)) $sublibrary tape(s) missing; run this again to retry them" >&2
+    short=1
+  fi
 done
 
 cat <<EOF
@@ -75,3 +91,4 @@ Stage a store with (a staging build -- Linux, WSL, or macOS; see the README):
     --sfy-dir   "$DEST/sfpy" \\
     -o data/nusift_b8.1.h5 --library "ENDF/B-VIII.1"
 EOF
+exit "$short"

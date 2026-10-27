@@ -73,3 +73,7 @@ CAPABILITY_PLANNING.md
 # dropped into the root was not covered, and `git add -A` committed 700 KB of it before anyone
 # noticed. No PDF at the top level belongs in this repository.
 /*.pdf
+
+# Scratch output from running the CLI in the tree: `decay --write cooled.csv` and the like. No
+# CSV belongs at the top level -- examples, packs and figure data all live in subdirectories.
+/*.csv

@@ -90,7 +90,7 @@ nusift plan -i inventory.csv --at 30d --metric exposure --units Sv --budget 2e-3
         --leg "approach,3m,4" --leg "valve work,20m,0.8" --leg "break:10m" \
         --leg "reassemble,15m,1.2,0.7" --leg "retreat,3m,4"
 
-# The smallest monitoring list holding 95% of BOTH metrics at every time on the grid
+# A short monitoring list holding 95% of BOTH metrics at every time on the grid
 nusift shortlist --seed-fission U-235 --yield-kt 20 --times 1h:100y:log:40 \
         --metrics activity,exposure --coverage 0.95
 
@@ -336,7 +336,8 @@ Implemented:
 - Dominance forecasting: who leads, and when that changes
 - Located events: crossings, turns, level windows, and when a fixed-length task fits a budget
 - Stay times: how long a stay beginning at a given time can run before it spends a dose budget
-- Robust triage sets: the smallest list holding a coverage floor across every metric and time
+- Robust triage sets: a short list, built greedily, holding a coverage floor across every
+  metric and time
 - Piecewise task plans: a job as legs with their own distance, occupancy, and breaks
 - Seed attribution: which seeded nuclide a response is riding on, as an exact partition
 - Counterfactual interventions: what removing a nuclide or an element on a date is worth later
