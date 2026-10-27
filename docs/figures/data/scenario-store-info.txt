@@ -1,7 +1,7 @@
 store:            data/nusift_b8.1.h5
 schema version:   1
 library:          ENDF/B-VIII.1
-staged:           2026-09-19T18:41:22Z
+staged:           2026-10-27T11:23:49Z
 staged by:        0.1.0
 tapes staged:     3821
 nuclides staged:  3828
@@ -16,7 +16,7 @@ unstable nuclides:              3562
     of those, >5% continuum:    34
     of those, clamped lines:    1471
   emit photons, no spectrum:    1546
-  SF branch, no yields staged:  103
+  SF branch, no yields staged:  102
 nuclides with atomic weights:   3947
   from AME2020:                 3947
     of those, extrapolated:     725
@@ -34,9 +34,9 @@ clamped end values rather than interpolations, so their contribution to an expos
 is an order-of-magnitude figure. Nearly all are soft X-rays, which any real source
 encapsulation absorbs before they reach air.
 
-103 nuclides have a spontaneous-fission branch but no fission-yield set of any
+102 nuclides have a spontaneous-fission branch but no fission-yield set of any
 energy. The branch removes atoms from the parent and produces nothing in their
 place, so a chain passing through one of them does not conserve atoms. Negligible
 for a fission-product source; worth knowing for an actinide inventory. Staging the
 SFY sublibrary (--sfy-dir) closes the gap. Affected:
-    Tl-180, Th-230, Pu-236, Pu-244, Am-242m, Am-242m2, Cm-234, Cm-244m, and 95 more
+    Tl-180, Th-230, Pu-236, Pu-244, Am-242m2, Cm-234, Cm-244m, Cm-250, and 94 more

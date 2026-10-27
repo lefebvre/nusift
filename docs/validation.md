@@ -12,7 +12,7 @@ CI gates on cannot be two different numbers.
 
 |  |  |
 | --- | --- |
-| store | `data/nusift_b8.1.h5`, ENDF/B-VIII.1, staged 2026-09-19T18:41:22Z |
+| store | `data/nusift_b8.1.h5`, ENDF/B-VIII.1, staged 2026-10-27T11:23:49Z |
 | coverage | 3828 nuclides staged, 4012 in the closed chain |
 | nusift | 0.1.0 |
 | cross-code | radioactivedecay 0.6.1 (pinned 0.6.1), ICRP-107 decay data |

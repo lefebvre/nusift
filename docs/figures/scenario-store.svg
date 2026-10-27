@@ -66,6 +66,6 @@
 <text class="ink" x="74.0" y="286.0" font-size="12" text-anchor="start" font-weight="normal">1,546 unstable nuclides have an evaluated average photon energy and no discrete lines to spend it on.</text>
 <text class="muted" x="74.0" y="304.0" font-size="11.5" text-anchor="start" font-weight="normal">That is not a defect to work around — it is the figure that decides whether an exposure answer means anything,</text>
 <text class="muted" x="74.0" y="320.0" font-size="11.5" text-anchor="start" font-weight="normal">and it is why a store with no lines refuses the question rather than returning zeros.</text>
-<text class="muted" x="74.0" y="342.0" font-size="11.5" text-anchor="start" font-weight="normal">103 nuclides have a spontaneous-fission branch and no yield set at any energy: their fission products</text>
+<text class="muted" x="74.0" y="342.0" font-size="11.5" text-anchor="start" font-weight="normal">102 nuclides have a spontaneous-fission branch and no yield set at any energy: their fission products</text>
 <text class="muted" x="74.0" y="358.0" font-size="11.5" text-anchor="start" font-weight="normal">go nowhere, which the store reports rather than silently dropping.</text>
 </svg>
