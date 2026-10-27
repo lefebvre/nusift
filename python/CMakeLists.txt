@@ -8,7 +8,11 @@
 # nanobind is found from the installed Python package rather than fetched, which is how
 # scikit-build-core expects it to be located and what keeps the wheel build reproducible.
 
-find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
+# Development.SABIModule is what lets nanobind honour STABLE_ABI below. Without it nanobind turns
+# the stable ABI off without a word and the wheel is tied to one CPython minor version. Optional,
+# because only CPython 3.12 and later has a stable ABI nanobind can target.
+find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module
+             OPTIONAL_COMPONENTS Development.SABIModule)
 
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
@@ -20,7 +24,8 @@ if(NOT NB_RESULT EQUAL 0)
     "Install it with: ${Python_EXECUTABLE} -m pip install nanobind")
 endif()
 list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
-find_package(nanobind CONFIG REQUIRED)
+# The floor dep_versions.cmake pins, which nothing applied before: any nanobind was accepted.
+find_package(nanobind ${NUSIFT_NANOBIND_MIN_VERSION} CONFIG REQUIRED)
 
 nanobind_add_module(nusift_ext STABLE_ABI NB_STATIC src/nusift_ext.cpp)
 set_target_properties(nusift_ext PROPERTIES OUTPUT_NAME _core)

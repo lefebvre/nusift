@@ -153,11 +153,30 @@ EventTolerance toleranceOf(double relative) {
   return tolerance;
 }
 
+// A time as Python writes one: a duration string the CLI would accept, or seconds. Anything else
+// is a TypeError naming what a time is, rather than nanobind's bare cast failure surfacing as a
+// RuntimeError that `except TypeError` and `except nusift.NusiftError` both miss.
 double timeFrom(const nb::object& value) {
   if (nb::isinstance<nb::str>(value)) {
     return parseDuration(nb::cast<std::string>(value));
   }
-  return nb::cast<double>(value);
+  double seconds = 0.0;
+  if (!nb::try_cast<double>(value, seconds)) {
+    throw nb::type_error("a time is a number of seconds or a duration string such as \"30d\"");
+  }
+  return seconds;
+}
+
+// The CRAM order, refused unless it is one there is. Read as "16, or else 48" it ran order 48 for
+// a 32 or a 14 and reported nothing.
+CramOrder orderFrom(int order) {
+  if (order == 16) {
+    return CramOrder::Order16;
+  }
+  if (order == 48) {
+    return CramOrder::Order48;
+  }
+  throw nb::value_error(("cram_order must be 16 or 48; got " + std::to_string(order)).c_str());
 }
 
 // Zero-copy 2-D view over C++-owned storage, with `owner` keeping it alive. Const, because a
@@ -566,7 +585,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         const double at = epoch.is_none() ? latestAssayDate(groups)
                           : nb::isinstance<nb::str>(epoch)
                               ? parseCalendarDate(nb::cast<std::string>(epoch))
@@ -654,7 +673,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         return decay(data, inventory, times, options);
       },
       "data"_a, "inventory"_a, "times"_a, "threads"_a = 0, "prune"_a = true, "cram_order"_a = 48,
@@ -691,7 +710,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         IntervalResult result;
         result.t1 = timeFrom(t1);
         result.t2 = timeFrom(t2);
@@ -1039,7 +1058,7 @@ NB_MODULE(_core, m) {
         spec.geometry = geometry;
         DecayOptions options;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         return ResponseEvaluator(data, inventory, spec, options);
       },
       "data"_a, "inventory"_a, "metric"_a = "activity", "by"_a = "nuclide", "units"_a = "",
@@ -1120,7 +1139,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         return taskSeries(data, inventory, spec, startTimes, timeFrom(duration), options, refine);
       },
       "data"_a, "inventory"_a, "starts"_a, "duration"_a, "metric"_a = "activity",
@@ -1182,10 +1201,14 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
+        // Both times are Python objects, read before the release: timeFrom() casts them, and a
+        // cast that fails without the GIL is a crash rather than a TypeError.
+        const double start = timeFrom(at);
+        const double longest = timeFrom(max_stay);
+        const auto byTolerance = toleranceOf(tolerance);
         const nb::gil_scoped_release release;
-        return stayTime(data, inventory, spec, timeFrom(at), budget, timeFrom(max_stay), options,
-                        toleranceOf(tolerance));
+        return stayTime(data, inventory, spec, start, budget, longest, options, byTolerance);
       },
       "data"_a, "inventory"_a, "at"_a, "budget"_a, "max_stay"_a = "24h", "metric"_a = "activity",
       "units"_a = "", "geometry"_a = exposure::PointSourceGeometry{}, "tolerance"_a = 1.0e-6,
@@ -1429,7 +1452,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         const double time = timeFrom(at);
         const nb::gil_scoped_release release;
         return decaySensitivities(data, inventory, time, spec, sensitivity, options);
@@ -1507,7 +1530,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         const double time = timeFrom(at);
         const double when = epoch.is_none() ? latestAssayDate(assays)
                             : nb::isinstance<nb::str>(epoch)
@@ -1670,7 +1693,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         const double time = timeFrom(at);
         const nb::gil_scoped_release release;
         return yieldUncertainty(data, fissionSeed, correlation, time, spec, options);
@@ -1778,7 +1801,7 @@ NB_MODULE(_core, m) {
         DecayOptions options;
         options.threads = threads;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         const double start = timeFrom(at);
         const nb::gil_scoped_release release;
         return runTaskPlan(data, inventory, spec, start, legs, budget, options);
@@ -1790,7 +1813,7 @@ NB_MODULE(_core, m) {
       "units, because a leg accrues a total rather than holding a rate. Pass `budget` to have "
       "the plan say where it runs out. No leg is shielded.");
 
-  // --- the smallest list that works everywhere -------------------------------
+  // --- a short list that works everywhere -----------------------------------
   //
   // `rank(coverage=0.95)` is this question at one instant for one metric. This is the same
   // question asked of every metric at every time simultaneously, which is a covering problem
@@ -1818,7 +1841,7 @@ NB_MODULE(_core, m) {
                shortestRoundTrip(p.achieved) + " of " + shortestRoundTrip(p.required) + ">";
       });
 
-  nb::class_<TriageSet>(m, "TriageSet", "The smallest set holding a floor everywhere at once.")
+  nb::class_<TriageSet>(m, "TriageSet", "A small set holding a floor everywhere at once.")
       .def_ro("members", &TriageSet::members)
       .def_ro("binding", &TriageSet::binding,
               "Where the set is closest to failing. The number to read first: a list of twenty "
@@ -1858,7 +1881,7 @@ NB_MODULE(_core, m) {
         return robustTriageSet(specs);
       },
       "requirements"_a, "coverage"_a = 0.95,
-      "The smallest set of contributors holding `coverage` of EVERY requirement at EVERY time. "
+      "A small set of contributors holding `coverage` of EVERY requirement at EVERY time. "
       "`requirements` maps a name to a response table, or to a (table, fraction) pair when the "
       "floors differ. Set cover is NP-hard and this is a deterministic greedy: a small set that "
       "meets the floor, not a proof that none smaller exists.");
@@ -1972,7 +1995,7 @@ NB_MODULE(_core, m) {
          double min_fraction, const nb::object& pin, bool prune, int cram_order) {
         DecayOptions options;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
         ResponseSpec spec;
         spec.metric = metricFrom(metric);
         // Passed through, not pinned to Nuclide: attributeToSeed refuses the others with a
@@ -2183,7 +2206,7 @@ NB_MODULE(_core, m) {
 
         DecayOptions options;
         options.prune = prune;
-        options.order = cram_order == 16 ? CramOrder::Order16 : CramOrder::Order48;
+        options.order = orderFrom(cram_order);
 
         // Every Python argument read before the GIL goes, as attribute() does: the forward and
         // adjoint solves need nothing from the interpreter, and holding it across them blocks
