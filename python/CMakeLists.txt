@@ -24,8 +24,14 @@ if(NOT NB_RESULT EQUAL 0)
     "Install it with: ${Python_EXECUTABLE} -m pip install nanobind")
 endif()
 list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
-# The floor dep_versions.cmake pins, which nothing applied before: any nanobind was accepted.
-find_package(nanobind ${NUSIFT_NANOBIND_MIN_VERSION} CONFIG REQUIRED)
+# The floor dep_versions.cmake pins, checked here rather than passed to find_package: nanobind's
+# version file accepts only its own major version, so asking for 2.4.0 refuses a 3.x.
+find_package(nanobind CONFIG REQUIRED)
+if(nanobind_VERSION VERSION_LESS NUSIFT_NANOBIND_MIN_VERSION)
+  message(FATAL_ERROR
+    "nanobind ${nanobind_VERSION} is older than the ${NUSIFT_NANOBIND_MIN_VERSION} NuSIFT needs. "
+    "Upgrade it with: ${Python_EXECUTABLE} -m pip install -U nanobind")
+endif()
 
 nanobind_add_module(nusift_ext STABLE_ABI NB_STATIC src/nusift_ext.cpp)
 set_target_properties(nusift_ext PROPERTIES OUTPUT_NAME _core)
