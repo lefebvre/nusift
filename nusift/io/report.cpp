@@ -497,7 +497,9 @@ void writeForecastJson(std::ostream& out, const std::vector<DominanceWindow>& wi
 void writeForecastCsv(std::ostream& out, const std::vector<DominanceWindow>& windows,
                       const std::vector<RankTrack>& tracks, const ResponseTable& table) {
   out << "label,key,start_s,end_s,peak_fraction,unit,kind,peak_time_s,best_rank,pinned\n";
-  const std::string unit = table.unitLabel.empty() ? unitName(table.unit) : table.unitLabel;
+  // Quoted: a pack names its own unit, and nothing stops that name holding a comma.
+  const std::string unit =
+      csvField(table.unitLabel.empty() ? unitName(table.unit) : table.unitLabel);
   for (const DominanceWindow& window : windows) {
     out << csvField(window.label) << ',' << window.id.key << ','
         << shortestRoundTrip(window.startSeconds) << ',' << shortestRoundTrip(window.endSeconds)
@@ -521,8 +523,8 @@ void writeCsvRows(std::ostream& out, const Ranking& ranking, bool withHeader) {
     if (ranking.domain == Domain::Interval) {
       out << shortestRoundTrip(ranking.timeEnd);
     }
-    // The unit is not quoted: it comes from a closed enum of spellings that contain no comma,
-    // so unlike a label it cannot acquire one.
+    // The unit is quoted as a label is: a coefficient pack names its own, and that name can
+    // hold a comma.
     //
     // `pinned` is last so that adding it did not renumber the columns anyone already reads by
     // position, and it is here at all because without it a loaded table cannot tell a row that
@@ -949,14 +951,14 @@ void writeInterventionsCsv(std::ostream& out, const InterventionStudy& study) {
     if (effect.contributors.empty()) {
       out << csvField(effect.name) << ',' << shortestRoundTrip(effect.response) << ','
           << shortestRoundTrip(effect.removed) << ',' << shortestRoundTrip(effect.removedFraction)
-          << ',' << unitOf(study) << ",,,,,\n";
+          << ',' << csvField(unitOf(study)) << ",,,,,\n";
       continue;
     }
     for (const RemovedContributor& contributor : effect.contributors) {
       out << csvField(effect.name) << ',' << shortestRoundTrip(effect.response) << ','
           << shortestRoundTrip(effect.removed) << ',' << shortestRoundTrip(effect.removedFraction)
-          << ',' << unitOf(study) << ',' << csvField(contributor.label) << ',' << contributor.key
-          << ',' << shortestRoundTrip(contributor.atomsRemoved) << ','
+          << ',' << csvField(unitOf(study)) << ',' << csvField(contributor.label) << ','
+          << contributor.key << ',' << shortestRoundTrip(contributor.atomsRemoved) << ','
           << shortestRoundTrip(contributor.value) << ',' << shortestRoundTrip(contributor.fraction)
           << '\n';
     }

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <sstream>
@@ -852,6 +853,84 @@ TEST(Report, TheInterventionCsvCarriesWhatEachBenefitWasMadeOf) {
   EXPECT_NE(csv.find("Cs-137"), std::string::npos) << csv;
   EXPECT_NE(csv.find("Sr-90"), std::string::npos) << csv;
   EXPECT_NE(csv.find("atoms_removed"), std::string::npos) << csv;
+}
+
+// --- a pack's own unit -------------------------------------------------------------
+
+// Each line of a CSV, split as an RFC 4180 reader would. Unlike csvFields, this one is meant to
+// understand quoting: the question here is what a reader gets back, not where the commas are.
+std::vector<std::vector<std::string>> readCsv(const std::string& text) {
+  std::vector<std::vector<std::string>> rows;
+  std::istringstream lines(text);
+  std::string line;
+  while (std::getline(lines, line)) {
+    std::vector<std::string> fields(1);
+    bool quoted = false;
+    for (std::size_t i = 0; i < line.size(); ++i) {
+      const char c = line[i];
+      if (quoted && c == '"' && i + 1 < line.size() && line[i + 1] == '"') {
+        fields.back() += '"';
+        ++i;
+      } else if (c == '"') {
+        quoted = !quoted;
+      } else if (c == ',' && !quoted) {
+        fields.emplace_back();
+      } else {
+        fields.back() += c;
+      }
+    }
+    rows.push_back(fields);
+  }
+  return rows;
+}
+
+// Every row as wide as the header, and the unit read back whole from the column named for it.
+void expectTheUnitStaysInItsColumn(const std::string& csv, const std::string& unit) {
+  const auto rows = readCsv(csv);
+  ASSERT_GE(rows.size(), 2u) << csv;
+  const auto& header = rows.front();
+  const auto unitColumn =
+      static_cast<std::size_t>(std::find(header.begin(), header.end(), "unit") - header.begin());
+  ASSERT_LT(unitColumn, header.size()) << csv;
+  for (std::size_t r = 1; r < rows.size(); ++r) {
+    ASSERT_EQ(rows[r].size(), header.size()) << "row " << r << ":\n" << csv;
+    EXPECT_EQ(rows[r][unitColumn], unit) << "row " << r << ":\n" << csv;
+  }
+}
+
+// A coefficient pack names its own unit, and the name is the pack author's: "Sv, committed" is
+// a fair one. Written bare, its comma pushed every column right of it along by one.
+TEST(Report, AForecastCsvQuotesAPacksUnit) {
+  ResponseTable table;
+  table.unitLabel = "Sv, committed";
+  table.times = {0.0, 3.15e7};
+  RankTrack track;
+  track.id.key = 551370;
+  track.label = "Cs-137";
+  track.rank = {1, 1};
+  track.fraction = {0.9, 0.95};
+  track.peakFraction = 0.95;
+  track.peakTimeIndex = 1;
+  DominanceWindow window;
+  window.id.key = 551370;
+  window.label = "Cs-137";
+  window.endSeconds = 3.15e7;
+  window.peakFraction = 0.95;
+
+  std::ostringstream out;
+  writeForecast(out, {window}, {track}, table, ReportContext{}, ReportFormat::Csv);
+  expectTheUnitStaysInItsColumn(out.str(), table.unitLabel);
+}
+
+TEST(Report, AnInterventionCsvQuotesAPacksUnit) {
+  InterventionStudy study = twoAlternatives();
+  study.unitLabel = "Sv, committed";
+  study.effects.push_back(InterventionEffect{});  // a row with no contributors
+  study.effects.back().name = "nothing";
+
+  std::ostringstream out;
+  writeInterventions(out, study, ReportContext{}, ReportFormat::Csv);
+  expectTheUnitStaysInItsColumn(out.str(), study.unitLabel);
 }
 
 }  // namespace
