@@ -371,6 +371,34 @@ TEST(InventoryIo, JsonReadsKeysByNameAndRefusesOnesItDoesNotKnow) {
       1.0e20);
 }
 
+// An escape means what JSON says it means. Taking the character after a backslash literally
+// read "\tBq" -- a tab, then Bq -- as "tBq", and 1e6 Bq became 1e18.
+TEST(InventoryIo, JsonDecodesEscapesAsJsonDefinesThem) {
+  const NuclearData data = chain();
+  const auto readIt = [&](const std::string& text) {
+    std::istringstream in(text);
+    return readInventoryJson(in, data, "test.json");
+  };
+  const double perBq = 1.0 / data.decayConstant(data.indexOf(kUnstable));
+
+  // Outside the macros, because MSVC misreads a backslash in a raw string passed as an argument.
+  const std::string tab = R"([{"nuclide": "Sn-100", "quantity": 1.0e6, "unit": "\tBq"}])";
+  const std::string newline = R"([{"nuclide": "Sn-100", "quantity": 1.0e6, "unit": "Bq\n"}])";
+  const std::string solidus = R"([{"nuclide": "Sn\/100", "quantity": 1.0e20}])";
+  const std::string unknown = R"([{"nuclide": "Sn-100", "quantity": 1.0e6, "unit": "\qBq"}])";
+  // Not a raw string: MSVC replaces a \u sequence even there, and the parser would see "Bq".
+  const std::string unicode =
+      "[{\"nuclide\": \"Sn-100\", \"quantity\": 1.0e6, \"unit\": \"\\u0042q\"}]";
+  const std::string rawTab = "[{\"nuclide\": \"Sn-100\", \"quantity\": 1.0e6, \"unit\": \"\tBq\"}]";
+
+  EXPECT_NEAR(readIt(tab).atomsOf(kUnstable), 1.0e6 * perBq, 1.0);
+  EXPECT_NEAR(readIt(newline).atomsOf(kUnstable), 1.0e6 * perBq, 1.0);
+  EXPECT_THROW(readIt(solidus), InputError);  // "Sn/100", which names nothing
+  EXPECT_THROW(readIt(unknown), InputError);
+  EXPECT_THROW(readIt(unicode), InputError);
+  EXPECT_THROW(readIt(rawTab), InputError);  // JSON has no unescaped control characters
+}
+
 // Being liberal about the punctuation is not kindness. A reader that skips any run of commas
 // accepts a file no other JSON tool will read, and one that stops at the first ] accepts the
 // first half of a file that is two documents long -- and then reports confidently on an

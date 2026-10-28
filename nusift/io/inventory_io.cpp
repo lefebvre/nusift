@@ -513,21 +513,56 @@ DatedInventory readInventoryDatedJson(std::istream& in, const NuclearData& data,
     // for 1e14 Bq of Cs-137. Every key now has to name a column, by the same names the CSV
     // header accepts, and none may appear twice.
     const auto readString = [&]() {
-      // At the opening quote. Escapes are honoured as far as an inventory can need them: a
-      // backslash takes the next character literally, which covers \" and \\ and \/.
+      // At the opening quote. Escapes are decoded as JSON defines them, and one JSON does not
+      // define is refused. Taking the character after a backslash literally read "\tBq" -- a tab,
+      // then Bq -- as "tBq", terabecquerels, twelve decades high.
       ++pos;
       std::string value;
       while (pos < text.size() && text[pos] != '"') {
-        if (text[pos] == '\\') {
-          ++pos;
-          if (pos < text.size() && text[pos] == 'u') {
-            failAt(sourceName, lineOf(pos), "\\u escapes are not supported in an inventory");
-          }
-          if (pos >= text.size()) {
-            break;
-          }
+        const char c = text[pos];
+        if (static_cast<unsigned char>(c) < 0x20) {
+          failAt(sourceName, lineOf(pos), "a control character inside a string must be escaped");
         }
-        value += text[pos];
+        if (c != '\\') {
+          value += c;
+          ++pos;
+          continue;
+        }
+        ++pos;
+        if (pos >= text.size()) {
+          break;
+        }
+        switch (text[pos]) {
+          case '"':
+            value += '"';
+            break;
+          case '\\':
+            value += '\\';
+            break;
+          case '/':
+            value += '/';
+            break;
+          case 'b':
+            value += '\b';
+            break;
+          case 'f':
+            value += '\f';
+            break;
+          case 'n':
+            value += '\n';
+            break;
+          case 'r':
+            value += '\r';
+            break;
+          case 't':
+            value += '\t';
+            break;
+          case 'u':
+            failAt(sourceName, lineOf(pos), "\\u escapes are not supported in an inventory");
+          default:
+            failAt(sourceName, lineOf(pos),
+                   std::string("\\") + text[pos] + " is not a JSON escape");
+        }
         ++pos;
       }
       if (pos >= text.size()) {
